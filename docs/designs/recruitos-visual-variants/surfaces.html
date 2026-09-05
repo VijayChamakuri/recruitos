@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="default">
+<head>
+<meta charset="utf-8">
+<title>RecruitOS remaining surfaces</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { min-width: 1440px; }
+  .screen { height: 940px; border-bottom: 24px solid var(--bg); overflow: hidden; }
+  .screen.tall { height: 1180px; }
+  .vlabel {
+    font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-faint);
+    padding: 8px 16px; background: var(--bg);
+  }
+  .panehead {
+    position: sticky; top: 0; z-index: 3;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 30px; padding: 0 12px; background: inherit;
+    border-bottom: 1px solid var(--hairline-strong);
+    font-family: var(--f-cond); font-size: 11px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--text-muted);
+  }
+  .doc { font-family: var(--f-serif); font-size: 17px; line-height: 27px; max-width: 68ch; }
+  .doc-sm { font-family: var(--f-serif); font-size: 15px; line-height: 24px; }
+  table.terms { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 12px; }
+  table.terms th { font-family: var(--f-cond); font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--text-muted); text-align: left; font-weight: 600; padding: 3px 4px; border-bottom: 1px solid var(--hairline); }
+  table.terms td { padding: 3px 4px; border-bottom: 1px solid var(--hairline); }
+  table.terms td.n { text-align: right; }
+  table.terms tr.total td { border-top: 1px solid var(--text); border-bottom: none; font-weight: 600; }
+  .sechead {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 10px 24px; border-bottom: 1px solid var(--hairline-strong); background: var(--surface);
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ S3: resolution queue + inspector + delta preview ============ -->
+<div class="vlabel">Surface 3 &middot; resolution queue, inspector on the packet, live delta preview before commit</div>
+<div class="screen">
+<div class="app">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item active"><span>Resolution Queue</span><span class="n">41</span></div>
+    <div class="item"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item"><span>Audit Timeline</span><span class="n">1842</span></div>
+    <div class="item"><span>Trust Center</span><span class="n">3</span></div>
+    <div class="group caps" style="margin-top:16px">Grouped by reason code</div>
+    <div class="item active"><span class="mono" style="font-size:12px">missing_evidence</span><span class="n">19</span></div>
+    <div class="item"><span class="mono" style="font-size:12px">contradiction</span><span class="n">9</span></div>
+    <div class="item"><span class="mono" style="font-size:12px">ambiguous</span><span class="n">7</span></div>
+    <div class="item"><span class="mono" style="font-size:12px">possible_duplicate</span><span class="n">4</span></div>
+    <div class="item"><span class="mono" style="font-size:12px">prompt_injection</span><span class="n">2</span></div>
+  </nav>
+
+  <main class="work" style="display:grid;grid-template-columns:1fr 420px;min-height:0">
+    <div style="overflow:auto;border-right:1px solid var(--hairline-strong)">
+      <div class="sechead"><span style="font-size:19px;line-height:26px">Resolution Queue</span>
+        <span class="mono muted" style="font-size:12px">ordered by reason precedence, then opened_at, then task_id</span></div>
+      <table class="q">
+        <thead><tr><th style="width:110px">Task</th><th style="width:190px">Candidate</th>
+          <th style="width:240px">Reason</th><th style="width:150px">Dimension</th>
+          <th style="width:80px;text-align:right">Age</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr class="group-head"><td colspan="6">missing_evidence &nbsp;(19)</td></tr>
+          <tr class="row-escalated row-focus"><td class="mono">t_4471</td><td>Priya Raghavan</td>
+            <td class="mono" style="font-size:12px">missing_evidence:evaluation_practice</td>
+            <td class="mono" style="font-size:12px">evalprac &middot; w2 &middot; required</td>
+            <td class="num">27m</td><td><span class="link">Supply evidence and set level</span></td></tr>
+          <tr class="row-escalated"><td class="mono">t_4468</td><td>Priya Raghavan</td>
+            <td class="mono" style="font-size:12px">missing_evidence:work_auth</td>
+            <td class="mono" style="font-size:12px">hard requirement</td>
+            <td class="num">27m</td><td><span class="link">Supply evidence and set level</span></td></tr>
+          <tr class="row-escalated"><td class="mono">t_4402</td><td>Amara Okonjo</td>
+            <td class="mono" style="font-size:12px">missing_evidence:data_pipelines</td>
+            <td class="mono" style="font-size:12px">data &middot; w2 &middot; required</td>
+            <td class="num">4h 12m</td><td><span class="link">Supply evidence and set level</span></td></tr>
+          <tr class="row-escalated"><td class="mono">t_4390</td><td>Tomas Lindqvist</td>
+            <td class="mono" style="font-size:12px">parse_failure</td>
+            <td class="mono" style="font-size:12px">all dimensions</td>
+            <td class="num">4h 12m</td><td><span class="link muted">Request re-extraction</span>
+              <span class="mono faint" style="font-size:11px">&nbsp;live mode only</span></td></tr>
+          <tr class="group-head"><td colspan="6">contradiction &nbsp;(9)</td></tr>
+          <tr class="row-escalated"><td class="mono">t_4455</td><td>Lena Vogt</td>
+            <td class="mono" style="font-size:12px">contradiction:tenure_vs_claim</td>
+            <td class="mono" style="font-size:12px">applied &middot; w3</td>
+            <td class="num">3h 51m</td><td><span class="link">Review contradiction</span></td></tr>
+        </tbody>
+      </table>
+
+      <div style="padding:16px 24px">
+        <div class="caps">Re-extraction outcome, stated on the surface</div>
+        <div class="doc-sm" style="margin-top:6px;max-width:68ch">
+          When a re-extraction completes, the task moves to <span class="mono">review required</span>, not
+          <span class="mono">resolved</span>. Identical output still creates a superseding result and the delta
+          renders as <span class="mono">0.0</span> rather than being hidden.
+        </div>
+      </div>
+    </div>
+
+    <!-- inspector: 420px right rail ON the packet -->
+    <aside style="background:var(--surface);overflow:auto">
+      <div class="panehead"><span>Resolution inspector &middot; t_4471</span><span class="mono" style="font-size:11px">on the packet</span></div>
+      <div style="padding:12px">
+        <div class="caps">1 &middot; Span, created by selecting text in the source pane</div>
+        <div class="bracket sup" style="background:var(--surface-paper);border:1px solid var(--hairline);border-left:3px solid var(--support);padding:8px 10px;margin-top:6px">
+          <q class="doc-sm">wrote the offline eval suite that gated every prompt change</q>
+          <div class="mono faint" style="font-size:11px;margin-top:3px">notes.md 512&ndash;561 &middot; exact &middot; human &middot; selection-derived offsets</div>
+        </div>
+
+        <div class="caps" style="margin-top:14px">2 &middot; Polarity</div>
+        <div style="display:flex;gap:0;margin-top:4px">
+          <button class="btn" style="border-radius:2px 0 0 2px;border-color:var(--support);color:var(--support);background:var(--support-wash)">Supporting</button>
+          <button class="btn" style="border-radius:0 2px 2px 0;border-left:none">Contradicting</button>
+        </div>
+
+        <div class="caps" style="margin-top:14px">3 &middot; Level, pre-filled from derive_level</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <select class="btn" style="flex:1"><option>partial</option><option>none</option><option>weak</option><option>strong</option></select>
+          <span class="level"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>
+        </div>
+        <div class="mono faint" style="font-size:11px;margin-top:4px">derivation: sup 2, con 0, net 2 &rarr; partial &middot; confirm or override &middot; an override is recorded as an override</div>
+
+        <div class="caps" style="margin-top:14px">4 &middot; Delta preview, computed before commit</div>
+        <div class="grid-dot" style="border:1px solid var(--hairline);border-radius:var(--r-panel);padding:10px;margin-top:6px;background:var(--surface-paper)">
+          <table class="terms"><tbody>
+            <tr><td>score</td><td class="n">61.7</td><td class="n">&rarr;</td><td class="n" style="color:var(--accent)">72.9</td><td class="n">+11.2</td></tr>
+            <tr><td>confidence</td><td class="n">0.48</td><td class="n">&rarr;</td><td class="n" style="color:var(--accent)">0.63</td><td class="n">+0.15</td></tr>
+            <tr><td>coverage</td><td class="n">0.67</td><td class="n">&rarr;</td><td class="n">0.83</td><td class="n">+0.16</td></tr>
+            <tr class="total"><td colspan="5">0.63 &ge; 0.55 &nbsp; clears T_ESCALATE</td></tr>
+          </tbody></table>
+          <div class="mono faint" style="font-size:11px;margin-top:6px">same pure core functions that run on the server commit &middot; 400ms tabular transition</div>
+        </div>
+
+        <div class="caps" style="margin-top:14px">5 &middot; Rationale, required</div>
+        <textarea class="btn" style="width:100%;height:56px;font-family:var(--f-sans);margin-top:4px" placeholder="Why this level, in your words"></textarea>
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn primary" style="flex:1">Record resolution</button>
+          <button class="btn">Cancel</button>
+        </div>
+        <div class="mono faint" style="font-size:11px;margin-top:6px">carries expectedVersion v18 &middot; creates a superseding result &middot; the original stays inspectable</div>
+      </div>
+    </aside>
+  </main>
+</div>
+</div>
+
+<!-- ============ S4: stale conflict band ============ -->
+<div class="vlabel">Surface 4 &middot; stale conflict, a first-class band and not a toast. no Save anyway.</div>
+<div class="screen">
+<div class="app">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item active"><span>Resolution Queue</span><span class="n">41</span></div>
+    <div class="item"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item"><span>Audit Timeline</span><span class="n">1843</span></div>
+    <div class="item"><span>Trust Center</span><span class="n">3</span></div>
+  </nav>
+  <main class="work" style="display:grid;grid-template-columns:1fr 420px;min-height:0">
+    <div style="overflow:auto;border-right:1px solid var(--hairline-strong);padding:24px;background:var(--surface-paper)">
+      <div style="font-size:26px;line-height:32px">Priya Raghavan</div>
+      <div class="mono faint" style="font-size:12px;margin-top:2px">cand_0f3a &middot; run #7 &middot; you loaded v18</div>
+      <div class="doc" style="margin-top:20px">
+        <p>The packet stays on screen. The evidence you were reading is not replaced and your unsaved
+        values in the inspector are not destroyed.</p>
+      </div>
+      <div class="grid-dot" style="margin-top:16px;border:1px solid var(--hairline);border-radius:var(--r-panel);padding:12px;max-width:520px">
+        <div class="caps">Compare changes &middot; only what moved</div>
+        <table class="terms" style="margin-top:6px"><tbody>
+          <tr><td>evalprac level</td><td class="n">none</td><td class="n">&rarr;</td><td class="n">partial</td></tr>
+          <tr><td>score</td><td class="n">61.7</td><td class="n">&rarr;</td><td class="n">70.4</td></tr>
+          <tr><td>confidence</td><td class="n">0.48</td><td class="n">&rarr;</td><td class="n">0.61</td></tr>
+          <tr><td>status</td><td class="n">escalated</td><td class="n">&rarr;</td><td class="n">scored</td></tr>
+          <tr><td>open tasks</td><td class="n">2</td><td class="n">&rarr;</td><td class="n">1</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <aside style="background:var(--surface);overflow:auto">
+      <div class="panehead"><span>Resolution inspector &middot; t_4471</span><span class="mono" style="font-size:11px">frozen</span></div>
+
+      <!-- the band: full width, contradict hairline, pinned directly above the affected controls -->
+      <div style="border:1px solid var(--contradict);border-left:3px solid var(--contradict);border-radius:var(--r-panel);margin:10px;padding:10px 12px;background:var(--contradict-wash)">
+        <div class="mono" style="font-size:12px;line-height:18px;color:var(--text)">
+          You reviewed v18. This packet is now v19.<br>
+          Changed by V. Chen at 12:44:02 &middot; resolution recorded on evaluation_practice
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn">Compare changes</button>
+          <button class="btn primary">Refresh to v19</button>
+        </div>
+        <div class="mono" style="font-size:11px;margin-top:8px;color:var(--text-muted)">
+          There is no Save anyway. The rejected stale submission is itself recorded in the audit timeline as
+          event 01843.
+        </div>
+      </div>
+
+      <div style="padding:0 12px 12px;opacity:.55">
+        <div class="caps">3 &middot; Level, pre-filled from derive_level</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <select class="btn" style="flex:1" disabled><option>partial</option></select>
+          <span class="level"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>
+        </div>
+        <div class="caps" style="margin-top:14px">5 &middot; Rationale, required</div>
+        <textarea class="btn" style="width:100%;height:56px;font-family:var(--f-sans);margin-top:4px" disabled>Notes.md documents an offline eval suite gating prompt changes.</textarea>
+        <div class="mono faint" style="font-size:11px;margin-top:4px">your unsaved values are kept</div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn primary" disabled style="flex:1">Record resolution</button>
+          <button class="btn" disabled>Cancel</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+</div>
+
+<!-- ============ S5: proposal review ============ -->
+<div class="vlabel">Surface 5 &middot; proposal review, its own destination, fixed no-outbound-effect footer</div>
+<div class="screen">
+<div class="app">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item"><span>Resolution Queue</span><span class="n">41</span></div>
+    <div class="item active"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item"><span>Audit Timeline</span><span class="n">1842</span></div>
+    <div class="item"><span>Trust Center</span><span class="n">3</span></div>
+  </nav>
+  <main class="work" style="display:flex;flex-direction:column;min-height:0">
+    <div class="sechead"><span style="font-size:19px;line-height:26px">Proposal Review</span>
+      <span class="mono muted" style="font-size:12px">12 awaiting approval &middot; 0 sent, because nothing is ever sent</span></div>
+
+    <div style="flex:1;overflow:auto;padding:16px 24px">
+      <!-- card 1: drafted follow-up renders as a message -->
+      <div class="panel" style="max-width:1000px;margin-bottom:16px">
+        <header>
+          <span style="font-size:16px;line-height:24px;font-weight:600">Draft follow-up to candidate</span>
+          <span class="on-record" style="border-color:var(--hairline-strong);color:var(--text-muted)">No outbound effect</span>
+          <span style="flex:1"></span>
+          <span class="mono faint" style="font-size:11px">prop_7712 &middot; generated by system:runtime &middot; packet v18</span>
+        </header>
+        <div style="display:grid;grid-template-columns:1fr 320px">
+          <div style="padding:12px 16px;border-right:1px solid var(--hairline);background:var(--surface-paper)">
+            <div class="mono faint" style="font-size:11px">Priya Raghavan &middot; cand_0f3a &middot; Applied AI Engineer</div>
+            <div class="doc-sm" style="margin-top:8px;max-width:68ch">
+              <p style="margin:0 0 10px">Hi Priya, thanks for applying. Your background in RAG evaluation lines up
+              closely with what this team is building. Before we schedule a call, could you point us to anything
+              you have written or shipped around offline evaluation practice?</p>
+              <p style="margin:0">Best,<br>V. Chen</p>
+            </div>
+          </div>
+          <div style="padding:12px 16px">
+            <div class="caps">Triggering evidence</div>
+            <div class="bracket sup" style="margin-top:4px">
+              <q class="doc-sm">shipped an eval harness for our RAG pipeline</q>
+              <div class="mono faint" style="font-size:11px;margin-top:2px">resume.pdf 1204&ndash;1249 &middot; <span class="link">open in packet</span></div>
+            </div>
+            <div class="caps" style="margin-top:12px">Assumptions</div>
+            <div class="mono muted" style="font-size:12px;line-height:18px">candidate is still active<br>role is still open<br>English is the working language</div>
+            <div class="caps" style="margin-top:12px">Open gaps</div>
+            <div class="mono muted" style="font-size:12px;line-height:18px">evaluation_practice unevidenced<br>work_auth unknown</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--hairline)">
+          <button class="btn primary">Approve draft</button>
+          <button class="btn">Edit draft</button>
+          <button class="btn">Reject draft</button>
+          <span style="flex:1"></span>
+          <span class="mono faint" style="font-size:11px">edit opens an inline side by side. the committed decision keeps both the original and the edit.</span>
+        </div>
+      </div>
+
+      <!-- card 2: stage change renders as mono -->
+      <div class="panel" style="max-width:1000px">
+        <header>
+          <span style="font-size:16px;line-height:24px;font-weight:600">Stage change</span>
+          <span class="on-record" style="border-color:var(--hairline-strong);color:var(--text-muted)">No outbound effect</span>
+          <span style="flex:1"></span>
+          <span class="mono faint" style="font-size:11px">prop_7718 &middot; generated by system:runtime &middot; packet v18</span>
+        </header>
+        <div style="padding:12px 16px;background:var(--surface-paper)">
+          <div class="mono" style="font-size:16px">stage: Applied &rarr; Phone Screen</div>
+          <div class="mono faint" style="font-size:11px;margin-top:4px">Dana Whitfield &middot; cand_11b7 &middot; proposed because score 81.7 sits above the shortlist cut and all hard requirements resolved pass</div>
+        </div>
+        <div style="display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--hairline)">
+          <button class="btn primary">Approve draft</button><button class="btn">Edit draft</button><button class="btn">Reject draft</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- the fixed footer, never removed -->
+    <div style="border-top:1px solid var(--hairline-strong);background:var(--surface-inset);padding:10px 24px">
+      <div class="doc-sm" style="max-width:none">Approval records an internal RecruitOS decision. No message is sent,
+      no ATS record is changed, and no external system is contacted.</div>
+    </div>
+  </main>
+</div>
+</div>
+
+<!-- ============ S6: audit timeline, candidate trace ============ -->
+<div class="vlabel">Surface 6 &middot; audit timeline, candidate trace as one continuous vertical rule</div>
+<div class="screen">
+<div class="app">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item"><span>Resolution Queue</span><span class="n">40</span></div>
+    <div class="item"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item active"><span>Audit Timeline</span><span class="n">1843</span></div>
+    <div class="item"><span>Trust Center</span><span class="n">3</span></div>
+    <div class="group caps" style="margin-top:16px">View</div>
+    <div class="item"><span>Global, reverse chron</span></div>
+    <div class="item active"><span>Candidate trace</span></div>
+  </nav>
+  <main class="work" style="display:flex;flex-direction:column;min-height:0">
+    <div class="sechead"><span style="font-size:19px;line-height:26px">Candidate trace</span>
+      <span class="mono muted" style="font-size:12px">Priya Raghavan &middot; cand_0f3a &middot; ascending &middot; grouped by command, expanded in eventOrdinal order</span></div>
+
+    <div style="flex:1;overflow:auto;padding:16px 24px;background:var(--surface-paper)">
+      <div style="border-left:1px solid var(--hairline-strong);padding-left:18px;position:relative;max-width:1100px">
+        <div class="mono" style="font-size:12px;line-height:19px">
+
+          <div style="margin-bottom:14px">
+            <div class="caps" style="padding:0">cmd_9001 &middot; import</div>
+            <div>00311 &nbsp; 2026-09-05T12:03:58.140Z &nbsp; &#9670; system:runtime &nbsp; candidate.imported &nbsp; v0&rarr;v1 &nbsp; import #23</div>
+            <div>00312 &nbsp; 2026-09-05T12:03:58.201Z &nbsp; &#9670; system:runtime &nbsp; document.normalized &nbsp; v1&rarr;v2 &nbsp; resume.pdf 4,218 chars</div>
+          </div>
+
+          <div style="margin-bottom:14px">
+            <div class="caps" style="padding:0">cmd_9014 &middot; extract</div>
+            <div>00358 &nbsp; 2026-09-05T12:04:06.882Z &nbsp; &#9670; system:runtime &nbsp; evidence.extracted &nbsp; v2&rarr;v9 &nbsp; 7 spans, 6 dimensions</div>
+            <div>00359 &nbsp; 2026-09-05T12:04:06.910Z &nbsp; &#9670; system:runtime &nbsp; evidence.gap_recorded &nbsp; v9&rarr;v10 &nbsp; evalprac, searched resume.pdf notes.md</div>
+            <div class="faint">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="link">expand deterministic payload</span> &middot; receipt sha256 4c1a&#8230;</div>
+          </div>
+
+          <div style="margin-bottom:14px">
+            <div class="caps" style="padding:0">cmd_9020 &middot; score and route</div>
+            <div>00401 &nbsp; 2026-09-05T12:04:11.402Z &nbsp; &#9670; system:runtime &nbsp; result.scored &nbsp; v10&rarr;v17 &nbsp; r_41d &nbsp; score 61.7 conf 0.48</div>
+            <div>00402 &nbsp; 2026-09-05T12:04:11.404Z &nbsp; &#9670; system:runtime &nbsp; candidate.routed &nbsp; v17&rarr;v18 &nbsp; escalated</div>
+            <div>00403 &nbsp; 2026-09-05T12:04:11.406Z &nbsp; &#9670; system:runtime &nbsp; task.opened &nbsp; t_4471 &nbsp; missing_evidence:evaluation_practice</div>
+            <div>00404 &nbsp; 2026-09-05T12:04:11.407Z &nbsp; &#9670; system:runtime &nbsp; task.opened &nbsp; t_4468 &nbsp; missing_evidence:work_auth</div>
+          </div>
+
+          <div style="margin-bottom:14px">
+            <div class="caps" style="padding:0">cmd_9312 &middot; human resolution</div>
+            <div>01840 &nbsp; 2026-09-05T12:44:02.118Z &nbsp; &#9679; V. Chen &nbsp; evidence.supplied &nbsp; v18&rarr;v19 &nbsp; notes.md 512&ndash;561 &middot; supporting &middot; human</div>
+            <div>01841 &nbsp; 2026-09-05T12:44:02.121Z &nbsp; &#9679; V. Chen &nbsp; level.set &nbsp; evalprac none&rarr;partial &nbsp; derive_level confirmed, not overridden</div>
+            <div>01842 &nbsp; 2026-09-05T12:44:02.140Z &nbsp; &#9670; system:runtime &nbsp; result.superseded &nbsp; r_41d&rarr;r_88c &nbsp; score 61.7&rarr;72.9 conf 0.48&rarr;0.63</div>
+            <div class="faint">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Resolution superseded by event 01842. The original result r_41d is preserved and stays inspectable.</div>
+          </div>
+
+          <div style="margin-bottom:14px">
+            <div class="caps" style="padding:0">cmd_9317 &middot; rejected stale submission</div>
+            <div>01843 &nbsp; 2026-09-05T12:44:19.006Z &nbsp; &#9679; V. Chen &nbsp; submission.rejected_stale &nbsp; expected v18, head v19 &nbsp; nothing written</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--hairline-strong);background:var(--surface-inset);padding:10px 24px">
+      <div class="doc-sm">Append-only, enforced by database triggers. Not cryptographically tamper-proof. An
+      administrator with file access can replace history.</div>
+    </div>
+  </main>
+</div>
+</div>
+
+<!-- ============ S7: Trust Center front page + section 01 ============ -->
+<div class="vlabel">Surface 7 &middot; Trust Center front page and section 01 known limitations. no green anywhere.</div>
+<div class="screen tall">
+<div class="app">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item"><span>Resolution Queue</span><span class="n">41</span></div>
+    <div class="item"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item"><span>Audit Timeline</span><span class="n">1843</span></div>
+    <div class="item active"><span>Trust Center</span><span class="n">3</span></div>
+    <div class="group caps" style="margin-top:16px">Sections</div>
+    <div class="item active"><span>01 Known limitations</span><span class="n">3</span></div>
+    <div class="item"><span>02 Class 1 invariants</span><span class="n">18</span></div>
+    <div class="item"><span>03 Class 2 measurement</span></div>
+    <div class="item"><span>04 Hallucination resistance</span></div>
+    <div class="item"><span>05 Bias demonstration</span></div>
+    <div class="item"><span>06 Calibration freeze delta</span></div>
+    <div class="item"><span>07 Workflow assumptions</span></div>
+  </nav>
+  <main class="work" style="background:var(--surface-paper)">
+    <div style="padding:24px 32px;max-width:1100px">
+      <div style="font-family:var(--f-serif);font-size:26px;line-height:32px;font-weight:600">Trust Center</div>
+      <div class="mono muted" style="font-size:12px;margin-top:4px">RecruitOS candidate triage &middot; rubric v1 &middot; run #7</div>
+      <div class="mono faint" style="font-size:12px">Generated 2026-09-05T14:02:11.482Z &middot; snapshot 9f2c&#8230; &middot; corpus 140 synthetic</div>
+
+      <table class="terms" style="margin-top:14px;max-width:520px"><tbody>
+        <tr><td>last eval run</td><td class="n">2026-09-05 14:02</td></tr>
+        <tr><td>eval dataset version</td><td class="n">tier1-v1 (25 cases)</td></tr>
+        <tr><td>synthetic case count</td><td class="n">140 main + 25 variant</td></tr>
+        <tr><td>open known limitations</td><td class="n">3</td></tr>
+      </tbody></table>
+
+      <div class="caps" style="margin-top:20px">Read this first</div>
+      <div class="doc" style="margin-top:4px">
+        All candidate data is synthetic. This is not an independent bias audit and not a compliance
+        certification. Three known limitations are open. Class 2 numbers are dated one-shot measurements
+        against a live model and are not gated in CI.
+      </div>
+
+      <div style="margin-top:24px;border-top:1px solid var(--hairline-strong);padding-top:14px">
+        <div style="display:flex;align-items:baseline;gap:12px">
+          <span class="mono" style="font-size:16px">01</span>
+          <span style="font-family:var(--f-serif);font-size:19px;line-height:26px;font-weight:600">Known limitations</span>
+          <span style="flex:1"></span>
+          <span class="mono muted" style="font-size:12px">3 open</span>
+        </div>
+
+        <!-- limitation card 1 -->
+        <div class="panel" style="margin-top:12px;background:var(--surface)">
+          <header>
+            <span class="on-record">On the record</span>
+            <span class="mono" style="font-size:12px">cand_0091 &middot; tier 1 &middot; assertion class 1 &middot; evidence fidelity</span>
+            <span style="flex:1"></span>
+            <span class="link mono" style="font-size:12px">open the packet and read the wrong answer</span>
+          </header>
+          <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <div>
+              <div class="caps">What the system currently produces</div>
+              <div class="mono" style="font-size:12px;line-height:18px;margin-top:4px">evalprac level = <b>partial</b><br>from span &ldquo;measured latency in staging&rdquo;</div>
+              <div class="caps" style="margin-top:10px">What it should produce</div>
+              <div class="mono" style="font-size:12px;line-height:18px;margin-top:4px">evalprac level = <b>none</b><br>gap, reason missing_evidence:evaluation_practice</div>
+            </div>
+            <div>
+              <div class="caps">Why it is wrong</div>
+              <div class="doc-sm" style="margin-top:4px">Latency measurement in staging is performance work, not evaluation
+              practice. The extractor accepted the word &ldquo;measured&rdquo; as topical evidence. The rubric anchor text
+              requires an offline evaluation loop with a held-out set. This case is committed as a permanent fixture so
+              the class cannot come out all green.</div>
+            </div>
+          </div>
+          <div style="padding:8px 16px;border-top:1px solid var(--hairline)" class="mono faint">
+            <span style="font-size:11px">owner V. Chen &middot; severity medium &middot; affects triage scoring &middot; discovered 2026-09-03 &middot; review 2026-10-01</span>
+          </div>
+        </div>
+
+        <!-- limitation card 2 -->
+        <div class="panel" style="margin-top:10px;background:var(--surface)">
+          <header>
+            <span class="on-record">On the record</span>
+            <span class="mono" style="font-size:12px">cand_0117 &middot; tier 1 &middot; assertion class 1 &middot; human routing integrity</span>
+            <span style="flex:1"></span>
+            <span class="link mono" style="font-size:12px">open the packet</span>
+          </header>
+          <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <div>
+              <div class="caps">What the system currently produces</div>
+              <div class="mono" style="font-size:12px;line-height:18px;margin-top:4px">status = scored, 0 open tasks</div>
+              <div class="caps" style="margin-top:10px">What it should produce</div>
+              <div class="mono" style="font-size:12px;line-height:18px;margin-top:4px">status = escalated<br>ambiguous:seniority</div>
+            </div>
+            <div>
+              <div class="caps">Why it is wrong</div>
+              <div class="doc-sm" style="margin-top:4px">Stated title is Staff and date-derived tenure supports Senior, one step
+              apart, which the committed predicate says must escalate. The two documents were consolidated before the
+              seniority comparison ran, so the disagreement was gone by the time the predicate was evaluated.</div>
+            </div>
+          </div>
+          <div style="padding:8px 16px;border-top:1px solid var(--hairline)" class="mono faint">
+            <span style="font-size:11px">owner V. Chen &middot; severity high &middot; affects routing &middot; discovered 2026-09-04 &middot; review 2026-09-19</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- section 02 preview: pass is a small mono ok, never green -->
+      <div style="margin-top:24px;border-top:1px solid var(--hairline-strong);padding-top:14px">
+        <div style="display:flex;align-items:baseline;gap:12px">
+          <span class="mono" style="font-size:16px">02</span>
+          <span style="font-family:var(--f-serif);font-size:19px;line-height:26px;font-weight:600">Class 1 &nbsp; deterministic invariants, CI-gated</span>
+          <span style="flex:1"></span>
+          <span class="mono muted" style="font-size:12px">18 checks &middot; 16 passed &middot; 2 failed &middot; 0 abstentions &middot; 0 not evaluated</span>
+        </div>
+        <div class="mono muted" style="font-size:12px;margin-top:4px">dataset tier1-v1 (25 cases) &middot; last run 2026-09-05 14:02 &middot; regression from previous run: 0</div>
+
+        <div class="caps" style="margin-top:12px">Evidence fidelity</div>
+        <div class="mono" style="font-size:12px;line-height:20px;margin-top:2px">
+          <div><span class="muted" style="display:inline-block;width:40px">ok</span> Every evidence item carries a verbatim quote that slices from stored normalized text.</div>
+          <div><span class="muted" style="display:inline-block;width:40px">ok</span> No paraphrase is ever stored in place of a verbatim span.</div>
+          <div><span style="color:var(--danger);font-weight:600;display:inline-block;width:40px">FAIL</span> A topical word never satisfies a rubric anchor requiring a named practice.
+            <span class="link">Inspect failures</span></div>
+          <div class="faint" style="padding-left:40px">expected evalprac=none on cand_0091, received partial. diff: +span[1841-1872] &ldquo;measured latency in staging&rdquo;</div>
+        </div>
+        <div class="caps" style="margin-top:10px">Decision determinism</div>
+        <div class="mono" style="font-size:12px;line-height:20px;margin-top:2px">
+          <div><span class="muted" style="display:inline-block;width:40px">ok</span> Shuffled input order produces byte-identical results.</div>
+          <div><span class="muted" style="display:inline-block;width:40px">ok</span> Two fresh-database replays produce the same canonical hash.</div>
+        </div>
+        <div class="caps" style="margin-top:10px">Human routing integrity</div>
+        <div class="mono" style="font-size:12px;line-height:20px;margin-top:2px">
+          <div><span class="muted" style="display:inline-block;width:40px">ok</span> Every matched predicate opens its own resolution task regardless of status precedence.</div>
+          <div><span style="color:var(--danger);font-weight:600;display:inline-block;width:40px">FAIL</span> Seniority disagreement across documents escalates.
+            <span class="link">Inspect failures</span></div>
+        </div>
+        <div class="mono faint" style="font-size:11px;margin-top:8px">16/18 on tier1-v1 (25 cases). A pass percentage never appears without its denominator and dataset version.</div>
+      </div>
+    </div>
+  </main>
+</div>
+</div>
+
+<!-- ============ S8: Hallucination Resistance panel ============ -->
+<div class="vlabel">Surface 8 &middot; section 04 hallucination resistance. a count you cannot click is a claim.</div>
+<div class="screen">
+<div class="app">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Sections</div>
+    <div class="item"><span>01 Known limitations</span><span class="n">3</span></div>
+    <div class="item"><span>02 Class 1 invariants</span><span class="n">18</span></div>
+    <div class="item"><span>03 Class 2 measurement</span></div>
+    <div class="item active"><span>04 Hallucination resistance</span></div>
+    <div class="item"><span>05 Bias demonstration</span></div>
+    <div class="item"><span>06 Calibration freeze delta</span></div>
+    <div class="item"><span>07 Workflow assumptions</span></div>
+  </nav>
+  <main class="work" style="background:var(--surface-paper)">
+    <div style="padding:24px 32px;max-width:1000px">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <span class="mono" style="font-size:16px">04</span>
+        <span style="font-family:var(--f-serif);font-size:26px;line-height:32px;font-weight:600">Hallucination resistance</span>
+      </div>
+      <div class="mono muted" style="font-size:12px;margin-top:4px">traceability ledger &middot; 7 traceable counts &middot; from 25 tier-1 candidates</div>
+
+      <table class="terms" style="margin-top:16px;font-size:13px">
+        <tbody>
+          <tr><td class="n" style="width:70px;font-size:16px">428</td><td style="width:340px">claims generated</td><td class="faint">from 25 tier-1 candidates</td><td style="width:80px"></td></tr>
+          <tr><td class="n" style="font-size:16px">391</td><td>claims linked to exact source spans</td><td class="faint"></td><td><span class="link">inspect</span></td></tr>
+          <tr><td class="n" style="font-size:16px">21</td><td>claims routed as evidence gaps</td><td class="muted">correct behavior</td><td><span class="link">inspect</span></td></tr>
+          <tr><td class="n" style="font-size:16px">11</td><td>contradictions surfaced</td><td class="faint"></td><td><span class="link">inspect</span></td></tr>
+          <tr><td class="n" style="font-size:16px">5</td><td>unsupported claims rejected</td><td class="faint"></td><td><span class="link">inspect</span></td></tr>
+          <tr><td class="n" style="font-size:16px">14</td><td>unlocated quotes</td><td class="faint"></td><td><span class="link">inspect</span></td></tr>
+          <tr><td class="n" style="font-size:16px">3</td><td>fabricated document references</td><td class="faint"></td><td><span class="link">inspect</span></td></tr>
+          <tr><td class="n" style="font-size:16px">2</td><td>grounded-capability refusals</td><td class="muted">correct behavior</td><td><span class="link">inspect</span></td></tr>
+          <tr><td class="n" style="font-size:16px">6</td><td>extractor vs derive_level mismatch</td><td class="faint"></td><td><span class="link">inspect</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="caps" style="margin-top:20px">Evidence gaps by dimension and reason</div>
+      <table class="terms" style="margin-top:6px;max-width:640px">
+        <thead><tr><th>dimension</th><th class="n">missing_evidence</th><th class="n">parse_failure</th><th class="n">unlocated</th><th class="n">total</th></tr></thead>
+        <tbody>
+          <tr><td>applied</td><td class="n">1</td><td class="n">0</td><td class="n">2</td><td class="n">3</td></tr>
+          <tr><td>prodeng</td><td class="n">0</td><td class="n">1</td><td class="n">1</td><td class="n">2</td></tr>
+          <tr><td>evalprac</td><td class="n">7</td><td class="n">0</td><td class="n">3</td><td class="n">10</td></tr>
+          <tr><td>data</td><td class="n">2</td><td class="n">1</td><td class="n">0</td><td class="n">3</td></tr>
+          <tr><td>ambig</td><td class="n">1</td><td class="n">0</td><td class="n">1</td><td class="n">2</td></tr>
+          <tr><td>comms</td><td class="n">1</td><td class="n">0</td><td class="n">0</td><td class="n">1</td></tr>
+          <tr class="total"><td>total</td><td class="n">12</td><td class="n">2</td><td class="n">7</td><td class="n">21</td></tr>
+        </tbody>
+      </table>
+
+      <div class="caps" style="margin-top:20px">Known limitations, shown twice on purpose</div>
+      <div class="doc-sm" style="margin-top:4px;max-width:68ch">The 3 open known limitations remain inside the totals above
+      and are also listed separately here, so removing them from the headline numbers is not possible without the
+      reader noticing. <span class="link">cand_0091</span>, <span class="link">cand_0117</span>, <span class="link">cand_0143</span>.</div>
+
+      <div style="margin-top:20px;border-top:1px solid var(--hairline-strong);padding-top:12px">
+        <div class="doc" style="max-width:68ch">A claim counts as traceable only when its source document, normalized span,
+        packet version, and extraction event are all available.</div>
+      </div>
+    </div>
+  </main>
+</div>
+</div>
+
+<!-- ============ S9: synthetic bias audit demonstration ============ -->
+<div class="vlabel">Surface 9 &middot; section 05 bias demonstration. insufficiency statement renders before any table.</div>
+<div class="screen tall">
+<div class="app">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Sections</div>
+    <div class="item"><span>01 Known limitations</span><span class="n">3</span></div>
+    <div class="item"><span>02 Class 1 invariants</span><span class="n">18</span></div>
+    <div class="item"><span>03 Class 2 measurement</span></div>
+    <div class="item"><span>04 Hallucination resistance</span></div>
+    <div class="item active"><span>05 Bias demonstration</span></div>
+    <div class="item"><span>06 Calibration freeze delta</span></div>
+    <div class="item"><span>07 Workflow assumptions</span></div>
+  </nav>
+  <main class="work" style="background:var(--surface-paper)">
+    <div style="padding:24px 32px;max-width:1120px">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <span class="mono" style="font-size:16px">05</span>
+        <span style="font-family:var(--f-serif);font-size:26px;line-height:32px;font-weight:600">Synthetic bias audit demonstration</span>
+        <span style="flex:1"></span>
+        <span class="pill-synthetic">Synthetic data</span>
+      </div>
+
+      <!-- full-width statement block, no chrome, BEFORE any table renders -->
+      <div class="doc" style="margin-top:16px;max-width:68ch">
+        This is a demonstration on synthetic data. The sample is too small to support a fairness conclusion.
+        With 140 synthetic candidates and a shortlist of 10, per-group cells fall below the size at which an
+        impact ratio is stable. Read the counts, not the ratios. This does not establish production fairness,
+        does not detect every proxy, does not represent a real applicant population, and does not replace
+        ongoing human review.
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 200px;gap:20px;margin-top:24px">
+        <div>
+          <div class="caps">Proposed cut &middot; n=10</div>
+          <table class="terms" style="margin-top:6px">
+            <thead><tr><th>group</th><th class="n">k/n</th><th class="n">rate</th><th class="n">ratio</th></tr></thead>
+            <tbody>
+              <tr><td>group A <span class="faint">ref</span></td><td class="n">4/38</td><td class="n">0.105</td><td class="n faint">1.00</td></tr>
+              <tr><td>group B</td><td class="n">3/41</td><td class="n">0.073</td><td class="n faint">0.70</td></tr>
+              <tr><td>group C</td><td class="n">2/34</td><td class="n">0.059</td><td class="n faint">0.56</td></tr>
+              <tr><td>group D</td><td class="n">1/27</td><td class="n">0.037</td><td class="n faint">0.35</td></tr>
+              <tr><td>group E</td><td class="n">0/0</td><td class="n notcomputable" colspan="2">not computable</td></tr>
+              <tr class="total"><td>total</td><td class="n">10/140</td><td class="n">0.071</td><td class="n"></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="caps">Human-approved cut &middot; n=10</div>
+          <table class="terms" style="margin-top:6px">
+            <thead><tr><th>group</th><th class="n">k/n</th><th class="n">rate</th><th class="n">ratio</th></tr></thead>
+            <tbody>
+              <tr><td>group A <span class="faint">ref</span></td><td class="n">3/38</td><td class="n">0.079</td><td class="n faint">1.00</td></tr>
+              <tr><td>group B</td><td class="n">3/41</td><td class="n">0.073</td><td class="n faint">0.93</td></tr>
+              <tr><td>group C</td><td class="n">3/34</td><td class="n">0.088</td><td class="n faint">1.12</td></tr>
+              <tr><td>group D</td><td class="n">1/27</td><td class="n">0.037</td><td class="n faint">0.47</td></tr>
+              <tr><td>group E</td><td class="n">0/0</td><td class="n notcomputable" colspan="2">not computable</td></tr>
+              <tr class="total"><td>total</td><td class="n">10/140</td><td class="n">0.071</td><td class="n"></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="caps">Delta, approved minus proposed</div>
+          <table class="terms" style="margin-top:6px">
+            <thead><tr><th>group</th><th class="n">&Delta;k</th></tr></thead>
+            <tbody>
+              <tr><td>A</td><td class="n">&minus;1</td></tr>
+              <tr><td>B</td><td class="n">0</td></tr>
+              <tr><td>C</td><td class="n">+1</td></tr>
+              <tr><td>D</td><td class="n">0</td></tr>
+              <tr><td>E</td><td class="n notcomputable">n/a</td></tr>
+              <tr class="total"><td>net</td><td class="n">0</td></tr>
+            </tbody>
+          </table>
+          <div class="mono faint" style="font-size:11px;margin-top:6px">the delta between the two cuts is the product's whole thesis, so it gets its own column</div>
+        </div>
+      </div>
+
+      <div class="mono muted" style="font-size:12px;margin-top:16px">
+        no threshold breach detected in this synthetic run &middot; four-fifths comparison shown for demonstration only,
+        unstable at these cell sizes
+      </div>
+
+      <div class="caps" style="margin-top:16px">Excluded variant corpora, listed rather than silently dropped</div>
+      <div class="mono muted" style="font-size:12px;line-height:18px">
+        tier1-variant-injection (5 cases) &middot; excluded, adversarial text not representative of an applicant pool<br>
+        tier1-variant-parse-failure (4 cases) &middot; excluded, no scored result to place at a cut<br>
+        tier1-variant-duplicate (3 cases) &middot; excluded, would double-count one person
+      </div>
+
+      <div class="caps" style="margin-top:16px">06 Calibration freeze delta</div>
+      <div style="display:flex;gap:24px;align-items:flex-end;margin-top:8px;padding:12px;border:1px solid var(--hairline);border-radius:var(--r-panel);max-width:560px" class="grid-dot">
+        <div style="display:flex;gap:10px;align-items:flex-end;height:110px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+            <div style="display:flex;gap:2px;align-items:flex-end">
+              <div style="width:14px;height:74px;background:var(--text-muted)"></div>
+              <div style="width:14px;height:80px;border:1px solid var(--text-muted);background:none"></div>
+            </div>
+            <span class="mono faint" style="font-size:11px">escalated</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+            <div style="display:flex;gap:2px;align-items:flex-end">
+              <div style="width:14px;height:36px;background:var(--text-muted)"></div>
+              <div style="width:14px;height:30px;border:1px solid var(--text-muted);background:none"></div>
+            </div>
+            <span class="mono faint" style="font-size:11px">scored</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+            <div style="display:flex;gap:2px;align-items:flex-end">
+              <div style="width:14px;height:16px;background:var(--text-muted)"></div>
+              <div style="width:14px;height:16px;border:1px solid var(--text-muted);background:none"></div>
+            </div>
+            <span class="mono faint" style="font-size:11px">rejected</span>
+          </div>
+        </div>
+        <div class="mono faint" style="font-size:11px;line-height:17px">
+          filled = predicted<br>outline = actual<br><br>
+          constants were frozen against tier-1 expected outcomes before the first end-to-end run and were not
+          retuned afterward
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</div>
+
+<!-- ============ S10: whole-packet data_integrity_failed ============ -->
+<div class="vlabel">Surface 10 &middot; whole-packet data_integrity_failed. a separate component from the inline refused span.</div>
+<div class="screen" style="height:560px">
+<div class="app" style="min-height:560px">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item active"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item"><span>Resolution Queue</span><span class="n">41</span></div>
+    <div class="item"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item"><span>Audit Timeline</span><span class="n">1843</span></div>
+    <div class="item"><span>Trust Center</span><span class="n">3</span></div>
+  </nav>
+  <main class="work" style="display:flex;align-items:flex-start;justify-content:flex-start;padding:48px">
+    <div style="max-width:70ch;border-left:3px solid var(--danger);padding-left:16px">
+      <div class="mono" style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--danger)">data_integrity_failed</div>
+      <div style="font-family:var(--f-serif);font-size:26px;line-height:32px;font-weight:600;margin-top:6px">This packet cannot be shown</div>
+      <div class="doc" style="margin-top:10px">
+        A historical reference this packet depends on is missing, so RecruitOS refuses to render a partial packet.
+        Showing some of the evidence and silently dropping the rest would be worse than showing nothing.
+      </div>
+      <table class="terms" style="margin-top:14px;max-width:560px"><tbody>
+        <tr><td>candidate</td><td class="n">cand_0f3a</td></tr>
+        <tr><td>result anchored</td><td class="n">r_88c</td></tr>
+        <tr><td>missing reference</td><td class="n">evidence_span es_2214 &rarr; document doc_88</td></tr>
+        <tr><td>captured head version</td><td class="n">v19</td></tr>
+        <tr><td>command correlation</td><td class="n">cmd_9312</td></tr>
+        <tr><td>retryable</td><td class="n">no</td></tr>
+      </tbody></table>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn">Open the audit trace</button>
+        <button class="btn">Back to the queue</button>
+      </div>
+      <div class="mono faint" style="font-size:11px;margin-top:10px">
+        Distinct from a per-span slice failure, which refuses one highlight inline and still renders the packet.
+        Two states, two components, never collapsed into one.
+      </div>
+    </div>
+  </main>
+</div>
+</div>
+
+<!-- ============ S11: dark mode peer ============ -->
+<div class="vlabel">Surface 11 &middot; dark theme as a complete peer, not an inversion. same packet, same rules, no green.</div>
+<div class="screen" data-theme="dark" style="height:620px">
+<div class="app" style="min-height:620px">
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span><span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span><span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span><span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span>
+    <span class="mono muted" style="font-size:12px">?theme=dark&amp;density=compact</span>
+    <span class="sep">&#124;</span><span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item active"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item"><span>Resolution Queue</span><span class="n">41</span></div>
+    <div class="item"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item"><span>Audit Timeline</span><span class="n">1843</span></div>
+    <div class="item"><span>Trust Center</span><span class="n">3</span></div>
+  </nav>
+  <main class="work" style="display:grid;grid-template-columns:5fr 7fr 6fr;min-height:0">
+    <section style="background:var(--surface-inset);border-right:1px solid var(--hairline-strong);overflow:auto">
+      <div class="panehead"><span>A &middot; Arithmetic</span></div>
+      <div class="grid-dot" style="padding:12px">
+        <div class="caps">Score</div>
+        <div class="mono" style="font-size:26px;line-height:32px">61.7</div>
+        <div class="mono muted" style="font-size:12px;margin-bottom:8px">= 100 &times; 7.40 / 12.00</div>
+        <table class="terms">
+          <thead><tr><th>dim</th><th>lvl</th><th class="n">w</th><th class="n">pts</th></tr></thead>
+          <tbody>
+            <tr><td>applied</td><td>part</td><td class="n">3</td><td class="n">2.01</td></tr>
+            <tr><td>prodeng</td><td>strong</td><td class="n">3</td><td class="n">3.00</td></tr>
+            <tr><td>evalprac</td><td>none</td><td class="n">2</td><td class="n">0.00</td></tr>
+            <tr><td>data</td><td>part</td><td class="n">2</td><td class="n">1.34</td></tr>
+            <tr class="total"><td colspan="3">total</td><td class="n">7.40 / 12.00</td></tr>
+          </tbody>
+        </table>
+        <div class="caps" style="margin-top:12px">Confidence</div>
+        <div class="mono" style="font-size:26px;line-height:32px">0.48</div>
+        <div class="mono" style="font-size:12px;color:var(--accent)">0.48 &lt; 0.55 T_ESCALATE</div>
+      </div>
+    </section>
+    <section style="background:var(--surface);border-right:1px solid var(--hairline-strong);overflow:auto">
+      <div class="panehead"><span>B &middot; Evidence ledger</span></div>
+      <div style="padding:10px 12px">
+        <div class="caps">Supporting (2)</div>
+        <div class="bracket sup" style="background:var(--surface-paper);border:1px solid var(--hairline);border-left:3px solid var(--support);padding:8px 10px;margin:6px 0">
+          <q class="doc-sm">shipped an eval harness for our RAG pipeline</q>
+          <div class="mono faint" style="font-size:11px;margin-top:3px">resume.pdf 1204&ndash;1249 &middot; exact &middot; extracted &middot; [E12]</div>
+        </div>
+        <div class="caps" style="margin-top:10px">Contradicting (1)</div>
+        <div class="bracket con" style="background:var(--surface-paper);border:1px solid var(--hairline);border-left:3px solid var(--contradict);padding:8px 10px;margin:6px 0">
+          <q class="doc-sm">4 years of applied ML</q>
+          <div class="mono faint" style="font-size:11px;margin-top:3px">contradicts derived tenure 2y 7m &middot; [E31]</div>
+        </div>
+        <div class="caps" style="margin-top:10px">Gaps (1)</div>
+        <div class="bracket gap" style="margin-top:6px">
+          <div class="mono" style="font-size:12px;line-height:18px;color:var(--text-muted)">
+            No located span, any polarity.<br>searched: resume.pdf, notes.md<br>reason: missing_evidence:evaluation_practice</div>
+        </div>
+      </div>
+    </section>
+    <section style="background:var(--surface-paper);overflow:auto">
+      <div class="panehead"><span>C &middot; Source &nbsp; resume.pdf</span></div>
+      <div style="padding:16px 20px;max-width:68ch" class="doc">
+        <p>Led the evaluation harness for our RAG pipeline. <mark class="sup">shipped an eval harness for our RAG pipeline<span class="tag">E12</span></mark> covering retrieval precision.</p>
+        <p>Reported <mark class="con">4 years of applied ML<span class="tag">E31</span></mark> while listed roles run 2019-06 to 2021-11, then 2022-03 to present.</p>
+        <p><span class="span-refused">span integrity failed, highlight refused</span> The rest of the document still renders.</p>
+      </div>
+    </section>
+  </main>
+</div>
+</div>
+
+</body>
+</html>

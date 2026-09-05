@@ -1,0 +1,436 @@
+/* RecruitOS design tokens. Transcribed verbatim from DESIGN.md Parts 3, 4, 5.
+   Do not edit values here. DESIGN.md is the source of truth. */
+
+:root {
+  color-scheme: light;
+
+  --bg:               #ECEEEF;
+  --surface:          #F7F8F8;
+  --surface-paper:    #FFFFFF;
+  --surface-inset:    #E4E7E8;
+  --hairline:         #CDD2D4;
+  --hairline-strong:  #98A0A4;
+
+  --text:             #14181B;
+  --text-muted:       #5C666B;
+  --text-faint:       #838C91;
+
+  --accent:           #2F5FD0;
+  --accent-hover:     #24499F;
+  --accent-wash:      #E6EDFB;
+
+  --support:          #0F7A6A;
+  --support-wash:     #DFF0EC;
+  --contradict:       #B07A16;
+  --contradict-wash:  #F7EEDA;
+  --gap-outline:      #98A0A4;
+
+  --danger:           #9E2B25;
+  --danger-wash:      #F7E3E1;
+
+  --grid-dot:         #D6DADC;
+
+  /* Part 3 scale */
+  --t-micro:  11px;  --lh-micro:  15px;
+  --t-xs:     12px;  --lh-xs:     16px;
+  --t-sm:     13px;  --lh-sm:     18px;
+  --t-base:   14px;  --lh-base:   20px;
+  --t-md:     16px;  --lh-md:     24px;
+  --t-lg:     19px;  --lh-lg:     26px;
+  --t-xl:     26px;  --lh-xl:     32px;
+  --t-doc:    17px;  --lh-doc:    27px;
+  --t-doc-sm: 15px;  --lh-doc-sm: 24px;
+
+  /* Part 5 radius */
+  --r-row:    2px;
+  --r-panel:  4px;
+  --r-dialog: 6px;
+  --r-pill: 999px;
+  --r-mark:   0px;
+
+  /* Part 5 density. default step. */
+  --row-h:      36px;
+  --row-text:   13px;
+  --row-lh:     18px;
+
+  --bar-h:  48px;
+  --rail-w: 216px;
+
+  /* Three families, self-hosted in production per Part 17.1.
+     Mockups fall back to system faces when the files are absent, which is
+     exactly the failure mode note 1 exists to prevent. */
+  --f-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-cond: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --f-serif: "Source Serif 4", "Source Serif Pro", Charter, Georgia, serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+[data-density="compact"]     { --row-h: 28px; --row-text: 12px; --row-lh: 16px; }
+[data-density="default"]     { --row-h: 36px; --row-text: 13px; --row-lh: 18px; }
+[data-density="comfortable"] { --row-h: 44px; --row-text: 14px; --row-lh: 20px; }
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:               #0E1114;
+  --surface:          #161A1E;
+  --surface-paper:    #1C2126;
+  --surface-inset:    #12161A;
+  --hairline:         #2C333A;
+  --hairline-strong:  #5E6871;
+
+  --text:             #E9EDEF;
+  --text-muted:       #99A3AA;
+  --text-faint:       #77818A;
+
+  --accent:           #7AA5F5;
+  --accent-hover:     #9CBEFF;
+  --accent-wash:      #17263F;
+
+  --support:          #4FC0A8;
+  --support-wash:     #102B27;
+  --contradict:       #DFAE55;
+  --contradict-wash:  #2E2513;
+  --gap-outline:      #5E6871;
+
+  --danger:           #E8827A;
+  --danger-wash:      #331B19;
+
+  --grid-dot:         #262C32;
+}
+
+/* ---------- base ---------- */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--f-sans);
+  font-size: var(--t-base);
+  line-height: var(--lh-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+.serif { font-family: var(--f-serif); }
+
+.caps {
+  font-family: var(--f-mono);
+  font-size: var(--t-micro);
+  line-height: var(--lh-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.muted { color: var(--text-muted); }
+.faint { color: var(--text-faint); }
+
+a, .link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* ---------- app shell (Part 5, Part 6) ---------- */
+
+.app {
+  display: grid;
+  grid-template-rows: var(--bar-h) 1fr;
+  grid-template-columns: var(--rail-w) 1fr;
+  grid-template-areas: "bar bar" "rail work";
+  height: 100%;
+  min-height: 900px;
+}
+
+.globalbar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--t-xs);
+  line-height: var(--lh-xs);
+}
+.globalbar .brand { font-weight: 600; font-size: var(--t-base); letter-spacing: -0.01em; }
+.globalbar .sep { color: var(--hairline-strong); }
+.globalbar .spacer { flex: 1; }
+
+/* Part 4: SYNTHETIC pill, mono caps, hairline-strong outline, no fill */
+.pill-synthetic {
+  font-family: var(--f-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  color: var(--text-muted);
+  background: none;
+}
+
+.rail {
+  grid-area: rail;
+  background: var(--surface);
+  border-right: 1px solid var(--hairline);
+  padding: 12px 0;
+}
+.rail .group { padding: 8px 12px 4px; }
+.rail .item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: var(--t-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-muted);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+.rail .item:hover { background: var(--surface-inset); color: var(--text); }
+.rail .item.active {
+  color: var(--text);
+  font-weight: 600;
+  border-left-color: var(--accent);
+  background: var(--surface-inset);
+}
+.rail .item .n { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--text-faint); }
+
+.work { grid-area: work; overflow: auto; }
+
+/* ---------- tables (Part 9) ---------- */
+
+table.q { width: 100%; border-collapse: collapse; }
+table.q thead th {
+  position: sticky; top: 0; z-index: 2;
+  height: 34px;
+  background: var(--surface-inset);
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--f-cond);
+  font-size: var(--t-micro);
+  line-height: var(--lh-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 0 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.q td {
+  height: var(--row-h);
+  padding: 6px 8px;
+  font-size: var(--row-text);
+  line-height: var(--row-lh);
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+table.q td.num {
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+table.q tr.row-escalated td:first-child { box-shadow: inset 3px 0 0 0 var(--accent); }
+table.q tr.row-focus td { box-shadow: inset 0 2px 0 0 var(--accent), inset 0 -2px 0 0 var(--accent); }
+table.q tr.row-focus td:first-child { box-shadow: inset 3px 0 0 0 var(--accent), inset 0 2px 0 0 var(--accent), inset 0 -2px 0 0 var(--accent); }
+table.q tr.rejected td { color: var(--text-muted); }
+
+.group-head {
+  background: var(--bg);
+  border-top: 1px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline);
+}
+.group-head td {
+  height: 26px;
+  padding: 4px 8px;
+  font-family: var(--f-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Part 9: the shortlist cut is a literal rule across the table */
+.cut td {
+  height: 22px;
+  padding: 0 8px;
+  border-top: 2px solid var(--text);
+  border-bottom: none;
+  font-family: var(--f-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+  text-align: center;
+  background: var(--bg);
+}
+
+/* Part 9: status is a mono text token, never a colored pill */
+.status { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--text-muted); }
+.status.rejected { color: var(--danger); }
+.reason { font-family: var(--f-mono); font-size: var(--t-xs); color: var(--text-muted); white-space: normal; }
+
+/* ---------- evidence coverage strip (Part 9, six cells, 7px) ---------- */
+
+.strip { display: inline-flex; gap: 2px; vertical-align: middle; }
+.strip i {
+  display: block;
+  width: 7px;
+  height: 14px;
+  border-radius: 1px;
+}
+.strip i.sup { background: var(--support); }
+.strip i.con {
+  background: var(--contradict-wash);
+  border: 1px solid var(--contradict);
+  background-image: repeating-linear-gradient(45deg,
+    var(--contradict) 0 1px, transparent 1px 3px);
+}
+.strip i.gap {
+  background: none;
+  border: 1px dashed var(--gap-outline);
+}
+
+/* ---------- evidence bracket, the signature component (Part 2) ---------- */
+
+.bracket {
+  border-left: 3px solid var(--hairline-strong);
+  padding-left: 10px;
+}
+.bracket.sup { border-left-color: var(--support); }
+.bracket.con { border-left-color: var(--contradict); }
+.bracket.esc { border-left-color: var(--accent); }
+.bracket.gap {
+  border-left: none;
+  border: 1px dashed var(--gap-outline);
+  padding: 10px;
+}
+.bracket.linked {
+  background: var(--accent-wash);
+  transition: background 180ms ease-out, opacity 180ms ease-out;
+}
+
+/* span highlights, never rounded (Part 5 --r-mark) */
+mark.sup {
+  background: var(--support-wash);
+  border-radius: 0;
+  color: inherit;
+  box-shadow: inset 0 -2px 0 0 var(--support);
+  padding: 1px 0;
+}
+mark.con {
+  background: var(--contradict-wash);
+  background-image: repeating-linear-gradient(45deg,
+    rgba(176,122,22,0.30) 0 1px, transparent 1px 4px);
+  border-radius: 0;
+  color: inherit;
+  box-shadow: inset 0 -2px 0 0 var(--contradict);
+  padding: 1px 0;
+}
+mark .tag {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  vertical-align: super;
+  margin-left: 2px;
+}
+
+/* Part 8 rule 9: per-span integrity failure. inline, refused, packet still renders. */
+.span-refused {
+  display: inline;
+  border: 1px solid var(--danger);
+  border-radius: 0;
+  color: var(--danger);
+  font-family: var(--f-mono);
+  font-size: var(--t-xs);
+  padding: 1px 4px;
+  background: repeating-linear-gradient(135deg,
+    var(--danger-wash) 0 3px, transparent 3px 6px);
+  text-decoration: line-through;
+}
+
+/* ---------- LevelChip: four ordinal segments, foreground grey, no hue ---------- */
+
+.level { display: inline-flex; gap: 2px; vertical-align: middle; }
+.level i {
+  width: 9px; height: 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 1px;
+  display: block;
+}
+.level i.on { background: var(--text-muted); border-color: var(--text-muted); }
+
+/* ---------- hard requirement chips (Part 8 rule 11) ---------- */
+
+.hreq {
+  font-family: var(--f-mono);
+  font-size: var(--t-xs);
+  padding: 1px 6px;
+  border-radius: var(--r-row);
+  white-space: nowrap;
+}
+.hreq.pass    { border: 1px solid var(--support); color: var(--support); }
+.hreq.fail    { background: var(--danger); border: 1px solid var(--danger); color: #fff; }
+.hreq.unknown { border: 1px dashed var(--gap-outline); color: var(--text-muted); }
+
+/* ---------- panels ---------- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+}
+.panel > header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-inset);
+}
+.paper { background: var(--surface-paper); }
+
+.btn {
+  font-family: var(--f-sans);
+  font-size: var(--t-base);
+  padding: 5px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:disabled { color: var(--text-faint); border-color: var(--hairline); cursor: not-allowed; }
+
+/* ---------- measurement grid, charts and arithmetic only (Part 2) ---------- */
+
+.grid-dot {
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+/* ---------- ON THE RECORD chip (Part 4) ---------- */
+
+.on-record {
+  font-family: var(--f-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--contradict);
+  border-radius: var(--r-row);
+  padding: 1px 6px;
+  color: var(--contradict);
+}
+
+.notcomputable { font-family: var(--f-mono); color: var(--text-faint); }
