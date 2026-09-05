@@ -15,6 +15,34 @@ Binding documents, in order of authority:
 
 No em dashes anywhere: not in code, comments, docs, commit messages, or product copy.
 
+## Skill routing
+
+When the user's request matches an available skill, invoke it via the Skill tool. When in
+doubt, invoke the skill.
+
+RecruitOS pipeline, in the order the project actually moves:
+
+| Stage | Skill | What it owns here |
+|---|---|---|
+| Product premise and wedge | `/office-hours` | what to build, who for, what the narrowest complete slice is. Produced `docs/designs/recruitos-candidate-triage-control-plane.md` |
+| Architecture and implementation plan | `/plan-eng-review` | package boundaries, schema, commands, tests, gates. Produced `docs/plans/recruitos-candidate-triage-implementation-plan.md` |
+| Design system and UX direction | `/design-consultation` | `DESIGN.md`. Already run and APPROVED. Re-run only to update it, never to start fresh |
+| Visual variants | `/design-shotgun` | generating and comparing concrete visual options inside the approved system |
+| Post-implementation visual QA | `/design-review` | run after UI code exists. Flags anything that does not match `DESIGN.md` |
+| Browser testing | `/qa` | live behavior, the six required Playwright workflows, the offline demo path |
+| Pre-ship code review | `/review` | the diff, before landing |
+| Ship | `/ship` | only when implementation, tests, design review, and QA are all ready. Not before |
+
+`/ship` is the last gate, not a shortcut past the ones above it.
+
+General routing:
+
+- Bugs and errors, invoke `/investigate`
+- Strategy and scope calls, invoke `/plan-ceo-review`
+- Full review pipeline, invoke `/autoplan`
+- Save progress, invoke `/context-save`. Resume it, invoke `/context-restore`
+- Author a backlog-ready spec or issue, invoke `/spec`
+
 ## Design System
 
 Always read `DESIGN.md` before making any visual or UI decision.

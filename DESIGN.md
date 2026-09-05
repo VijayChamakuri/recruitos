@@ -1,6 +1,6 @@
 # Design System and UX Direction: RecruitOS
 
-Status: proposed, not yet implemented
+Status: **APPROVED** 2026-09-05. All four deliberate risks accepted as written.
 Created: 2026-09-05 by `/design-consultation`
 Binds: `docs/designs/recruitos-candidate-triage-control-plane.md` (product, APPROVED)
 Binds: `docs/plans/recruitos-candidate-triage-implementation-plan.md` (architecture, CLEARED)
@@ -11,6 +11,48 @@ implies an architectural clarification, it is called out in "Architecture notes 
 by UX" at the end, and nowhere else.
 
 House rule for all product copy, docs, and commits in this repo: no em dashes.
+
+---
+
+## Locked at approval
+
+Approved 2026-09-05. The four deliberate risks below were reviewed against the
+alternative of cutting them and were kept. Changing any line in this section requires an
+explicit decision record, not a judgment call during implementation.
+
+**The four risks, all kept:**
+
+1. The Trust Center opens with known limitations and never uses green as a success
+   shortcut. See Part 13.
+2. The score never renders as a badge, ring, gauge, or grade, and is never the primary
+   truth object. See Part 8, rule 1.
+3. Typography separates machine data, source documents, and human review prose into three
+   distinct systems. See Part 3.
+4. The queue's primary scan signal is the six-cell evidence coverage strip, not a plain
+   match-score column. See Part 9.
+
+The accepted tradeoff, stated so nobody relitigates it later: a hiring manager who wants
+one number will need one sentence of explanation. That is worth paying, because the
+explanation is the product. A score-first design would make RecruitOS look like the
+pattern the project exists to challenge.
+
+**Also locked:**
+
+| Constraint | Where it is specified |
+|---|---|
+| Light mode primary, dark mode a complete peer | Part 2, Part 4 |
+| Fonts self-hosted and committed, no CDN dependency for the demo | Part 3, Part 17.1 |
+| Green never means passed, anywhere, in either theme | Part 4 |
+| Hue encodes evidence polarity only | Part 4, Rule 1 |
+| No raw status color shortcut. Status uses weight, rule, and typography | Part 4, Rule 2 |
+| The evidence bracket is the signature component | Part 2, Part 15 |
+| Known limitations visible in the first viewport and counted in the global bar | Part 6, Part 13 |
+| No `Save anyway` on a stale conflict | Part 10 |
+| Every Trust Center count is clickable through to its rows | Part 13.04 |
+| The score is not in the packet header | Part 8, rule 1 |
+| Three permanently visible evidence slots per dimension | Part 8, rule 5 |
+| Theme and density URL-addressable with deterministic defaults | Part 5, Part 17.4 |
+| Whole-packet `data_integrity_failed` and per-span slice failure are separate components | Part 8, rule 9, Part 17.3 |
 
 ---
 
@@ -952,6 +994,7 @@ with the cleared plan.
 
 | Date | Decision | Rationale |
 |---|---|---|
+| 2026-09-05 | **Direction APPROVED. All four deliberate risks kept as written** | Reviewed against cutting risk 4 alone (option B) and risks 3 and 4 together (option C). Both were rejected: the product's claim is that it makes AI-assisted hiring inspectable and honest about failure, and each risk is that claim made visible in a different surface. The one-number tradeoff is accepted because the explanation is the product |
 | 2026-09-05 | Initial design system and UX direction created | `/design-consultation`, informed by WebSearch research on 2026 evidence-provenance UI patterns, dense internal tool conventions, and AI trust surfaces, plus an independent Codex design direction |
 | 2026-09-05 | Light theme is primary, dark is a complete peer | The core act is reading a document and checking a quote. Evidence should read as paper. Also anti-convergence: the whole dev-tool category is dark-first |
 | 2026-09-05 | The score never appears as a badge and never in the packet header | The product's own demand evidence says a bare percentage makes the reader open the resume anyway, which adds a step |
