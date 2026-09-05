@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="default">
+<head>
+<meta charset="utf-8">
+<title>RecruitOS design shotgun: comparison board</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { padding: 20px 28px 60px; }
+  h1 { font-family: var(--f-serif); font-size: 26px; line-height: 32px; margin: 0 0 4px; font-weight: 600; }
+  .sub { font-family: var(--f-mono); font-size: 12px; color: var(--text-muted); }
+  .lede { font-family: var(--f-serif); font-size: 17px; line-height: 27px; max-width: 68ch; margin: 14px 0 0; }
+
+  .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+  .col { border: 1px solid var(--hairline); background: var(--surface); border-radius: var(--r-panel); }
+  .col.win { border-color: var(--accent); border-width: 2px; }
+  .col > header {
+    display: flex; align-items: baseline; gap: 8px; padding: 8px 12px;
+    background: var(--surface-inset); border-bottom: 1px solid var(--hairline);
+  }
+  .col > header .k { font-family: var(--f-mono); font-size: 16px; }
+  .col > header .nm { font-size: 16px; font-weight: 600; }
+  .col.win > header { background: var(--accent-wash); }
+  .col .body { padding: 10px 12px; }
+  .col .body p { font-size: 13px; line-height: 19px; margin: 0 0 8px; }
+  .col .body .caps { margin: 10px 0 4px; }
+  .col .body ul { margin: 0; padding-left: 16px; font-size: 13px; line-height: 19px; }
+  .col .body li { margin-bottom: 3px; }
+
+  .viewport {
+    height: 420px; overflow: hidden; border-bottom: 1px solid var(--hairline);
+    background: var(--bg); position: relative;
+  }
+  .viewport iframe {
+    width: 1500px; height: 1980px; border: 0;
+    transform: scale(0.315); transform-origin: 0 0;
+  }
+  .viewport .zoom {
+    position: absolute; right: 6px; bottom: 6px;
+    font-family: var(--f-mono); font-size: 10px; color: var(--text-faint);
+    background: var(--surface); border: 1px solid var(--hairline); padding: 1px 5px;
+  }
+
+  table.score { width: 100%; border-collapse: collapse; margin-top: 28px; }
+  table.score th {
+    font-family: var(--f-cond); font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--text-muted); text-align: left; font-weight: 600; padding: 5px 8px;
+    border-bottom: 1px solid var(--hairline-strong); background: var(--surface-inset);
+  }
+  table.score td { padding: 6px 8px; border-bottom: 1px solid var(--hairline); font-size: 13px; line-height: 19px; vertical-align: top; }
+  table.score td.m { font-family: var(--f-mono); font-size: 12px; text-align: center; width: 90px; }
+  table.score .ok { color: var(--text-muted); }
+  table.score .bad { color: var(--danger); font-weight: 600; }
+  table.score tr.tot td { border-top: 1px solid var(--text); border-bottom: none; font-weight: 600; }
+
+  .verdict { margin-top: 28px; border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; max-width: 72ch; }
+  .verdict h2 { font-family: var(--f-serif); font-size: 19px; line-height: 26px; margin: 0 0 6px; font-weight: 600; }
+  .verdict .doc { font-family: var(--f-serif); font-size: 17px; line-height: 27px; }
+
+  .more { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+  .more a {
+    display: block; border: 1px solid var(--hairline-strong); border-radius: var(--r-panel);
+    padding: 8px 14px; text-decoration: none; color: var(--text); background: var(--surface);
+  }
+  .more a .t { font-size: 14px; font-weight: 600; }
+  .more a .d { font-family: var(--f-mono); font-size: 11px; color: var(--text-faint); }
+</style>
+</head>
+<body>
+
+<h1>Design shotgun: RecruitOS application variants</h1>
+<div class="sub">2026-09-05 &middot; inside the APPROVED direction in DESIGN.md &middot; paper and graphite &middot; nothing in the locked list is up for a vote</div>
+
+<p class="lede">All three variants use the same tokens, the same three type systems, the same four rationed hues,
+and the same closed component inventory. They differ on the one thing DESIGN.md deliberately leaves open:
+how the packet's three surfaces are arranged and where the command center lives. The rest of the application
+is built once, in the recommended structure, and is linked below the scorecard.</p>
+
+<div class="cols">
+
+  <div class="col">
+    <header><span class="k">A</span><span class="nm">Ledger</span><span style="flex:1"></span><span class="mono faint" style="font-size:11px">score 21/30</span></header>
+    <div class="viewport"><iframe src="variant-a.html" scrolling="no"></iframe><span class="zoom">variant-a.html &middot; 31.5%</span></div>
+    <div class="body">
+      <p>One continuous ledger. Arithmetic, evidence, and source sit at nearly the same surface value, separated
+      only by hairlines. Evidence renders as flat rows, not cards. The queue is the command center, with a single
+      hairline run strip and no readouts above it.</p>
+      <div class="caps">Where it wins</div>
+      <ul>
+        <li>Highest density of the three. Most rows and most evidence per viewport.</li>
+        <li>Most obviously not a dashboard. Reads as an instrument log.</li>
+        <li>Cheapest to build. Almost no pane chrome to maintain.</li>
+      </ul>
+      <div class="caps">Where it loses</div>
+      <ul>
+        <li>The paper claim collapses. If the source pane is the same value as the chrome, "evidence should read as paper" stops being visible.</li>
+        <li>The three type systems do most of the separation work alone, which is a lot of load on typography that is not yet self-hosted.</li>
+        <li>No home for the command center readouts, so the founder and talent-lead flows have nowhere to land.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="col win">
+    <header><span class="k">B</span><span class="nm">Bench</span><span style="flex:1"></span><span class="mono" style="font-size:11px;color:var(--accent)">recommended &middot; 27/30</span></header>
+    <div class="viewport"><iframe src="variant-b.html" scrolling="no"></iframe><span class="zoom">variant-b.html &middot; 31.5%</span></div>
+    <div class="body">
+      <p>Three panes at three declared surface values: graphite arithmetic, neutral evidence ledger, paper source.
+      The evidence bracket is promoted from a left rule into a thread that draws a visible dashed line through
+      all three panes when a claim is focused. The command center is an instrument band of readouts above the
+      queue, hairline-separated, no cards and no gauges.</p>
+      <div class="caps">Where it wins</div>
+      <ul>
+        <li>Surface value carries the paper-and-graphite claim without spending any hue.</li>
+        <li>The thread makes the signature component something you can see in a still screenshot, which is what capture 02 needs.</li>
+        <li>The band gives the command center a home without adding a sixth destination to the locked IA.</li>
+        <li>Injection flag, refused span, and gap card all have room to render at full fidelity.</li>
+      </ul>
+      <div class="caps">Where it loses</div>
+      <ul>
+        <li>The thread is the most implementation work in the set. It needs measured positions, and it must be disabled under prefers-reduced-motion.</li>
+        <li>The band is one scroll of vertical budget the recruiter's daily loop does not need.</li>
+        <li>Three surface values is one more contrast pair to verify in dark mode.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="col">
+    <header><span class="k">C</span><span class="nm">Dossier</span><span style="flex:1"></span><span class="mono faint" style="font-size:11px">score 19/30</span></header>
+    <div class="viewport"><iframe src="variant-c.html" scrolling="no"></iframe><span class="zoom">variant-c.html &middot; 31.5%</span></div>
+    <div class="body">
+      <p>Document-first. The source document takes the widest pane, evidence becomes margin annotations aligned to
+      the spans they explain, and the arithmetic narrows to a 250px sticky ledger. The command center is a serif
+      run report page with the queue below it.</p>
+      <div class="caps">Where it wins</div>
+      <ul>
+        <li>Best pure reading experience. This is what "no ATS renders a resume as a document" was arguing for.</li>
+        <li>Marginalia is a genuinely legible metaphor for grounded evidence.</li>
+        <li>The run report is the most quotable single screen for a non-technical reader.</li>
+      </ul>
+      <div class="caps">Where it loses</div>
+      <ul>
+        <li>It quietly demotes the arithmetic. DESIGN.md says arithmetic and evidence are equally first-class, and a 250px column against a full-width document is not equal.</li>
+        <li>Three permanent slots per dimension do not survive a margin. Empty supporting and contradicting slots get collapsed into a footnote, which is the exact silent-absence failure Part 8 rule 5 bans.</li>
+        <li>The report page puts a scroll between the recruiter and the daily loop.</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<table class="score">
+  <thead><tr>
+    <th style="width:34%">Test, taken from the locked list in DESIGN.md</th>
+    <th class="m" style="text-align:center">A Ledger</th>
+    <th class="m" style="text-align:center">B Bench</th>
+    <th class="m" style="text-align:center">C Dossier</th>
+    <th>Why the difference</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>Evidence surface reads as paper</td>
+      <td class="m bad">1</td><td class="m ok">3</td><td class="m ok">3</td>
+      <td>A puts the source at the same surface value as the chrome. B and C both declare it.</td></tr>
+    <tr><td>Arithmetic and evidence equally first-class</td>
+      <td class="m ok">3</td><td class="m ok">3</td><td class="m bad">1</td>
+      <td>C narrows the arithmetic to a 250px rail against a full-width document.</td></tr>
+    <tr><td>Three permanent slots per dimension survive</td>
+      <td class="m ok">3</td><td class="m ok">3</td><td class="m bad">1</td>
+      <td>Margin annotations have no room for two empty slots per dimension, so C collapses them.</td></tr>
+    <tr><td>Evidence bracket is legible as the signature</td>
+      <td class="m">2</td><td class="m ok">3</td><td class="m">2</td>
+      <td>Only B makes the four-way link visible without interaction, which a static screenshot needs.</td></tr>
+    <tr><td>Score is not the header and not a badge</td>
+      <td class="m ok">3</td><td class="m ok">3</td><td class="m ok">3</td>
+      <td>All three comply. This was never the contested axis.</td></tr>
+    <tr><td>Queue scan signal is the six-cell strip</td>
+      <td class="m ok">3</td><td class="m ok">3</td><td class="m">2</td>
+      <td>C's run report pushes the strips below the first viewport.</td></tr>
+    <tr><td>Command center exists without a sixth destination</td>
+      <td class="m bad">1</td><td class="m ok">3</td><td class="m">2</td>
+      <td>A has nowhere to put it. C spends a scroll on it. B uses a band inside destination 1.</td></tr>
+    <tr><td>Density holds at 140 rows and 6 dimensions</td>
+      <td class="m ok">3</td><td class="m">2</td><td class="m">2</td>
+      <td>A is densest. B pays a band. C pays a report page.</td></tr>
+    <tr><td>Dark mode is a straightforward peer</td>
+      <td class="m ok">3</td><td class="m">2</td><td class="m">2</td>
+      <td>Fewer declared surface values means fewer contrast pairs to re-verify.</td></tr>
+    <tr><td>Implementation cost inside T12</td>
+      <td class="m ok">3</td><td class="m">2</td><td class="m">1</td>
+      <td>B adds the thread. C adds margin-to-span alignment, which is the hardest of the three.</td></tr>
+    <tr class="tot"><td>Total</td><td class="m">21</td><td class="m" style="color:var(--accent)">27</td><td class="m">19</td><td></td></tr>
+  </tbody>
+</table>
+<div class="mono faint" style="font-size:11px;margin-top:6px">3 = holds, 2 = holds with a cost, 1 = breaks a locked constraint or has no answer</div>
+
+<div class="verdict">
+  <h2>Recommendation: B, Bench</h2>
+  <div class="doc">
+    B is the only variant that breaks no locked constraint. A loses the paper claim, which is the reason light
+    mode is primary at all. C is the most pleasant to read and it breaks two rules to get there: it demotes the
+    arithmetic below the evidence, and it cannot hold three permanent slots per dimension, which is the exact
+    silent-absence failure Part 8 rule 5 exists to make impossible.
+  </div>
+  <div class="doc" style="margin-top:10px">
+    Take two things from the losers. From A, the density discipline: the queue keeps its plain table and the
+    instrument band never grows into cards. From C, the document typography: the source pane keeps its 68ch
+    measure and its section heads, because C proved the reading experience is worth protecting.
+  </div>
+  <div class="doc" style="margin-top:10px">
+    The one thing to watch in B is the thread. It is the best part of the design and the easiest part to ship
+    badly. If the measured positions turn out to be fragile across resize, virtualization, or reduced motion, cut
+    the connector line and keep the synchronized bracket highlight. The claim survives. The connector is the
+    flourish on top of it.
+  </div>
+</div>
+
+<div class="more">
+  <a href="surfaces.html"><div class="t">Remaining nine surfaces</div><div class="d">surfaces.html &middot; resolution and re-score, stale conflict, proposals, audit trace, Trust Center 01 and 02, hallucination resistance, bias demonstration, whole-packet integrity failure, dark peer</div></a>
+  <a href="readme-sequence.html"><div class="t">README screenshot sequence</div><div class="d">readme-sequence.html &middot; nine captures in argument order with pinned URLs</div></a>
+  <a href="variant-a.html"><div class="t">Variant A full size</div><div class="d">variant-a.html</div></a>
+  <a href="variant-b.html"><div class="t">Variant B full size</div><div class="d">variant-b.html</div></a>
+  <a href="variant-c.html"><div class="t">Variant C full size</div><div class="d">variant-c.html</div></a>
+</div>
+
+<div style="margin-top:28px;border-top:1px solid var(--hairline-strong);padding-top:12px;max-width:68ch">
+  <div class="caps">Known limitation of this board, on the record</div>
+  <div class="doc" style="font-size:15px;line-height:24px">
+    IBM Plex Sans, IBM Plex Sans Condensed, Source Serif 4, and IBM Plex Mono are not installed on this machine
+    and these mockups do not bundle them, so every frame above renders in fallback faces. Structure, spacing,
+    and color are accurate. Typographic texture is not. That is the same failure Part 17 note 1 exists to
+    prevent, showing up here first.
+  </div>
+</div>
+
+</body>
+</html>

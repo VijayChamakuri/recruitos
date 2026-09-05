@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="default">
+<head>
+<meta charset="utf-8">
+<title>RecruitOS variant A: Ledger</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { min-width: 1440px; }
+  .screen { height: 940px; border-bottom: 24px solid var(--bg); }
+  .vlabel {
+    font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-faint);
+    padding: 8px 16px; background: var(--bg);
+  }
+
+  /* --- A: packet is one continuous ledger. no pane chrome, hairlines only. --- */
+  .packet-a { display: grid; grid-template-columns: 5fr 7fr 6fr; height: 100%; }
+  .col-a { border-right: 1px solid var(--hairline); overflow: auto; background: var(--surface); }
+  .col-b { border-right: 1px solid var(--hairline); overflow: auto; background: var(--surface); }
+  .col-c { overflow: auto; background: var(--surface-paper); }
+  .colhead {
+    position: sticky; top: 0; z-index: 3;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 28px; padding: 0 12px;
+    background: var(--surface-inset); border-bottom: 1px solid var(--hairline);
+    font-family: var(--f-cond); font-size: 11px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--text-muted);
+  }
+  .arith { padding: 12px; }
+  .arith .big { font-family: var(--f-mono); font-size: 26px; line-height: 32px; font-variant-numeric: tabular-nums; }
+  table.terms { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 12px; }
+  table.terms th {
+    font-family: var(--f-cond); font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--text-muted); text-align: left; font-weight: 600; padding: 3px 4px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  table.terms td { padding: 3px 4px; border-bottom: 1px solid var(--hairline); cursor: pointer; }
+  table.terms td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table.terms tr.on td { background: var(--accent-wash); box-shadow: inset 3px 0 0 0 var(--accent); }
+  table.terms tr.total td { border-top: 1px solid var(--text); border-bottom: none; font-weight: 600; }
+
+  /* A: evidence is flat ledger rows, not cards */
+  .dim { border-bottom: 1px solid var(--hairline-strong); }
+  .dimhead {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; background: var(--surface-inset);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .dimhead .idx { font-family: var(--f-mono); font-size: 12px; color: var(--text-faint); }
+  .dimhead .nm { font-size: 13px; font-weight: 600; flex: 1; }
+  .slot { padding: 6px 12px 8px; border-bottom: 1px solid var(--hairline); }
+  .slot > .caps { margin-bottom: 4px; }
+  .ev { padding: 4px 0 6px 10px; margin-bottom: 4px; }
+  .ev q { font-family: var(--f-serif); font-size: 15px; line-height: 24px; display: block; }
+  .ev .meta { font-family: var(--f-mono); font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+  .doc { padding: 20px 24px; max-width: 68ch; font-family: var(--f-serif); font-size: 17px; line-height: 27px; }
+</style>
+</head>
+<body>
+
+<!-- ================= SCREEN 1: command center / triage queue ================= -->
+<div class="vlabel">Variant A &middot; Ledger &middot; screen 1 of 2 &middot; triage queue and command center</div>
+<div class="screen">
+<div class="app">
+
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span>
+    <span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span>
+    <span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span>
+    <span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span>
+    <span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span>
+    <span class="mono muted" style="font-size:12px">theme light &middot; density default</span>
+    <span class="sep">&#124;</span>
+    <span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item active"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item"><span>Resolution Queue</span><span class="n">41</span></div>
+    <div class="item"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item"><span>Audit Timeline</span><span class="n">1842</span></div>
+    <div class="item"><span>Trust Center</span><span class="n">3</span></div>
+    <div class="group caps" style="margin-top:16px">Run</div>
+    <div class="mono faint" style="padding:2px 12px;font-size:11px">
+      <div style="font-size:11px">run #7 &middot; sealed</div>
+      <div style="font-size:11px">rubric v1</div>
+      <div style="font-size:11px">snapshot 9f2c&#8230;</div>
+      <div style="font-size:11px">12:04:11.402Z</div>
+    </div>
+  </nav>
+
+  <main class="work">
+    <!-- A: no dashboard band. the queue IS the command center. one hairline run strip. -->
+    <div style="display:flex;align-items:baseline;gap:16px;padding:10px 16px;border-bottom:1px solid var(--hairline);background:var(--surface)">
+      <span style="font-size:19px;line-height:26px">Triage Queue</span>
+      <span class="mono muted" style="font-size:12px">140 candidates &middot; 87 scored &middot; 41 escalated &middot; 12 rejected on hard requirement</span>
+      <span style="flex:1"></span>
+      <span class="mono faint" style="font-size:12px">j k move &middot; enter open &middot; e evidence &middot; r resolve &middot; / search</span>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;padding:6px 16px;border-bottom:1px solid var(--hairline);background:var(--surface-inset)">
+      <span class="caps" style="padding:0">Evidence strip legend</span>
+      <span class="strip"><i class="sup"></i></span><span class="mono" style="font-size:11px">span located</span>
+      <span class="strip"><i class="con"></i></span><span class="mono" style="font-size:11px">contradicted</span>
+      <span class="strip"><i class="gap"></i></span><span class="mono" style="font-size:11px">gap, no evidence</span>
+      <span class="mono faint" style="font-size:11px">cells in committed rubric order: applied, prodeng, evalprac, data, ambig, comms</span>
+      <span style="flex:1"></span>
+      <span class="link mono" style="font-size:11px">dismiss</span>
+    </div>
+
+    <table class="q">
+      <thead><tr>
+        <th style="width:44px">#</th>
+        <th style="width:190px">Candidate</th>
+        <th style="width:44px">Ch</th>
+        <th style="width:76px">Evidence</th>
+        <th style="width:64px;text-align:right">Score</th>
+        <th style="width:56px;text-align:right">Conf</th>
+        <th style="width:130px">Status</th>
+        <th style="width:210px">Reasons</th>
+        <th style="width:56px;text-align:right">Tasks</th>
+        <th>Updated</th>
+      </tr></thead>
+      <tbody>
+        <tr class="group-head"><td colspan="10">Scored &nbsp;(87)</td></tr>
+        <tr><td class="num">004</td><td>Marcus Oyelaran</td><td class="mono">in</td>
+          <td><span class="strip"><i class="sup"></i><i class="sup"></i><i class="con"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span></td>
+          <td class="num">84.2</td><td class="num">0.81</td><td><span class="status">scored</span></td><td class="faint mono" style="font-size:12px">n/a</td><td class="num">0</td><td class="mono faint" style="font-size:12px">12:04:11</td></tr>
+        <tr><td class="num">019</td><td>Dana Whitfield</td><td class="mono">src</td>
+          <td><span class="strip"><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i></span></td>
+          <td class="num">81.7</td><td class="num">0.77</td><td><span class="status">scored</span></td><td class="faint mono" style="font-size:12px">n/a</td><td class="num">0</td><td class="mono faint" style="font-size:12px">12:04:11</td></tr>
+        <tr><td class="num">027</td><td>Hyun-woo Park</td><td class="mono">in</td>
+          <td><span class="strip"><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="con"></i><i class="sup"></i><i class="sup"></i></span></td>
+          <td class="num">78.4</td><td class="num">0.74</td><td><span class="status">scored</span></td><td class="faint mono" style="font-size:12px">n/a</td><td class="num">0</td><td class="mono faint" style="font-size:12px">12:04:11</td></tr>
+        <tr><td class="num">052</td><td>Ifeoma Nwachukwu</td><td class="mono">src</td>
+          <td><span class="strip"><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span></td>
+          <td class="num">73.1</td><td class="num">0.69</td><td><span class="status">scored</span></td><td class="faint mono" style="font-size:12px">n/a</td><td class="num">0</td><td class="mono faint" style="font-size:12px">12:04:12</td></tr>
+        <tr class="cut"><td colspan="10">Shortlist cut &nbsp; n=10</td></tr>
+        <tr><td class="num">061</td><td>Ana Ferreira</td><td class="mono">in</td>
+          <td><span class="strip"><i class="sup"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span></td>
+          <td class="num">62.9</td><td class="num">0.66</td><td><span class="status">scored</span></td><td class="faint mono" style="font-size:12px">n/a</td><td class="num">0</td><td class="mono faint" style="font-size:12px">12:04:12</td></tr>
+        <tr><td class="num">073</td><td>Kwame Boateng</td><td class="mono">in</td>
+          <td><span class="strip"><i class="sup"></i><i class="con"></i><i class="gap"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span></td>
+          <td class="num">58.3</td><td class="num">0.61</td><td><span class="status">scored</span></td><td class="faint mono" style="font-size:12px">n/a</td><td class="num">0</td><td class="mono faint" style="font-size:12px">12:04:12</td></tr>
+
+        <tr class="group-head"><td colspan="10">Pending resolution, may qualify &nbsp;(41)</td></tr>
+        <tr class="row-escalated row-focus"><td class="num">023</td><td>Priya Raghavan</td><td class="mono">in</td>
+          <td><span class="strip"><i class="sup"></i><i class="con"></i><i class="gap"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span></td>
+          <td class="num">61.7</td><td class="num">0.48</td><td><span class="status">escalated</span></td>
+          <td class="reason">missing_evidence:<br>evaluation_practice</td><td class="num">2</td><td class="mono faint" style="font-size:12px">12:31:07</td></tr>
+        <tr class="row-escalated"><td class="num">088</td><td>Tomas Lindqvist</td><td class="mono">in</td>
+          <td><span class="strip"><i class="sup"></i><i class="gap"></i><i class="gap"></i><i class="gap"></i><i class="gap"></i><i class="gap"></i></span></td>
+          <td class="num faint">n/a</td><td class="num faint">n/a</td><td><span class="status">escalated</span></td>
+          <td class="reason">assessment_unavailable</td><td class="num">1</td><td class="mono faint" style="font-size:12px">12:04:12</td></tr>
+        <tr class="row-escalated"><td class="num">094</td><td>Lena Vogt</td><td class="mono">src</td>
+          <td><span class="strip"><i class="sup"></i><i class="con"></i><i class="con"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i></span></td>
+          <td class="num">69.0</td><td class="num">0.52</td><td><span class="status">escalated</span></td>
+          <td class="reason">contradiction:tenure_vs_claim</td><td class="num">1</td><td class="mono faint" style="font-size:12px">12:04:12</td></tr>
+        <tr class="row-escalated"><td class="num">102</td><td>Rafael Duarte</td><td class="mono">in</td>
+          <td><span class="strip"><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i><i class="con"></i></span></td>
+          <td class="num">66.2</td><td class="num">0.53</td><td><span class="status">escalated</span></td>
+          <td class="reason">ambiguous:seniority</td><td class="num">1</td><td class="mono faint" style="font-size:12px">12:04:12</td></tr>
+
+        <tr class="group-head"><td colspan="10">Rejected on hard requirement &nbsp;(12)</td></tr>
+        <tr class="rejected"><td class="num">111</td><td>Sam Achebe</td><td class="mono">in</td>
+          <td><span class="strip"><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i><i class="gap"></i></span></td>
+          <td class="num">71.4</td><td class="num">0.72</td><td><span class="status rejected">rejected_hard_req</span></td>
+          <td class="reason">work_auth</td><td class="num">0</td><td class="mono faint" style="font-size:12px">12:04:12</td></tr>
+        <tr class="rejected"><td class="num">126</td><td>Yui Nakamura</td><td class="mono">src</td>
+          <td><span class="strip"><i class="sup"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span></td>
+          <td class="num">64.8</td><td class="num">0.70</td><td><span class="status rejected">rejected_hard_req</span></td>
+          <td class="reason">location</td><td class="num">0</td><td class="mono faint" style="font-size:12px">12:04:12</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</div>
+
+<!-- ================= SCREEN 2: candidate packet ================= -->
+<div class="vlabel">Variant A &middot; Ledger &middot; screen 2 of 2 &middot; candidate packet, evidence bracket as flat left rule</div>
+<div class="screen">
+<div class="app">
+
+  <div class="globalbar">
+    <span class="brand">RecruitOS</span>
+    <span class="muted">Applied AI Engineer</span>
+    <span class="mono muted" style="font-size:12px">run #7 sealed</span>
+    <span class="sep">&#124;</span>
+    <span class="pill-synthetic">Synthetic data</span>
+    <span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">41 open tasks</span>
+    <span class="sep">&#124;</span>
+    <span class="mono link" style="font-size:12px">3 known limitations</span>
+    <span class="spacer"></span>
+    <span style="font-size:13px">V. Chen &#9662;</span>
+  </div>
+
+  <nav class="rail">
+    <div class="group caps">Destinations</div>
+    <div class="item active"><span>Triage Queue</span><span class="n">140</span></div>
+    <div class="item"><span>Resolution Queue</span><span class="n">41</span></div>
+    <div class="item"><span>Proposal Review</span><span class="n">12</span></div>
+    <div class="item"><span>Audit Timeline</span><span class="n">1842</span></div>
+    <div class="item"><span>Trust Center</span><span class="n">3</span></div>
+  </nav>
+
+  <main class="work" style="display:flex;flex-direction:column">
+    <!-- packet header. NO SCORE. (Part 8 rule 1) -->
+    <div style="padding:10px 16px 8px;border-bottom:1px solid var(--hairline);background:var(--surface)">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <span style="font-size:26px;line-height:32px;letter-spacing:-0.01em">Priya Raghavan</span>
+        <span style="flex:1"></span>
+        <span class="pill-synthetic">Synthetic</span>
+        <span class="mono" style="font-size:12px">result r_88c (current) &#8592; r_41d &#9662;</span>
+      </div>
+      <div class="mono faint" style="font-size:12px;margin-top:2px">cand_0f3a &middot; inbound &middot; import #23 &middot; run #7 &middot; v18 &nbsp;&nbsp;
+        <span style="color:var(--accent)">escalated &middot; 2 open tasks</span></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <span class="caps" style="padding:0">Hard req</span>
+        <span class="hreq unknown">work_auth unknown &middot; missing_evidence</span>
+        <span class="hreq pass">yoe pass</span>
+        <span class="hreq pass">location pass</span>
+        <span style="flex:1"></span>
+        <span class="link mono" style="font-size:12px">audit trace</span>
+        <span class="link mono" style="font-size:12px">source</span>
+      </div>
+    </div>
+
+    <div class="packet-a" style="flex:1;min-height:0">
+      <!-- A. ARITHMETIC -->
+      <section class="col-a">
+        <div class="colhead"><span>A &middot; Arithmetic</span><span class="mono" style="font-size:11px">sticky</span></div>
+        <div class="arith grid-dot">
+          <div class="caps">Score</div>
+          <div class="big">61.7</div>
+          <div class="mono muted" style="font-size:12px;margin-bottom:10px">= 100 &times; 7.40 / 12.00</div>
+
+          <table class="terms">
+            <thead><tr><th>dim</th><th>lvl</th><th style="text-align:right">w</th><th style="text-align:right">pts</th></tr></thead>
+            <tbody>
+              <tr class="on"><td>applied</td><td>part</td><td class="n">3</td><td class="n">2.01</td></tr>
+              <tr><td>prodeng</td><td>strong</td><td class="n">3</td><td class="n">3.00</td></tr>
+              <tr><td>evalprac</td><td>none</td><td class="n">2</td><td class="n">0.00</td></tr>
+              <tr><td>data</td><td>part</td><td class="n">2</td><td class="n">1.34</td></tr>
+              <tr><td>ambig</td><td>weak</td><td class="n">1</td><td class="n">0.33</td></tr>
+              <tr><td>comms</td><td>part</td><td class="n">1</td><td class="n">0.67</td></tr>
+              <tr class="total"><td colspan="3">total</td><td class="n">7.40 / 12.00</td></tr>
+            </tbody>
+          </table>
+
+          <div class="caps" style="margin-top:16px">Confidence</div>
+          <div class="big">0.48</div>
+          <table class="terms" style="margin-top:6px">
+            <tbody>
+              <tr><td>&nbsp;0.45 &times; cov</td><td class="n">0.67</td><td class="n">=</td><td class="n">&nbsp;0.301</td></tr>
+              <tr><td>&nbsp;0.25 &times; res</td><td class="n">0.91</td><td class="n">=</td><td class="n">&nbsp;0.228</td></tr>
+              <tr><td>&minus;0.20 &times; con</td><td class="n">0.17</td><td class="n">=</td><td class="n">&minus;0.033</td></tr>
+              <tr><td>&minus;0.10 &times; mis</td><td class="n">0.25</td><td class="n">=</td><td class="n">&minus;0.025</td></tr>
+              <tr class="total"><td colspan="3">total</td><td class="n">0.471 &rarr; 0.48</td></tr>
+            </tbody>
+          </table>
+          <div class="mono" style="font-size:12px;margin-top:6px;color:var(--accent)">0.48 &lt; 0.55 &nbsp; T_ESCALATE</div>
+
+          <div class="caps" style="margin-top:16px">Calibration diagnostic</div>
+          <div class="mono muted" style="font-size:12px;line-height:18px">
+            derive_level &nbsp;&rarr; partial<br>
+            extractor &nbsp;&nbsp;&nbsp;&nbsp;&rarr; partial<br>
+            agree<br>
+            <span class="faint">no scoring authority</span>
+          </div>
+
+          <button class="btn primary" style="width:100%;margin-top:16px">Record resolution (2)</button>
+        </div>
+      </section>
+
+      <!-- B. EVIDENCE LEDGER -->
+      <section class="col-b">
+        <div class="colhead"><span>B &middot; Evidence ledger</span><span class="mono" style="font-size:11px">6 dimensions, rubric order</span></div>
+
+        <div class="dim">
+          <div class="dimhead"><span class="idx">&#9312;</span><span class="nm">Applied ML / LLM systems</span>
+            <span class="level"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>
+            <span class="mono muted" style="font-size:12px">partial</span><span class="mono faint" style="font-size:12px">w3</span></div>
+
+          <div class="slot">
+            <div class="caps">Supporting (2)</div>
+            <div class="ev bracket sup linked">
+              <q>shipped an eval harness for our RAG pipeline</q>
+              <div class="meta">resume.pdf 1204&ndash;1249 &middot; exact &middot; extracted &middot; not human-confirmed &middot; [E12]</div>
+            </div>
+            <div class="ev bracket sup">
+              <q>owned prompt regression suite across three model versions</q>
+              <div class="meta">notes.md 88&ndash;140 &middot; normalized &middot; extracted &middot; not human-confirmed &middot; [E14]</div>
+            </div>
+          </div>
+
+          <div class="slot">
+            <div class="caps">Contradicting (1)</div>
+            <div class="ev bracket con">
+              <q>4 years of applied ML</q>
+              <div class="meta">contradicts derived tenure 2y 7m &middot; resume.pdf 402&ndash;428 &middot; exact &middot; extracted &middot; [E31]</div>
+            </div>
+          </div>
+
+          <div class="slot" style="border-bottom:none">
+            <div class="caps">Gaps (0)</div>
+            <div class="mono faint" style="font-size:12px">No gap. All spans located.</div>
+          </div>
+        </div>
+
+        <div class="dim">
+          <div class="dimhead"><span class="idx">&#9313;</span><span class="nm">Production software engineering</span>
+            <span class="level"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>
+            <span class="mono muted" style="font-size:12px">strong</span><span class="mono faint" style="font-size:12px">w3</span></div>
+          <div class="slot"><div class="caps">Supporting (3)</div>
+            <div class="ev bracket sup"><q>on-call rotation for a service at 4k rps</q>
+              <div class="meta">resume.pdf 2210&ndash;2248 &middot; exact &middot; extracted &middot; [E18]</div></div>
+          </div>
+          <div class="slot"><div class="caps">Contradicting (0)</div>
+            <div class="mono faint" style="font-size:12px">No contradicting evidence found in the provided sources.</div></div>
+          <div class="slot" style="border-bottom:none"><div class="caps">Gaps (0)</div>
+            <div class="mono faint" style="font-size:12px">No gap. All spans located.</div></div>
+        </div>
+
+        <div class="dim">
+          <div class="dimhead"><span class="idx">&#9314;</span><span class="nm">Evaluation and measurement</span>
+            <span class="level"><i></i><i></i><i></i><i></i></span>
+            <span class="mono muted" style="font-size:12px">none</span>
+            <span class="mono" style="font-size:11px;letter-spacing:.04em;color:var(--text-muted)">REQUIRED</span>
+            <span class="mono faint" style="font-size:12px">w2</span></div>
+          <div class="slot"><div class="caps">Supporting (0)</div>
+            <div class="mono faint" style="font-size:12px">No supporting evidence found in the provided sources.</div></div>
+          <div class="slot"><div class="caps">Contradicting (0)</div>
+            <div class="mono faint" style="font-size:12px">No contradicting evidence found in the provided sources.</div></div>
+          <div class="slot" style="border-bottom:none">
+            <div class="caps">Gaps (1)</div>
+            <div class="bracket gap">
+              <div class="mono" style="font-size:12px;line-height:18px;color:var(--text-muted)">
+                <span class="caps" style="padding:0">Evidence gap</span><br>
+                No located span, any polarity.<br>
+                searched: resume.pdf, notes.md<br>
+                reason: missing_evidence:evaluation_practice
+              </div>
+              <button class="btn" style="margin-top:8px">Supply evidence and level</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="dim">
+          <div class="dimhead"><span class="idx">&#9315;</span><span class="nm">Data and pipelines</span>
+            <span class="level"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>
+            <span class="mono muted" style="font-size:12px">partial</span><span class="mono faint" style="font-size:12px">w2</span></div>
+          <div class="slot" style="border-bottom:none"><div class="caps">Supporting (1) &middot; Contradicting (0) &middot; Gaps (0)</div>
+            <div class="ev bracket sup"><q>built the ingestion path for 200 GB of interview transcripts</q>
+              <div class="meta">resume.pdf 3010&ndash;3062 &middot; fuzzy &middot; extracted &middot; [E22]</div></div></div>
+        </div>
+      </section>
+
+      <!-- C. SOURCE -->
+      <section class="col-c">
+        <div class="colhead"><span>C &middot; Source &nbsp; resume.pdf &#9662;</span><span class="mono" style="font-size:11px">normalized &middot; 4,218 chars</span></div>
+        <div style="padding:6px 24px;border-bottom:1px solid var(--hairline);display:flex;gap:12px;align-items:center">
+          <span class="mono" style="font-size:12px;border-bottom:2px solid var(--accent);padding-bottom:3px">resume.pdf</span>
+          <span class="mono faint" style="font-size:12px">notes.md</span>
+          <span style="flex:1"></span>
+          <span class="link mono" style="font-size:11px">View normalization log</span>
+        </div>
+        <div class="doc">
+          <p>Led the evaluation harness for our RAG pipeline. <mark class="sup">shipped an eval harness for our RAG pipeline<span class="tag">E12</span></mark> covering retrieval precision and answer groundedness across three release candidates.</p>
+          <p>Reported <mark class="con">4 years of applied ML<span class="tag">E31</span></mark> experience while listed roles run 2019-06 to 2021-11, then 2022-03 to present.</p>
+          <p>Owned the deployment path for two production services, including <mark class="sup">on-call rotation for a service at 4k rps<span class="tag">E18</span></mark> during the migration quarter.</p>
+          <p><span class="span-refused">span integrity failed, highlight refused</span> The surrounding paragraph still renders. Offsets 3702&ndash;3744 no longer slice to the stored text under UTF-16.</p>
+          <p>Built the ingestion path for 200 GB of interview transcripts and the deduplication pass that fed the retrieval index.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</div>
+
+</body>
+</html>
