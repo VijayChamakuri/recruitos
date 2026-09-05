@@ -909,7 +909,8 @@ A closed set. Adding a component outside this list requires a note in the decisi
 `EvidenceCoverageStrip`
 
 **Queue and status:** `QueueTable`, `CutRule`, `GroupHeader`, `StatusToken`, `ReasonCode`,
-`ActorTag`, `LineageControl`, `DensityControl`
+`ActorTag`, `LineageControl`, `DensityControl`, `CommandBand` (destination 1 landing state
+only, never a sixth destination)
 
 **Work:** `TaskRow`, `ResolutionInspector`, `SpanSelector`, `DeltaPreview`, `ProposalCard`,
 `DiffView`, `ConflictBand`, `NoOutboundEffectFooter`
@@ -1005,3 +1006,5 @@ with the cleared plan.
 | 2026-09-05 | The evidence bracket threads card, span, arithmetic term, and audit event | Adopted from the Codex outside voice, which articulated it better than the original hover-linking sketch |
 | 2026-09-05 | Escalated candidates stay in the queue in their own labeled group, not behind a filter | The product exists to refuse "AI screening quietly loses candidates" |
 | 2026-09-05 | The resolution form is an inspector on the packet, and spans are created by selecting text in the source pane | Resolving requires reading the evidence, and a selection-created span is structurally guaranteed to be locatable |
+| 2026-09-05 | **Variant B Bench approved as the implementation design direction** | `/design-shotgun` generated three variants inside the approved system, varying only the packet pane arrangement and the command center placement. B was the only one that broke no locked constraint. A lost the paper claim that justifies light-primary. C demoted the arithmetic and collapsed the three permanent evidence slots, which is the exact silent-absence failure Part 8 rule 5 exists to prevent. See `docs/designs/recruitos-visual-variants.md` |
+| 2026-09-05 | `CommandBand` added to the Part 15 closed inventory | The command center is the landing state of destination 1 and not a sixth destination, so the readouts need a component and the IA stays at five entries. Constrained to that landing state; moving it to its own route requires a new decision record |
