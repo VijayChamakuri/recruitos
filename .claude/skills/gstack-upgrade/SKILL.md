@@ -1,0 +1,1 @@
+/Users/vijaychamakuri/conductor/recruitOS/recruitos/.claude/skills/gstack/gstack-upgrade/SKILL.md
