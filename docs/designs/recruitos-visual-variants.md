@@ -436,22 +436,29 @@ above is what makes that mechanical rather than a promise.
 
 ---
 
-## Amendment owed to DESIGN.md
+## Amendment to DESIGN.md, LANDED
 
-`DESIGN.md` lives on the `recruitos-design-consulatation` branch and is not present in this
-worktree, so this branch cannot edit it. Two edits are owed there, and they are written out
-here so they can be applied verbatim rather than reconstructed.
+**Status: applied.** Commit `24cf4f26e61bf1aaad23f88f6a526f032b149573` (`24cf4f2`),
+`docs: record approved B Bench design amendment`, on branch
+`recruitos-design-consulatation`. Two hunks, 4 insertions, 1 deletion, nothing else
+touched. `DESIGN.md` still reads `Status: **APPROVED**`, Part 6 still lists five
+destinations, and the em dash scan is clean.
 
-**Part 15, Queue and status group.** Append `CommandBand` to the list:
+`DESIGN.md` lives on that branch and is not present in this worktree, which is why the two
+edits were written out here first. They are kept below as the record of exactly what was
+applied.
+
+**Part 15, Queue and status group.** `CommandBand` appended to the list:
 
 > **Queue and status:** `QueueTable`, `CutRule`, `GroupHeader`, `StatusToken`, `ReasonCode`,
 > `ActorTag`, `LineageControl`, `DensityControl`, `CommandBand` (destination 1 landing state
 > only, never a sixth destination)
 
-**Part 18, Decisions Log.** Append two rows:
+**Part 18, Decisions Log.** Two rows appended:
 
 > \| 2026-09-05 \| **Variant B Bench approved as the implementation design direction** \| `/design-shotgun` generated three variants inside the approved system, varying only the packet pane arrangement and the command center placement. B was the only one that broke no locked constraint. A lost the paper claim that justifies light-primary. C demoted the arithmetic and collapsed the three permanent evidence slots, which is the exact silent-absence failure Part 8 rule 5 exists to prevent. See `docs/designs/recruitos-visual-variants.md` \|
 >
 > \| 2026-09-05 \| `CommandBand` added to the Part 15 closed inventory \| The command center is the landing state of destination 1 and not a sixth destination, so the readouts need a component and the IA stays at five entries. Constrained to that landing state; moving it to its own route requires a new decision record \|
 
-Until those land, this document is the binding record for both.
+`DESIGN.md` is the binding record for both. This section is the audit trail of how they got
+there.
