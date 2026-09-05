@@ -1,6 +1,7 @@
 # Visual Variants and Build Spec: RecruitOS
 
-Status: **RECOMMENDED, awaiting your pick**
+Status: **APPROVED** 2026-09-05. Variant **B Bench** is the implementation design direction
+for `apps/web`. Decision record `030626ce`.
 Created: 2026-09-05 by `/design-shotgun`
 Binds under: `DESIGN.md` (APPROVED). This document does not change a single locked line.
 Binds under: `docs/designs/recruitos-candidate-triage-control-plane.md` (product, APPROVED)
@@ -387,10 +388,70 @@ the parsed URL so there is no flash of the wrong theme.
 
 ---
 
-## Open question for you
+## Approval, 2026-09-05
 
-The `CommandBand` in variant B is the only component in this document that is not in the
-Part 15 closed inventory. DESIGN.md says adding one requires a note in the decisions log.
-If you approve B, that note gets written. If you would rather keep the inventory closed and
-have destination 1 open on a bare table, say so and the band comes out. The rest of B is
-unaffected either way.
+**Variant B Bench is approved as the implementation design direction.** Decision record
+`030626ce`. A and C are rejected and are kept in the repo as the reasoning trail, not as
+options.
+
+Approved on these grounds, in the approver's words: B keeps the approved paper-and-graphite
+design visible, makes the evidence bracket legible across pane gutters, and preserves the
+three permanent evidence slots without collapsing missing or empty states.
+
+- **A Ledger rejected** for weakening the paper and source-document distinction.
+- **C Dossier rejected** for demoting the arithmetic and collapsing empty evidence slots,
+  which breaks the trust model.
+
+### `CommandBand` is admitted to the closed inventory
+
+Part 15 says adding a component outside the inventory requires a note in the decisions log.
+The note is written. `CommandBand` joins the **Queue and status** group, with two
+constraints that are part of the approval and not implementation latitude:
+
+1. `CommandBand` exists only as the landing state of destination 1, the Triage Queue.
+2. It never becomes a sixth top-level navigation destination. The left rail keeps five
+   entries. If a future need pushes the band toward its own route, that is a new decision
+   record, not a refactor.
+
+The command center dashboard is the landing state of destination 1. That is settled.
+
+### Part 17 enforcement, all six items retained
+
+Carried into implementation exactly as specified in the section above:
+
+1. CI grep fails the build on any remote font URL.
+2. Client-bundle boundary test on `@recruitos/core`.
+3. Server-action fallback for the delta preview documented, to be taken only if bundle
+   safety proves expensive, and decided before T12 starts rather than during.
+4. Separate whole-packet and per-span integrity components.
+5. Playwright assertion that those two integrity states cannot collapse into one.
+6. URL-first theme and density resolver where `localStorage` never wins.
+
+### Fonts
+
+The fallback-font rendering in these mockups is accepted for design review only. The
+implemented application self-hosts **IBM Plex Sans, IBM Plex Sans Condensed, Source Serif 4,
+and IBM Plex Mono** so the zero-network demo renders with the intended typography. Item 1
+above is what makes that mechanical rather than a promise.
+
+---
+
+## Amendment owed to DESIGN.md
+
+`DESIGN.md` lives on the `recruitos-design-consulatation` branch and is not present in this
+worktree, so this branch cannot edit it. Two edits are owed there, and they are written out
+here so they can be applied verbatim rather than reconstructed.
+
+**Part 15, Queue and status group.** Append `CommandBand` to the list:
+
+> **Queue and status:** `QueueTable`, `CutRule`, `GroupHeader`, `StatusToken`, `ReasonCode`,
+> `ActorTag`, `LineageControl`, `DensityControl`, `CommandBand` (destination 1 landing state
+> only, never a sixth destination)
+
+**Part 18, Decisions Log.** Append two rows:
+
+> \| 2026-09-05 \| **Variant B Bench approved as the implementation design direction** \| `/design-shotgun` generated three variants inside the approved system, varying only the packet pane arrangement and the command center placement. B was the only one that broke no locked constraint. A lost the paper claim that justifies light-primary. C demoted the arithmetic and collapsed the three permanent evidence slots, which is the exact silent-absence failure Part 8 rule 5 exists to prevent. See `docs/designs/recruitos-visual-variants.md` \|
+>
+> \| 2026-09-05 \| `CommandBand` added to the Part 15 closed inventory \| The command center is the landing state of destination 1 and not a sixth destination, so the readouts need a component and the IA stays at five entries. Constrained to that landing state; moving it to its own route requires a new decision record \|
+
+Until those land, this document is the binding record for both.
