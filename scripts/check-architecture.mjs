@@ -301,9 +301,25 @@ function prototypeReflectionOnCallable(node, checker, sourceFiles) {
   );
 }
 
+function ambientReflectGetCapability(node, checker, sourceFiles) {
+  if (!ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node)) {
+    return false;
+  }
+  const owner = unwrapExpression(node.expression);
+  return (
+    ts.isIdentifier(owner) &&
+    owner.text === "Reflect" &&
+    !symbolHasEmittedLocalDeclaration(resolvedSymbol(owner, checker), sourceFiles) &&
+    accessedProperty(node) === "get"
+  );
+}
+
 function indirectDynamicCodeCapability(node, checker, sourceFiles) {
   if (prototypeReflectionOnCallable(node, checker, sourceFiles)) {
     return "prototype reflection on callable value";
+  }
+  if (ambientReflectGetCapability(node, checker, sourceFiles)) {
+    return "reflective property access capability Reflect.get";
   }
   if (!ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node)) {
     return undefined;

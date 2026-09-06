@@ -73,7 +73,9 @@ describe("core architecture boundary", () => {
     ["function-constructor", "indirect Function constructor capability"],
     ["retained-function-constructor", "indirect Function constructor capability"],
     ["constructor-global-access", "indirect Function constructor capability"],
-    ["prototype-function-constructor", "prototype reflection on callable value"]
+    ["prototype-function-constructor", "prototype reflection on callable value"],
+    ["reflect-get-function-constructor", "reflective property access capability Reflect.get"],
+    ["retained-reflect-get", "reflective property access capability Reflect.get"]
   ])("rejects the %s fixture", (name, expected) => {
     expect(fixture(name)).toEqual(expect.arrayContaining([expect.stringContaining(expected)]));
   });
