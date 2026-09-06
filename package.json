@@ -1,0 +1,27 @@
+{
+  "name": "recruitos",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": "24.19.0",
+    "pnpm": "10.17.1"
+  },
+  "scripts": {
+    "build": "corepack pnpm --filter @recruitos/core build",
+    "check": "corepack pnpm test:types && corepack pnpm check:architecture && corepack pnpm test",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:types": "corepack pnpm --filter @recruitos/core test:types",
+    "typecheck": "corepack pnpm test:types"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.1",
+    "@vitest/coverage-v8": "3.2.4",
+    "fast-check": "4.3.0",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  }
+}

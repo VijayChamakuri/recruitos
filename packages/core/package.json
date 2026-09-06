@@ -1,0 +1,52 @@
+{
+  "name": "@recruitos/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./canonical": {
+      "types": "./dist/canonical/index.d.ts",
+      "browser": "./dist/canonical/index.js",
+      "import": "./dist/canonical/index.js",
+      "default": "./dist/canonical/index.js"
+    },
+    "./domain": {
+      "types": "./dist/domain/index.d.ts",
+      "browser": "./dist/domain/index.js",
+      "import": "./dist/domain/index.js",
+      "default": "./dist/domain/index.js"
+    },
+    "./errors": {
+      "types": "./dist/errors/index.d.ts",
+      "browser": "./dist/errors/index.js",
+      "import": "./dist/errors/index.js",
+      "default": "./dist/errors/index.js"
+    },
+    "./matching": {
+      "types": "./dist/matching/index.d.ts",
+      "browser": "./dist/matching/index.js",
+      "import": "./dist/matching/index.js",
+      "default": "./dist/matching/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.config.ts",
+    "test:coverage": "vitest run --root ../.. --config vitest.config.ts --coverage",
+    "test:types": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "corepack pnpm test:types"
+  },
+  "dependencies": {
+    "zod": "4.1.5"
+  }
+}
