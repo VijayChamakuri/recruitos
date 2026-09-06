@@ -1,0 +1,158 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "d1ef6d97-f89b-401d-a399-023f094da884",
+  "prevId": "a50254a2-afe5-4f9f-a0a2-7b86859769c3",
+  "tables": {
+    "command_receipt": {
+      "name": "command_receipt",
+      "columns": {
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "command_name": {
+          "name": "command_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expected_version": {
+          "name": "expected_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "result_json": {
+          "name": "result_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "result_hash": {
+          "name": "result_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "command_receipt_expected_version": {
+          "name": "command_receipt_expected_version",
+          "value": "\"command_receipt\".\"expected_version\" >= 0"
+        },
+        "command_receipt_created_at": {
+          "name": "command_receipt_created_at",
+          "value": "\"command_receipt\".\"created_at\" >= 0"
+        },
+        "command_receipt_completed_at": {
+          "name": "command_receipt_completed_at",
+          "value": "\"command_receipt\".\"completed_at\" IS NULL OR \"command_receipt\".\"completed_at\" >= \"command_receipt\".\"created_at\""
+        },
+        "command_receipt_status": {
+          "name": "command_receipt_status",
+          "value": "\"command_receipt\".\"status\" IN ('in_progress', 'succeeded', 'failed')"
+        },
+        "command_receipt_terminal_shape": {
+          "name": "command_receipt_terminal_shape",
+          "value": "(\n        \"command_receipt\".\"status\" = 'in_progress'\n        AND \"command_receipt\".\"result_json\" IS NULL\n        AND \"command_receipt\".\"result_hash\" IS NULL\n        AND \"command_receipt\".\"error_code\" IS NULL\n        AND \"command_receipt\".\"error_message\" IS NULL\n        AND \"command_receipt\".\"completed_at\" IS NULL\n      ) OR (\n        \"command_receipt\".\"status\" = 'succeeded'\n        AND \"command_receipt\".\"result_json\" IS NOT NULL\n        AND \"command_receipt\".\"result_hash\" IS NOT NULL\n        AND \"command_receipt\".\"error_code\" IS NULL\n        AND \"command_receipt\".\"error_message\" IS NULL\n        AND \"command_receipt\".\"completed_at\" IS NOT NULL\n      ) OR (\n        \"command_receipt\".\"status\" = 'failed'\n        AND \"command_receipt\".\"result_json\" IS NULL\n        AND \"command_receipt\".\"result_hash\" IS NULL\n        AND \"command_receipt\".\"error_code\" IS NOT NULL\n        AND \"command_receipt\".\"error_message\" IS NOT NULL\n        AND \"command_receipt\".\"completed_at\" IS NOT NULL\n      )"
+        }
+      }
+    },
+    "runtime_migration_smoke": {
+      "name": "runtime_migration_smoke",
+      "columns": {
+        "singleton": {
+          "name": "singleton",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "applied": {
+          "name": "applied",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

@@ -79,7 +79,7 @@ function expectedMigrationRequired(reason: string): object {
   };
 }
 
-async function addSecondTestMigration(migrationsFolder: string): Promise<number> {
+async function addTestMigration(migrationsFolder: string): Promise<number> {
   const journalPath = join(migrationsFolder, "meta", "_journal.json");
   const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
     entries: Array<{
@@ -90,18 +90,20 @@ async function addSecondTestMigration(migrationsFolder: string): Promise<number>
       breakpoints: boolean;
     }>;
   };
-  const firstEntry = journal.entries[0]!;
-  const secondTimestamp = firstEntry.when + 1;
+  const lastEntry = journal.entries.at(-1)!;
+  const nextIndex = journal.entries.length;
+  const secondTimestamp = lastEntry.when + 1;
+  const tag = `${nextIndex.toString().padStart(4, "0")}_runtime_foundation_test`;
   journal.entries.push({
-    idx: 1,
-    version: firstEntry.version,
+    idx: nextIndex,
+    version: lastEntry.version,
     when: secondTimestamp,
-    tag: "0001_runtime_foundation_test",
+    tag,
     breakpoints: true
   });
   await writeFile(journalPath, `${JSON.stringify(journal, null, 2)}\n`, "utf8");
   await writeFile(
-    join(migrationsFolder, "0001_runtime_foundation_test.sql"),
+    join(migrationsFolder, `${tag}.sql`),
     "CREATE TABLE `runtime_migration_second_smoke` (`singleton` integer PRIMARY KEY) STRICT;\n",
     "utf8"
   );
@@ -373,7 +375,7 @@ describe("openRuntimeDatabase", () => {
 
   it("rejects non-increasing local migration order", async () => {
     const fixture = await createDatabaseFixture();
-    await addSecondTestMigration(fixture.migrationsFolder);
+    await addTestMigration(fixture.migrationsFolder);
     const journalPath = join(fixture.migrationsFolder, "meta", "_journal.json");
     const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
       entries: Array<{ when: number }>;
@@ -457,7 +459,7 @@ describe("openRuntimeDatabase", () => {
 
   it("rejects missing applied migration history", async () => {
     const fixture = await createDatabaseFixture();
-    await addSecondTestMigration(fixture.migrationsFolder);
+    await addTestMigration(fixture.migrationsFolder);
     const result = openRuntimeDatabase(fixture);
 
     expect(result.ok).toBe(true);
@@ -480,7 +482,7 @@ describe("openRuntimeDatabase", () => {
 
   it("rejects a missing final applied migration entry", async () => {
     const fixture = await createDatabaseFixture();
-    await addSecondTestMigration(fixture.migrationsFolder);
+    await addTestMigration(fixture.migrationsFolder);
     const result = openRuntimeDatabase(fixture);
 
     expect(result.ok).toBe(true);
@@ -503,7 +505,7 @@ describe("openRuntimeDatabase", () => {
 
   it("rejects out-of-order applied migration history", async () => {
     const fixture = await createDatabaseFixture();
-    await addSecondTestMigration(fixture.migrationsFolder);
+    await addTestMigration(fixture.migrationsFolder);
     const result = openRuntimeDatabase(fixture);
 
     expect(result.ok).toBe(true);
@@ -514,7 +516,7 @@ describe("openRuntimeDatabase", () => {
     expect(result.value.migrate()).toEqual({ ok: true, value: undefined });
     getNativeDatabase(result)
       .prepare(
-        "UPDATE __drizzle_migrations SET id = 3 WHERE id = (SELECT min(id) FROM __drizzle_migrations)"
+        "UPDATE __drizzle_migrations SET id = (SELECT max(id) + 1 FROM __drizzle_migrations) WHERE id = (SELECT min(id) FROM __drizzle_migrations)"
       )
       .run();
 
