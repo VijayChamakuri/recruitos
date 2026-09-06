@@ -39,17 +39,29 @@ type CommandReceiptRow = Readonly<{
   completedAt: unknown;
 }>;
 
-export type ExecuteCommandOptions<TResult> = Readonly<{
+type CommandIdentity = Readonly<
+  Pick<
+    CommandReceipt,
+    "commandId" | "actorId" | "expectedVersion" | "commandName" | "payloadHash"
+  >
+>;
+
+export type ExecuteCommandOptions<
+  TPayloadSchema extends z.ZodType,
+  TResultSchema extends z.ZodType
+> = Readonly<{
   connection: RuntimeDatabaseConnection;
   command: CommandEnvelope;
   completedAt: number;
-  resultSchema: z.ZodType<TResult>;
+  payloadSchema: TPayloadSchema;
+  resultSchema: TResultSchema;
   readVersion: (
     context: ImmediateTransactionContext
   ) => Result<number, RuntimeError>;
   mutate: (
-    context: ImmediateTransactionContext
-  ) => Result<TResult, RuntimeError>;
+    context: ImmediateTransactionContext,
+    payload: z.output<TPayloadSchema>
+  ) => Result<z.input<TResultSchema>, RuntimeError>;
 }>;
 
 function persistenceFailure(message: string): RuntimeError {
@@ -101,7 +113,7 @@ function readReceipt(
 
 function verifyIdentity(
   receipt: CommandReceipt,
-  command: CommandEnvelope
+  command: CommandIdentity
 ): Result<void, RuntimeError> {
   const mismatchedFields = [
     receipt.commandName === command.commandName ? undefined : "commandName",
@@ -119,10 +131,10 @@ function verifyIdentity(
       );
 }
 
-function parseStoredResult<TResult>(
+function parseStoredResult<TResultSchema extends z.ZodType>(
   receipt: CommandReceipt,
-  resultSchema: z.ZodType<TResult>
-): Result<CommandExecution<TResult>, RuntimeError> {
+  resultSchema: TResultSchema
+): Result<CommandExecution<z.output<TResultSchema>>, RuntimeError> {
   if (receipt.status !== "succeeded") {
     return err(
       commandConflict(
@@ -131,12 +143,7 @@ function parseStoredResult<TResult>(
     );
   }
 
-  const resultJson = receipt.resultJson;
-  const resultHash = receipt.resultHash;
-  const completedAt = receipt.completedAt;
-  if (resultJson === null || resultHash === null || completedAt === null) {
-    return err(persistenceFailure("Stored successful command receipt is incomplete"));
-  }
+  const { resultJson, resultHash, completedAt } = receipt;
 
   let decoded: unknown;
   try {
@@ -144,13 +151,13 @@ function parseStoredResult<TResult>(
   } catch {
     return err(persistenceFailure("Stored command result is not valid JSON"));
   }
+  const canonical = canonicalJsonStringify(decoded);
+  if (!canonical.ok || canonical.value !== resultJson || sha256Hex(resultJson) !== resultHash) {
+    return err(persistenceFailure("Stored command result failed integrity validation"));
+  }
   const parsed = resultSchema.safeParse(decoded);
   if (!parsed.success) {
     return err(persistenceFailure("Stored command result does not match its schema"));
-  }
-  const canonical = canonicalJsonStringify(parsed.data);
-  if (!canonical.ok || canonical.value !== resultJson || sha256Hex(resultJson) !== resultHash) {
-    return err(persistenceFailure("Stored command result failed integrity validation"));
   }
 
   return ok(
@@ -169,7 +176,7 @@ function parseStoredResult<TResult>(
 
 function storeSuccess(
   context: ImmediateTransactionContext,
-  command: CommandEnvelope,
+  command: CommandIdentity,
   resultJson: string,
   resultHash: string,
   completedAt: number
@@ -204,22 +211,79 @@ function storeSuccess(
     );
 }
 
-export function executeCommand<TResult>(
-  options: ExecuteCommandOptions<TResult>
-): Result<CommandExecution<TResult>, RuntimeError> {
-  const command = CommandEnvelopeSchema.safeParse(options.command);
-  const completedAt = NonnegativeIntegerSchema.safeParse(options.completedAt);
-  if (!command.success || !completedAt.success) {
+export function executeCommand<
+  TPayloadSchema extends z.ZodType,
+  TResultSchema extends z.ZodType
+>(
+  options: ExecuteCommandOptions<TPayloadSchema, TResultSchema>
+): Result<CommandExecution<z.output<TResultSchema>>, RuntimeError> {
+  if (typeof options !== "object" || options === null) {
     return err(persistenceFailure("Invalid command execution input"));
   }
 
+  const optionRecord = options as unknown as Record<string, unknown>;
+  if (
+    typeof optionRecord.payloadSchema !== "object" ||
+    optionRecord.payloadSchema === null ||
+    typeof (optionRecord.payloadSchema as { safeParse?: unknown }).safeParse !== "function" ||
+    typeof optionRecord.resultSchema !== "object" ||
+    optionRecord.resultSchema === null ||
+    typeof (optionRecord.resultSchema as { safeParse?: unknown }).safeParse !== "function" ||
+    typeof optionRecord.readVersion !== "function" ||
+    typeof optionRecord.mutate !== "function"
+  ) {
+    return err(persistenceFailure("Invalid command execution input"));
+  }
+
+  try {
+    const command = CommandEnvelopeSchema.safeParse(optionRecord.command);
+    const completedAt = NonnegativeIntegerSchema.safeParse(optionRecord.completedAt);
+    if (!command.success || !completedAt.success) {
+      return err(persistenceFailure("Invalid command execution input"));
+    }
+    const payload = options.payloadSchema.safeParse(command.data.payload);
+    if (!payload.success) {
+      return err(persistenceFailure("Invalid command payload"));
+    }
+    const canonicalPayload = canonicalJsonStringify(command.data.payload);
+    if (!canonicalPayload.ok) {
+      return err(persistenceFailure("Command payload is not canonical JSON"));
+    }
+    const commandIdentity: CommandIdentity = {
+      commandId: command.data.commandId,
+      actorId: command.data.actorId,
+      expectedVersion: command.data.expectedVersion,
+      commandName: command.data.commandName,
+      payloadHash: sha256Hex(canonicalPayload.value)
+    };
+
+    return executeValidatedCommand(
+      options,
+      commandIdentity,
+      payload.data,
+      completedAt.data
+    );
+  } catch {
+    return err(persistenceFailure("Invalid command execution input"));
+  }
+}
+
+function executeValidatedCommand<
+  TPayloadSchema extends z.ZodType,
+  TResultSchema extends z.ZodType
+>(
+  options: ExecuteCommandOptions<TPayloadSchema, TResultSchema>,
+  commandIdentity: CommandIdentity,
+  payload: z.output<TPayloadSchema>,
+  completedAt: number
+): Result<CommandExecution<z.output<TResultSchema>>, RuntimeError> {
   return runImmediateTransaction(options.connection, (context) => {
-    const storedReceipt = readReceipt(context, command.data.commandId);
+    const storedReceipt = readReceipt(context, commandIdentity.commandId);
     if (!storedReceipt.ok) {
       return storedReceipt;
     }
     if (storedReceipt.value !== undefined) {
-      const identity = verifyIdentity(storedReceipt.value, command.data);
+      const identity = verifyIdentity(storedReceipt.value, commandIdentity);
       return identity.ok
         ? parseStoredResult(storedReceipt.value, options.resultSchema)
         : identity;
@@ -233,43 +297,43 @@ export function executeCommand<TResult>(
     if (!parsedVersion.success) {
       return err(persistenceFailure("Aggregate version is invalid"));
     }
-    if (parsedVersion.data !== command.data.expectedVersion) {
+    if (parsedVersion.data !== commandIdentity.expectedVersion) {
       return err(
         commandConflict("expected_version_mismatch", {
-          expectedVersion: command.data.expectedVersion,
+          expectedVersion: commandIdentity.expectedVersion,
           actualVersion: parsedVersion.data
         })
       );
     }
 
-    const mutated = options.mutate(context);
+    const mutated = options.mutate(context, payload);
     if (!mutated.ok) {
       return mutated;
+    }
+    const canonical = canonicalJsonStringify(mutated.value);
+    if (!canonical.ok) {
+      return err(persistenceFailure("Command result is not canonical JSON"));
     }
     const parsedResult = options.resultSchema.safeParse(mutated.value);
     if (!parsedResult.success) {
       return err(persistenceFailure("Command result does not match its schema"));
     }
-    const canonical = canonicalJsonStringify(parsedResult.data);
-    if (!canonical.ok) {
-      return err(persistenceFailure("Command result is not canonical JSON"));
-    }
     const resultHash = sha256Hex(canonical.value);
     storeSuccess(
       context,
-      command.data,
+      commandIdentity,
       canonical.value,
       resultHash,
-      completedAt.data
+      completedAt
     );
 
     return ok(
       Object.freeze({
         metadata: CommandExecutionMetadataSchema.parse({
-          commandId: command.data.commandId,
+          commandId: commandIdentity.commandId,
           status: "succeeded",
           resultHash,
-          completedAt: completedAt.data,
+          completedAt,
           replayed: false
         }),
         result: parsedResult.data

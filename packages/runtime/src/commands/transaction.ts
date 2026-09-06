@@ -37,19 +37,49 @@ export function runImmediateTransaction<TResult>(
   connection: RuntimeDatabaseConnection,
   work: (context: ImmediateTransactionContext) => Result<TResult, RuntimeError>
 ): Result<TResult, RuntimeError> {
-  if (!connection.isOpen()) {
+  if (
+    typeof connection !== "object" ||
+    connection === null ||
+    typeof connection.isOpen !== "function" ||
+    typeof work !== "function"
+  ) {
     return err(
       createRuntimeError(
         "persistence_failed",
-        "Cannot start a transaction on a closed runtime database",
+        "Invalid runtime database transaction input",
         false
       )
     );
   }
 
-  const nativeDatabase = (
-    connection.database as unknown as { $client: BetterSqlite3.Database }
-  ).$client;
+  let nativeDatabase: BetterSqlite3.Database;
+  try {
+    if (!connection.isOpen()) {
+      return err(
+        createRuntimeError(
+          "persistence_failed",
+          "Cannot start a transaction on a closed runtime database",
+          false
+        )
+      );
+    }
+    nativeDatabase = (
+      connection.database as unknown as { $client: BetterSqlite3.Database }
+    ).$client;
+  } catch (error) {
+    return err(persistenceFailure(error));
+  }
+
+  if (nativeDatabase.inTransaction) {
+    return err(
+      createRuntimeError(
+        "persistence_failed",
+        "Cannot start an immediate transaction while another transaction is active",
+        false
+      )
+    );
+  }
+
   const context = Object.freeze({ database: connection.database, nativeDatabase });
 
   try {

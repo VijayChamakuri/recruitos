@@ -7,6 +7,7 @@ import {
   canonicalJsonSha256,
   err,
   ok,
+  sha256Hex,
   type Result,
   type Sha256Hex
 } from "@recruitos/core";
@@ -20,11 +21,12 @@ import {
 } from "../db/index.js";
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
 import { executeCommand } from "./executor.js";
-import { CommandEnvelopeSchema } from "./schemas.js";
+import { CommandEnvelopeSchema, CommandReceiptSchema } from "./schemas.js";
 import { runImmediateTransaction } from "./transaction.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 const temporaryDirectories: string[] = [];
+const TestPayloadSchema = z.object({ increment: z.number().int().safe() }).strict();
 const TestResultSchema = z.object({ version: z.number().int().safe().nonnegative() }).strict();
 
 async function openMigratedDatabase(
@@ -50,18 +52,18 @@ async function createDatabaseFilename(): Promise<string> {
   return join(directory, "runtime.db");
 }
 
-function nativeDatabase(connection: RuntimeDatabaseConnection): BetterSqlite3.Database {
-  return (
-    connection.database as unknown as { $client: BetterSqlite3.Database }
-  ).$client;
-}
-
-function payloadHash(payload: unknown): Sha256Hex {
+function hashPayload(payload: unknown): Sha256Hex {
   const result = canonicalJsonSha256(payload);
   if (!result.ok) {
     throw new Error(result.error.message);
   }
   return result.value;
+}
+
+function nativeDatabase(connection: RuntimeDatabaseConnection): BetterSqlite3.Database {
+  return (
+    connection.database as unknown as { $client: BetterSqlite3.Database }
+  ).$client;
 }
 
 function command(overrides: Record<string, unknown> = {}) {
@@ -70,7 +72,7 @@ function command(overrides: Record<string, unknown> = {}) {
     actorId: "test-actor-1",
     expectedVersion: 1,
     commandName: "test.increment",
-    payloadHash: payloadHash({ increment: 1 }),
+    payload: { increment: 1 },
     ...overrides
   });
 }
@@ -114,6 +116,7 @@ function executeIncrement(
     connection,
     command: input,
     completedAt: 1_788_700_000_000,
+    payloadSchema: TestPayloadSchema,
     resultSchema: TestResultSchema,
     readVersion: (context) => {
       expect(context.nativeDatabase.inTransaction).toBe(true);
@@ -129,6 +132,18 @@ function executeIncrement(
   });
 }
 
+function validExecutionOptions(connection: RuntimeDatabaseConnection) {
+  return {
+    connection,
+    command: command(),
+    completedAt: 1_788_700_000_000,
+    payloadSchema: TestPayloadSchema,
+    resultSchema: TestResultSchema,
+    readVersion: () => ok(1),
+    mutate: () => ok({ version: 2 })
+  };
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) =>
@@ -138,6 +153,45 @@ afterEach(async () => {
 });
 
 describe("command protocol", () => {
+  it.each([
+    {
+      status: "succeeded",
+      resultJson: null,
+      resultHash: null,
+      errorCode: null,
+      errorMessage: null,
+      completedAt: null
+    },
+    {
+      status: "in_progress",
+      resultJson: "{}",
+      resultHash: "a".repeat(64),
+      errorCode: null,
+      errorMessage: null,
+      completedAt: 10
+    },
+    {
+      status: "failed",
+      resultJson: null,
+      resultHash: null,
+      errorCode: null,
+      errorMessage: null,
+      completedAt: null
+    }
+  ])("rejects invalid $status receipt terminal metadata", (terminalMetadata) => {
+    expect(
+      CommandReceiptSchema.safeParse({
+        commandId: "test-command",
+        actorId: "test-actor",
+        expectedVersion: 0,
+        commandName: "test.run",
+        payloadHash: "a".repeat(64),
+        createdAt: 10,
+        ...terminalMetadata
+      }).success
+    ).toBe(false);
+  });
+
   it("commits with the expected version and replays the stored success", async () => {
     const { connection } = await openMigratedDatabase();
     createTestAggregate(connection);
@@ -181,7 +235,14 @@ describe("command protocol", () => {
   });
 
   it.each([
-    ["payload", { payloadHash: payloadHash({ increment: 2 }) }, "payloadHash"],
+    [
+      "payload",
+      {
+        payload: { increment: 2 },
+        payloadHash: hashPayload({ increment: 1 })
+      },
+      "payloadHash"
+    ],
     ["actor", { actorId: "test-actor-2" }, "actorId"],
     ["command name", { commandName: "test.decrement" }, "commandName"],
     ["expected version", { expectedVersion: 2 }, "expectedVersion"]
@@ -276,7 +337,7 @@ describe("command protocol", () => {
       base.commandName,
       base.actorId,
       base.expectedVersion,
-      base.payloadHash,
+      hashPayload(base.payload),
       "in_progress",
       null,
       null,
@@ -294,7 +355,7 @@ describe("command protocol", () => {
       base.commandName,
       base.actorId,
       base.expectedVersion,
-      base.payloadHash,
+      hashPayload(base.payload),
       "failed",
       "test_failure",
       "Stored test failure",
@@ -333,6 +394,28 @@ describe("command protocol", () => {
     nativeDatabase(first.connection).exec("ROLLBACK");
     expect(first.connection.close().ok).toBe(true);
     expect(second.connection.close().ok).toBe(true);
+  });
+
+  it("refuses to run inside an existing transaction", async () => {
+    const { connection } = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+    database.exec("BEGIN DEFERRED");
+    const work = vi.fn(() => ok("not-run"));
+
+    const result = runImmediateTransaction(connection, work);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "persistence_failed",
+        message: "Cannot start an immediate transaction while another transaction is active",
+        retryable: false
+      }
+    });
+    expect(work).not.toHaveBeenCalled();
+    expect(database.inTransaction).toBe(true);
+    database.exec("ROLLBACK");
+    expect(connection.close().ok).toBe(true);
   });
 
   it("rolls back thrown persistence failures and leaves the connection usable", async () => {
@@ -381,5 +464,241 @@ describe("command protocol", () => {
         .get()
     ).toEqual({ count: 2 });
     expect(connection.close().ok).toBe(true);
+  });
+
+  it("applies a transforming result schema exactly once on execution and replay", async () => {
+    const { connection } = await openMigratedDatabase();
+    createTestAggregate(connection);
+    const TransformingResultSchema = z
+      .object({ version: z.number().int().transform((version) => version + 1) })
+      .strict();
+    const input = command({ commandId: "test-transform-command" });
+    const options = {
+      connection,
+      command: input,
+      completedAt: 1_788_700_000_000,
+      payloadSchema: TestPayloadSchema,
+      resultSchema: TransformingResultSchema,
+      readVersion: () => ok(1),
+      mutate: vi.fn(() => ok({ version: 1 }))
+    };
+
+    const first = executeCommand(options);
+    const replay = executeCommand(options);
+
+    expect(first).toMatchObject({
+      ok: true,
+      value: { metadata: { replayed: false }, result: { version: 2 } }
+    });
+    expect(replay).toMatchObject({
+      ok: true,
+      value: { metadata: { replayed: true }, result: { version: 2 } }
+    });
+    expect(options.mutate).toHaveBeenCalledTimes(1);
+    expect(
+      nativeDatabase(connection)
+        .prepare("SELECT result_json AS resultJson FROM command_receipt WHERE command_id = ?")
+        .get(input.commandId)
+    ).toEqual({ resultJson: '{"version":1}' });
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it.each([null, undefined, 1, "invalid", true])(
+    "rejects invalid JavaScript options without throwing: %j",
+    (invalidOptions) => {
+      expect(() => executeCommand(invalidOptions as never)).not.toThrow();
+      expect(executeCommand(invalidOptions as never)).toEqual({
+        ok: false,
+        error: {
+          code: "persistence_failed",
+          message: "Invalid command execution input",
+          retryable: false
+        }
+      });
+    }
+  );
+
+  it.each([
+    {},
+    { payloadSchema: null },
+    { payloadSchema: {}, resultSchema: {} },
+    {
+      payloadSchema: TestPayloadSchema,
+      resultSchema: TestResultSchema,
+      readVersion: null,
+      mutate: null
+    }
+  ])("rejects malformed JavaScript option objects", (invalidOptions) => {
+    expect(executeCommand(invalidOptions as never)).toEqual({
+      ok: false,
+      error: {
+        code: "persistence_failed",
+        message: "Invalid command execution input",
+        retryable: false
+      }
+    });
+  });
+
+  it("returns typed errors for invalid command, payload, version, and result boundaries", async () => {
+    const { connection } = await openMigratedDatabase();
+    createTestAggregate(connection);
+    const valid = validExecutionOptions(connection);
+    const failure = createRuntimeError("persistence_failed", "Test read failed", false);
+
+    expect(executeCommand({ ...valid, command: null } as never)).toMatchObject({
+      ok: false,
+      error: { message: "Invalid command execution input" }
+    });
+    expect(executeCommand({ ...valid, completedAt: -1 })).toMatchObject({
+      ok: false,
+      error: { message: "Invalid command execution input" }
+    });
+    expect(
+      executeCommand({
+        ...valid,
+        payloadSchema: z.object({ increment: z.literal(2) }).strict()
+      })
+    ).toMatchObject({ ok: false, error: { message: "Invalid command payload" } });
+    expect(
+      executeCommand({
+        ...valid,
+        command: command({ payload: { increment: 1, unsupported: 1n } }),
+        payloadSchema: z.unknown()
+      })
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Command payload is not canonical JSON" }
+    });
+    expect(
+      executeCommand({
+        ...valid,
+        readVersion: () => err(failure)
+      })
+    ).toEqual({ ok: false, error: failure });
+    expect(
+      executeCommand({
+        ...valid,
+        readVersion: () => ok(-1)
+      })
+    ).toMatchObject({ ok: false, error: { message: "Aggregate version is invalid" } });
+    expect(
+      executeCommand({
+        ...valid,
+        command: command({ commandId: "test-noncanonical-result" }),
+        resultSchema: z.unknown(),
+        mutate: () => ok(1n)
+      })
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Command result is not canonical JSON" }
+    });
+    expect(
+      executeCommand({
+        ...valid,
+        command: command({ commandId: "test-invalid-result" }),
+        mutate: () => ok({ version: -1 })
+      })
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Command result does not match its schema" }
+    });
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("converts payload-schema inspection failures into typed invalid input", async () => {
+    const { connection } = await openMigratedDatabase();
+    const options = validExecutionOptions(connection);
+    const throwingSchema = {
+      safeParse: () => {
+        throw new Error("test-only schema failure");
+      }
+    };
+
+    expect(
+      executeCommand({ ...options, payloadSchema: throwingSchema } as never)
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Invalid command execution input" }
+    });
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects corrupt stored receipt identity and result bytes", async () => {
+    const { connection } = await openMigratedDatabase();
+    createTestAggregate(connection);
+    const input = command({ commandId: "test-corrupt-receipt" });
+    const options = { ...validExecutionOptions(connection), command: input };
+    expect(executeCommand(options).ok).toBe(true);
+    const database = nativeDatabase(connection);
+
+    database
+      .prepare("UPDATE command_receipt SET command_name = '' WHERE command_id = ?")
+      .run(input.commandId);
+    expect(executeCommand(options)).toMatchObject({
+      ok: false,
+      error: { message: "Stored command receipt is invalid" }
+    });
+
+    database
+      .prepare("UPDATE command_receipt SET command_name = ?, result_json = ? WHERE command_id = ?")
+      .run(input.commandName, "{", input.commandId);
+    expect(executeCommand(options)).toMatchObject({
+      ok: false,
+      error: { message: "Stored command result is not valid JSON" }
+    });
+
+    database
+      .prepare("UPDATE command_receipt SET result_json = ?, result_hash = ? WHERE command_id = ?")
+      .run('{"version":2}', "a".repeat(64), input.commandId);
+    expect(executeCommand(options)).toMatchObject({
+      ok: false,
+      error: { message: "Stored command result failed integrity validation" }
+    });
+
+    database
+      .prepare("UPDATE command_receipt SET result_json = ?, result_hash = ? WHERE command_id = ?")
+      .run("null", sha256Hex("null"), input.commandId);
+    expect(executeCommand(options)).toMatchObject({
+      ok: false,
+      error: { message: "Stored command result does not match its schema" }
+    });
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("validates transaction helper JavaScript inputs and closed connections", async () => {
+    const work = () => ok(undefined);
+    for (const invalidConnection of [null, undefined, 1, "invalid", {}, { isOpen: null }]) {
+      expect(runImmediateTransaction(invalidConnection as never, work)).toMatchObject({
+        ok: false,
+        error: { message: "Invalid runtime database transaction input" }
+      });
+    }
+
+    const { connection } = await openMigratedDatabase();
+    expect(runImmediateTransaction(connection, null as never)).toMatchObject({
+      ok: false,
+      error: { message: "Invalid runtime database transaction input" }
+    });
+    expect(connection.close().ok).toBe(true);
+    expect(runImmediateTransaction(connection, work)).toMatchObject({
+      ok: false,
+      error: { message: "Cannot start a transaction on a closed runtime database" }
+    });
+  });
+
+  it("maps malformed connection objects into typed transaction errors", () => {
+    expect(
+      runImmediateTransaction(
+        {
+          isOpen: () => {
+            throw new Error("test-only connection failure");
+          }
+        } as never,
+        () => ok(undefined)
+      )
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Runtime database transaction failed", retryable: false }
+    });
   });
 });

@@ -32,69 +32,57 @@ export const CommandEnvelopeSchema = z
     actorId: ActorIdSchema,
     expectedVersion: NonnegativeIntegerSchema,
     commandName: CommandNameSchema,
-    payloadHash: Sha256HexSchema
+    payload: z.unknown(),
+    payloadHash: Sha256HexSchema.optional()
   })
   .strict();
 
 export type CommandEnvelope = z.infer<typeof CommandEnvelopeSchema>;
 
-export const CommandReceiptSchema = z
-  .object({
-    commandId: CommandIdSchema,
-    actorId: ActorIdSchema,
-    expectedVersion: NonnegativeIntegerSchema,
-    commandName: CommandNameSchema,
-    payloadHash: Sha256HexSchema,
-    status: CommandStatusSchema,
-    resultJson: z.string().nullable(),
-    resultHash: Sha256HexSchema.nullable(),
-    errorCode: z.string().min(1).max(128).nullable(),
-    errorMessage: z.string().min(1).max(500).nullable(),
-    createdAt: NonnegativeIntegerSchema,
-    completedAt: NonnegativeIntegerSchema.nullable()
-  })
-  .strict()
-  .superRefine((receipt, context) => {
-    if (
-      receipt.status === "succeeded" &&
-      (receipt.resultJson === null ||
-        receipt.resultHash === null ||
-        receipt.completedAt === null ||
-        receipt.errorCode !== null ||
-        receipt.errorMessage !== null)
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "A successful command receipt must contain only success metadata"
-      });
-    }
-    if (
-      receipt.status === "in_progress" &&
-      (receipt.resultJson !== null ||
-        receipt.resultHash !== null ||
-        receipt.errorCode !== null ||
-        receipt.errorMessage !== null ||
-        receipt.completedAt !== null)
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "An in-progress command receipt cannot contain terminal metadata"
-      });
-    }
-    if (
-      receipt.status === "failed" &&
-      (receipt.resultJson !== null ||
-        receipt.resultHash !== null ||
-        receipt.errorCode === null ||
-        receipt.errorMessage === null ||
-        receipt.completedAt === null)
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "A failed command receipt must contain only failure metadata"
-      });
-    }
-  });
+const commandReceiptIdentityShape = {
+  commandId: CommandIdSchema,
+  actorId: ActorIdSchema,
+  expectedVersion: NonnegativeIntegerSchema,
+  commandName: CommandNameSchema,
+  payloadHash: Sha256HexSchema,
+  createdAt: NonnegativeIntegerSchema
+};
+
+export const CommandReceiptSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      ...commandReceiptIdentityShape,
+      status: z.literal("in_progress"),
+      resultJson: z.null(),
+      resultHash: z.null(),
+      errorCode: z.null(),
+      errorMessage: z.null(),
+      completedAt: z.null()
+    })
+    .strict(),
+  z
+    .object({
+      ...commandReceiptIdentityShape,
+      status: z.literal("succeeded"),
+      resultJson: z.string(),
+      resultHash: Sha256HexSchema,
+      errorCode: z.null(),
+      errorMessage: z.null(),
+      completedAt: NonnegativeIntegerSchema
+    })
+    .strict(),
+  z
+    .object({
+      ...commandReceiptIdentityShape,
+      status: z.literal("failed"),
+      resultJson: z.null(),
+      resultHash: z.null(),
+      errorCode: z.string().min(1).max(128),
+      errorMessage: z.string().min(1).max(500),
+      completedAt: NonnegativeIntegerSchema
+    })
+    .strict()
+]);
 
 export type CommandReceipt = z.infer<typeof CommandReceiptSchema>;
 

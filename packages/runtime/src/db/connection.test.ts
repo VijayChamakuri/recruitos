@@ -352,6 +352,78 @@ describe("openRuntimeDatabase", () => {
     expect(result.value.close().ok).toBe(true);
   });
 
+  it("rejects malformed and divergent durable migration state", async () => {
+    const malformedFixture = await createDatabaseFixture();
+    const malformed = openRuntimeDatabase(malformedFixture);
+    expect(malformed.ok).toBe(true);
+    if (!malformed.ok) {
+      return;
+    }
+    expect(malformed.value.migrate()).toEqual({ ok: true, value: undefined });
+    getNativeDatabase(malformed)
+      .prepare("UPDATE __recruitos_migration_state SET last_hash = 'invalid'")
+      .run();
+    expect(malformed.value.migrate()).toEqual(
+      expectedMigrationRequired("invalid_applied_history")
+    );
+    expect(malformed.value.close().ok).toBe(true);
+
+    const shortFixture = await createDatabaseFixture();
+    const short = openRuntimeDatabase(shortFixture);
+    expect(short.ok).toBe(true);
+    if (!short.ok) {
+      return;
+    }
+    expect(short.value.migrate()).toEqual({ ok: true, value: undefined });
+    getNativeDatabase(short)
+      .prepare("UPDATE __recruitos_migration_state SET applied_count = applied_count - 1")
+      .run();
+    expect(short.value.migrate()).toEqual(
+      expectedMigrationRequired("unknown_applied_migration")
+    );
+    expect(short.value.close().ok).toBe(true);
+
+    const finalFixture = await createDatabaseFixture();
+    const final = openRuntimeDatabase(finalFixture);
+    expect(final.ok).toBe(true);
+    if (!final.ok) {
+      return;
+    }
+    expect(final.value.migrate()).toEqual({ ok: true, value: undefined });
+    getNativeDatabase(final)
+      .prepare("UPDATE __recruitos_migration_state SET last_hash = ?")
+      .run("f".repeat(64));
+    expect(final.value.migrate()).toEqual(
+      expectedMigrationRequired("invalid_applied_history")
+    );
+    expect(final.value.close().ok).toBe(true);
+  });
+
+  it("validates empty durable migration state consistently", async () => {
+    const fixture = await createDatabaseFixture();
+    const journalPath = join(fixture.migrationsFolder, "meta", "_journal.json");
+    const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+      entries: unknown[];
+    };
+    journal.entries = [];
+    await writeFile(journalPath, `${JSON.stringify(journal, null, 2)}\n`, "utf8");
+    const result = openRuntimeDatabase(fixture);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.migrate()).toEqual({ ok: true, value: undefined });
+    expect(result.value.migrate()).toEqual({ ok: true, value: undefined });
+    getNativeDatabase(result)
+      .prepare("UPDATE __recruitos_migration_state SET last_hash = ?")
+      .run("f".repeat(64));
+    expect(result.value.migrate()).toEqual(
+      expectedMigrationRequired("invalid_applied_history")
+    );
+    expect(result.value.close().ok).toBe(true);
+  });
+
   it("rejects malformed local migration history", async () => {
     const fixture = await createDatabaseFixture();
     const journalPath = join(fixture.migrationsFolder, "meta", "_journal.json");
@@ -647,6 +719,38 @@ describe("openRuntimeDatabase", () => {
         }
       });
       expect(walAttempts).toBeGreaterThan(1);
+    } finally {
+      BetterSqlite3.prototype.pragma = originalPragma;
+      performanceNow.mockRestore();
+    }
+  });
+
+  it("stops WAL retry when contention consumes the remaining retry delay", async () => {
+    const filename = await createDatabaseFilename();
+    const originalPragma = BetterSqlite3.prototype.pragma;
+    const performanceNow = vi.spyOn(performance, "now");
+    const times = [0, 1, 6000];
+    performanceNow.mockImplementation(() => times.shift() ?? 6000);
+    BetterSqlite3.prototype.pragma = function patchedPragma(
+      this: BetterSqlite3.Database,
+      source: string,
+      options?: BetterSqlite3.PragmaOptions
+    ): unknown {
+      if (source === "journal_mode = WAL") {
+        throw Object.assign(new Error("busy"), { code: "SQLITE_BUSY" });
+      }
+      return originalPragma.call(this, source, options);
+    } as typeof BetterSqlite3.prototype.pragma;
+
+    try {
+      expect(openRuntimeDatabase({ filename })).toEqual({
+        ok: false,
+        error: {
+          code: "persistence_failed",
+          message: "Runtime database open failed",
+          retryable: true
+        }
+      });
     } finally {
       BetterSqlite3.prototype.pragma = originalPragma;
       performanceNow.mockRestore();
