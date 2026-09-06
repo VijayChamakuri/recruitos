@@ -301,17 +301,97 @@ function prototypeReflectionOnCallable(node, checker, sourceFiles) {
   );
 }
 
-function ambientReflectGetCapability(node, checker, sourceFiles) {
-  if (!ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node)) {
+function expressionResolvesToAmbientReflect(node, checker, sourceFiles, seenSymbols = new Set()) {
+  const expression = unwrapExpression(node);
+  if (!ts.isIdentifier(expression)) {
     return false;
   }
-  const owner = unwrapExpression(node.expression);
+  const symbol = resolvedSymbol(expression, checker);
+  if (!symbolHasEmittedLocalDeclaration(symbol, sourceFiles)) {
+    return (symbol?.getName() ?? expression.text) === "Reflect";
+  }
+  if (symbol === undefined || seenSymbols.has(symbol)) {
+    return false;
+  }
+  seenSymbols.add(symbol);
   return (
-    ts.isIdentifier(owner) &&
-    owner.text === "Reflect" &&
-    !symbolHasEmittedLocalDeclaration(resolvedSymbol(owner, checker), sourceFiles) &&
-    accessedProperty(node) === "get"
+    symbol.declarations?.some(
+      (declaration) =>
+        ts.isVariableDeclaration(declaration) &&
+        declaration.initializer !== undefined &&
+        expressionResolvesToAmbientReflect(
+          declaration.initializer,
+          checker,
+          sourceFiles,
+          seenSymbols
+        )
+    ) === true
   );
+}
+
+function bindingElementProperty(declaration) {
+  const property = declaration.propertyName ?? declaration.name;
+  return ts.isIdentifier(property) ? property.text : stringLiteralText(property);
+}
+
+function expressionResolvesToAmbientReflectGet(
+  node,
+  checker,
+  sourceFiles,
+  seenSymbols = new Set()
+) {
+  const expression = unwrapExpression(node);
+  if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
+    const property = accessedProperty(expression);
+    return (
+      expressionResolvesToAmbientReflect(
+        expression.expression,
+        checker,
+        sourceFiles,
+        seenSymbols
+      ) &&
+      (property === "get" || (ts.isElementAccessExpression(expression) && property === undefined))
+    );
+  }
+  if (!ts.isIdentifier(expression)) {
+    return false;
+  }
+  const symbol = resolvedSymbol(expression, checker);
+  if (symbol === undefined || seenSymbols.has(symbol)) {
+    return false;
+  }
+  seenSymbols.add(symbol);
+  return (
+    symbol.declarations?.some((declaration) => {
+      if (ts.isVariableDeclaration(declaration) && declaration.initializer !== undefined) {
+        return expressionResolvesToAmbientReflectGet(
+          declaration.initializer,
+          checker,
+          sourceFiles,
+          seenSymbols
+        );
+      }
+      if (
+        ts.isBindingElement(declaration) &&
+        ts.isObjectBindingPattern(declaration.parent) &&
+        ts.isVariableDeclaration(declaration.parent.parent) &&
+        declaration.parent.parent.initializer !== undefined &&
+        bindingElementProperty(declaration) === "get"
+      ) {
+        return expressionResolvesToAmbientReflect(
+          declaration.parent.parent.initializer,
+          checker,
+          sourceFiles,
+          seenSymbols
+        );
+      }
+      return false;
+    }) === true
+  );
+}
+
+function ambientReflectGetCapability(node, checker, sourceFiles) {
+  return expressionResolvesToAmbientReflectGet(node, checker, sourceFiles);
 }
 
 function indirectDynamicCodeCapability(node, checker, sourceFiles) {

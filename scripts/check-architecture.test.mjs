@@ -75,7 +75,9 @@ describe("core architecture boundary", () => {
     ["constructor-global-access", "indirect Function constructor capability"],
     ["prototype-function-constructor", "prototype reflection on callable value"],
     ["reflect-get-function-constructor", "reflective property access capability Reflect.get"],
-    ["retained-reflect-get", "reflective property access capability Reflect.get"]
+    ["retained-reflect-get", "reflective property access capability Reflect.get"],
+    ["aliased-reflect-get", "reflective property access capability Reflect.get"],
+    ["destructured-reflect-get", "reflective property access capability Reflect.get"]
   ])("rejects the %s fixture", (name, expected) => {
     expect(fixture(name)).toEqual(expect.arrayContaining([expect.stringContaining(expected)]));
   });
@@ -90,7 +92,13 @@ describe("core architecture boundary", () => {
     );
   });
 
-  it.each(["shadowed-fetch", "shadowed-date", "shadowed-require", "local-object-constructor"])(
+  it.each([
+    "shadowed-fetch",
+    "shadowed-date",
+    "shadowed-require",
+    "local-object-constructor",
+    "local-reflect-get"
+  ])(
     "allows the locally implemented %s fixture",
     (name) => {
       expect(fixture(name)).toEqual([]);
