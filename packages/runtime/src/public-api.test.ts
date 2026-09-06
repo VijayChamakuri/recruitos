@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import * as runtime from "./index.js";
 
 describe("runtime public API", () => {
-  it("exports the connection, command protocol, schema, and typed error foundation", () => {
+  it("exports the audit, connection, command protocol, schema, and error foundation", () => {
     expect(Object.keys(runtime).sort()).toEqual([
+      "AuditEventDraftSchema",
+      "AuditEventNameSchema",
+      "AuditEventSchema",
       "CommandConflictReasonSchema",
       "CommandEnvelopeSchema",
       "CommandExecutionMetadataSchema",
@@ -14,10 +17,13 @@ describe("runtime public API", () => {
       "RuntimeDatabaseOptionsSchema",
       "RuntimeErrorSchema",
       "SqliteConfigurationSchema",
+      "appendAuditEvent",
+      "auditEvents",
       "commandReceipts",
       "createRuntimeError",
       "executeCommand",
       "openRuntimeDatabase",
+      "readAuditEvent",
       "runImmediateTransaction",
       "runtimeMigrationSmoke"
     ]);

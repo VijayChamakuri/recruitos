@@ -462,7 +462,7 @@ describe("command protocol", () => {
       nativeDatabase(connection)
         .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
         .get()
-    ).toEqual({ count: 2 });
+    ).toEqual({ count: 3 });
     expect(connection.close().ok).toBe(true);
   });
 

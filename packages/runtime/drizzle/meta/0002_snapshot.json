@@ -1,0 +1,301 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "f5caf601-d52a-4fa7-967e-bcd0503c6850",
+  "prevId": "d1ef6d97-f89b-401d-a399-023f094da884",
+  "tables": {
+    "audit_event": {
+      "name": "audit_event",
+      "columns": {
+        "audit_event_id": {
+          "name": "audit_event_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "event_ordinal": {
+          "name": "event_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_display_name": {
+          "name": "actor_display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_version": {
+          "name": "event_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "audit_event_command_ordinal_unique": {
+          "name": "audit_event_command_ordinal_unique",
+          "columns": [
+            "command_id",
+            "event_ordinal"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "audit_event_command_id_command_receipt_command_id_fk": {
+          "name": "audit_event_command_id_command_receipt_command_id_fk",
+          "tableFrom": "audit_event",
+          "tableTo": "command_receipt",
+          "columnsFrom": [
+            "command_id"
+          ],
+          "columnsTo": [
+            "command_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "audit_event_command_ordinal_pair": {
+          "name": "audit_event_command_ordinal_pair",
+          "value": "(\"audit_event\".\"command_id\" IS NULL AND \"audit_event\".\"event_ordinal\" IS NULL) OR (\"audit_event\".\"command_id\" IS NOT NULL AND \"audit_event\".\"event_ordinal\" IS NOT NULL)"
+        },
+        "audit_event_event_ordinal": {
+          "name": "audit_event_event_ordinal",
+          "value": "\"audit_event\".\"event_ordinal\" IS NULL OR \"audit_event\".\"event_ordinal\" >= 0"
+        },
+        "audit_event_actor_display_name": {
+          "name": "audit_event_actor_display_name",
+          "value": "length(\"audit_event\".\"actor_display_name\") BETWEEN 1 AND 200"
+        },
+        "audit_event_name": {
+          "name": "audit_event_name",
+          "value": "length(\"audit_event\".\"event_name\") BETWEEN 1 AND 128"
+        },
+        "audit_event_version": {
+          "name": "audit_event_version",
+          "value": "\"audit_event\".\"event_version\" > 0"
+        },
+        "audit_event_payload_hash": {
+          "name": "audit_event_payload_hash",
+          "value": "length(\"audit_event\".\"payload_hash\") = 64 AND \"audit_event\".\"payload_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "audit_event_occurred_at": {
+          "name": "audit_event_occurred_at",
+          "value": "\"audit_event\".\"occurred_at\" >= 0"
+        },
+        "audit_event_recorded_at": {
+          "name": "audit_event_recorded_at",
+          "value": "\"audit_event\".\"recorded_at\" >= \"audit_event\".\"occurred_at\""
+        }
+      }
+    },
+    "command_receipt": {
+      "name": "command_receipt",
+      "columns": {
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "command_name": {
+          "name": "command_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expected_version": {
+          "name": "expected_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "result_json": {
+          "name": "result_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "result_hash": {
+          "name": "result_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "command_receipt_expected_version": {
+          "name": "command_receipt_expected_version",
+          "value": "\"command_receipt\".\"expected_version\" >= 0"
+        },
+        "command_receipt_created_at": {
+          "name": "command_receipt_created_at",
+          "value": "\"command_receipt\".\"created_at\" >= 0"
+        },
+        "command_receipt_completed_at": {
+          "name": "command_receipt_completed_at",
+          "value": "\"command_receipt\".\"completed_at\" IS NULL OR \"command_receipt\".\"completed_at\" >= \"command_receipt\".\"created_at\""
+        },
+        "command_receipt_status": {
+          "name": "command_receipt_status",
+          "value": "\"command_receipt\".\"status\" IN ('in_progress', 'succeeded', 'failed')"
+        },
+        "command_receipt_terminal_shape": {
+          "name": "command_receipt_terminal_shape",
+          "value": "(\n        \"command_receipt\".\"status\" = 'in_progress'\n        AND \"command_receipt\".\"result_json\" IS NULL\n        AND \"command_receipt\".\"result_hash\" IS NULL\n        AND \"command_receipt\".\"error_code\" IS NULL\n        AND \"command_receipt\".\"error_message\" IS NULL\n        AND \"command_receipt\".\"completed_at\" IS NULL\n      ) OR (\n        \"command_receipt\".\"status\" = 'succeeded'\n        AND \"command_receipt\".\"result_json\" IS NOT NULL\n        AND \"command_receipt\".\"result_hash\" IS NOT NULL\n        AND \"command_receipt\".\"error_code\" IS NULL\n        AND \"command_receipt\".\"error_message\" IS NULL\n        AND \"command_receipt\".\"completed_at\" IS NOT NULL\n      ) OR (\n        \"command_receipt\".\"status\" = 'failed'\n        AND \"command_receipt\".\"result_json\" IS NULL\n        AND \"command_receipt\".\"result_hash\" IS NULL\n        AND \"command_receipt\".\"error_code\" IS NOT NULL\n        AND \"command_receipt\".\"error_message\" IS NOT NULL\n        AND \"command_receipt\".\"completed_at\" IS NOT NULL\n      )"
+        }
+      }
+    },
+    "runtime_migration_smoke": {
+      "name": "runtime_migration_smoke",
+      "columns": {
+        "singleton": {
+          "name": "singleton",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "applied": {
+          "name": "applied",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

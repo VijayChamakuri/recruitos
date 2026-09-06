@@ -1,9 +1,9 @@
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 
-import { commandReceipts } from "./schema.js";
+import { auditEvents, commandReceipts } from "./schema.js";
 
-describe("command receipt Drizzle schema", () => {
+describe("runtime Drizzle schema", () => {
   it("exposes every command receipt integrity constraint", () => {
     expect(
       getTableConfig(commandReceipts)
@@ -16,5 +16,23 @@ describe("command receipt Drizzle schema", () => {
       "command_receipt_status",
       "command_receipt_terminal_shape"
     ]);
+  });
+
+  it("exposes the neutral audit constraints and command ordering index", () => {
+    const config = getTableConfig(auditEvents);
+    expect(config.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "audit_event_actor_display_name",
+      "audit_event_command_ordinal_pair",
+      "audit_event_event_ordinal",
+      "audit_event_name",
+      "audit_event_occurred_at",
+      "audit_event_payload_hash",
+      "audit_event_recorded_at",
+      "audit_event_version"
+    ]);
+    expect(config.indexes.map((index) => index.config.name)).toEqual([
+      "audit_event_command_ordinal_unique"
+    ]);
+    expect(config.foreignKeys).toHaveLength(1);
   });
 });

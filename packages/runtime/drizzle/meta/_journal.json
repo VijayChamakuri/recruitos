@@ -15,6 +15,13 @@
       "when": 1788702434522,
       "tag": "0001_command_protocol_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788706901880,
+      "tag": "0002_audit_envelope_foundation",
+      "breakpoints": true
     }
   ]
 }
