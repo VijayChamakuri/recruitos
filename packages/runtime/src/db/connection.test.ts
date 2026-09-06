@@ -25,6 +25,7 @@ const temporaryDirectories: string[] = [];
 const bundledMigrationsFolder = fileURLToPath(
   new URL("../../drizzle", import.meta.url)
 );
+const runtimePackageFolder = fileURLToPath(new URL("../..", import.meta.url));
 
 type DatabaseFixture = Readonly<{
   filename: string;
@@ -35,6 +36,10 @@ type WorkerResult = Readonly<{
   code: number | null;
   stdout: string;
   stderr: string;
+}>;
+
+type RunningWorker = Readonly<{
+  completion: Promise<WorkerResult>;
 }>;
 
 async function createDatabaseFilename(): Promise<string> {
@@ -151,6 +156,58 @@ async function runMigrationWorker(
       resolve({ code, stdout, stderr });
     });
   });
+}
+
+async function startExclusiveLockWorker(
+  filename: string,
+  holdMilliseconds: number
+): Promise<RunningWorker> {
+  const workerSource = `
+    const [filename, holdMillisecondsValue] = process.argv.slice(1);
+    const { default: BetterSqlite3 } = await import("better-sqlite3");
+    const database = new BetterSqlite3(filename);
+    database.exec("CREATE TABLE lock_holder (id INTEGER); BEGIN EXCLUSIVE");
+    process.stdout.write("ready\\n");
+    setTimeout(() => {
+      database.exec("ROLLBACK");
+      database.close();
+      process.stdout.write("released\\n");
+    }, Number(holdMillisecondsValue));
+  `;
+  const child = spawn(
+    process.execPath,
+    ["--input-type=module", "--eval", workerSource, filename, String(holdMilliseconds)],
+    { cwd: runtimePackageFolder, stdio: ["ignore", "pipe", "pipe"] }
+  );
+  let stdout = "";
+  let stderr = "";
+  let ready = false;
+
+  const completion = new Promise<WorkerResult>((resolve) => {
+    child.once("close", (code) => {
+      resolve({ code, stdout, stderr });
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+      if (!ready && stdout.includes("ready\n")) {
+        ready = true;
+        resolve();
+      }
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.once("error", reject);
+    child.once("close", () => {
+      if (!ready) {
+        reject(new Error(`Exclusive lock worker exited before ready: ${stderr}`));
+      }
+    });
+  });
+
+  return { completion };
 }
 
 afterEach(async () => {
@@ -596,12 +653,14 @@ describe("openRuntimeDatabase", () => {
 
   it("bounds WAL contention by the initialization budget", async () => {
     const filename = await createDatabaseFilename();
-    const competingDatabase = new BetterSqlite3(filename);
-    competingDatabase.exec("CREATE TABLE lock_holder (id INTEGER); BEGIN EXCLUSIVE");
+    const lockWorker = await startExclusiveLockWorker(filename, 5050);
+    const close = vi.spyOn(BetterSqlite3.prototype, "close");
     const startedAt = performance.now();
+    let result: ReturnType<typeof openRuntimeDatabase> | undefined;
 
     try {
-      expect(openRuntimeDatabase({ filename })).toEqual({
+      result = openRuntimeDatabase({ filename });
+      expect(result).toEqual({
         ok: false,
         error: {
           code: "persistence_failed",
@@ -609,10 +668,19 @@ describe("openRuntimeDatabase", () => {
           retryable: true
         }
       });
-      expect(performance.now() - startedAt).toBeLessThan(7000);
+      expect(performance.now() - startedAt).toBeLessThan(6000);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(await lockWorker.completion).toEqual({
+        code: 0,
+        stdout: "ready\nreleased\n",
+        stderr: ""
+      });
     } finally {
-      competingDatabase.exec("ROLLBACK");
-      competingDatabase.close();
+      if (result?.ok) {
+        result.value.close();
+      }
+      await lockWorker.completion;
+      close.mockRestore();
     }
   }, 10_000);
 

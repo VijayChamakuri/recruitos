@@ -178,28 +178,36 @@ function enableWalWithRetry(
     nativeDatabase.pragma(`busy_timeout = ${remainingMilliseconds}`);
     try {
       nativeDatabase.pragma("journal_mode = WAL");
-      return;
     } catch (error) {
       if (!isSqliteContention(error)) {
         throw error;
       }
+
+      const retryDelayMilliseconds = Math.min(
+        CONFIGURATION_RETRY_DELAY_MILLISECONDS,
+        Math.max(0, deadline - performance.now())
+      );
+      if (retryDelayMilliseconds === 0) {
+        throw Object.assign(
+          new Error("SQLite initialization contention budget exceeded"),
+          { code: "SQLITE_BUSY" }
+        );
+      }
+      Atomics.wait(
+        new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)),
+        0,
+        0,
+        retryDelayMilliseconds
+      );
+      continue;
     }
 
-    const retryDelayMilliseconds = Math.min(
-      CONFIGURATION_RETRY_DELAY_MILLISECONDS,
-      Math.max(0, deadline - performance.now())
-    );
-    if (retryDelayMilliseconds === 0) {
+    if (performance.now() >= deadline) {
       throw Object.assign(new Error("SQLite initialization contention budget exceeded"), {
         code: "SQLITE_BUSY"
       });
     }
-    Atomics.wait(
-      new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)),
-      0,
-      0,
-      retryDelayMilliseconds
-    );
+    return;
   }
 }
 
