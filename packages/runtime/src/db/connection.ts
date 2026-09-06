@@ -3,15 +3,20 @@ import { fileURLToPath } from "node:url";
 import { err, ok, type Result } from "@recruitos/core";
 import BetterSqlite3 from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { migrate as runDrizzleMigrations } from "drizzle-orm/better-sqlite3/migrator";
+import { readMigrationFiles, type MigrationMeta } from "drizzle-orm/migrator";
 import { z } from "zod";
 
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
 
 const MINIMUM_SQLITE_VERSION = "3.51.3";
+const BUSY_TIMEOUT_MILLISECONDS = 5000;
+const CONFIGURATION_RETRY_ATTEMPTS = 50;
+const CONFIGURATION_RETRY_DELAY_MILLISECONDS = 10;
 const DEFAULT_MIGRATIONS_FOLDER = fileURLToPath(
   new URL("../../drizzle", import.meta.url)
 );
+const MIGRATION_HISTORY_MESSAGE =
+  "Runtime database migration history does not match local migrations";
 
 export const RuntimeDatabaseOptionsSchema = z
   .object({
@@ -76,6 +81,37 @@ export type RuntimeDatabaseConnection = Readonly<{
 
 type SqliteVersionRow = Readonly<{ version: string }>;
 
+const MigrationHashSchema = z.string().regex(/^[0-9a-f]{64}$/u);
+
+const LocalMigrationSchema = z
+  .object({
+    sql: z.array(z.string()),
+    folderMillis: z.number().int().safe().nonnegative(),
+    hash: MigrationHashSchema,
+    bps: z.boolean()
+  })
+  .strict();
+
+const AppliedMigrationSchema = z
+  .object({
+    id: z.number().int().safe().positive(),
+    hash: MigrationHashSchema,
+    createdAt: z.number().int().safe().nonnegative()
+  })
+  .strict();
+
+type AppliedMigration = z.infer<typeof AppliedMigrationSchema>;
+
+class MigrationHistoryMismatch extends Error {
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super(MIGRATION_HISTORY_MESSAGE);
+    this.name = "MigrationHistoryMismatch";
+    this.reason = reason;
+  }
+}
+
 const RawSqliteConfigurationSchema = z
   .object({
     sqliteVersion: z.string(),
@@ -116,18 +152,209 @@ function readConfiguration(nativeDatabase: BetterSqlite3.Database): SqliteConfig
   });
 }
 
+function enableWalWithRetry(
+  nativeDatabase: BetterSqlite3.Database,
+  remainingAttempts = CONFIGURATION_RETRY_ATTEMPTS
+): void {
+  try {
+    nativeDatabase.pragma("journal_mode = WAL");
+  } catch (error) {
+    if (!isSqliteContention(error) || remainingAttempts === 1) {
+      throw error;
+    }
+    Atomics.wait(
+      new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)),
+      0,
+      0,
+      CONFIGURATION_RETRY_DELAY_MILLISECONDS
+    );
+    enableWalWithRetry(nativeDatabase, remainingAttempts - 1);
+  }
+}
+
 function configure(nativeDatabase: BetterSqlite3.Database): SqliteConfiguration {
-  nativeDatabase.pragma("journal_mode = WAL");
+  nativeDatabase.pragma(`busy_timeout = ${BUSY_TIMEOUT_MILLISECONDS}`);
+  enableWalWithRetry(nativeDatabase);
   nativeDatabase.pragma("foreign_keys = ON");
-  nativeDatabase.pragma("busy_timeout = 5000");
   nativeDatabase.pragma("synchronous = FULL");
   nativeDatabase.pragma("wal_autocheckpoint = 1000");
 
   return readConfiguration(nativeDatabase);
 }
 
-function persistenceFailure(message: string): RuntimeError {
-  return createRuntimeError("persistence_failed", message, false);
+function isSqliteContention(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return (
+    typeof code === "string" && /^SQLITE_(?:BUSY|LOCKED)(?:_|$)/u.test(code)
+  );
+}
+
+function persistenceFailure(message: string, retryable = false): RuntimeError {
+  return createRuntimeError("persistence_failed", message, retryable);
+}
+
+function migrationRequired(reason: string): RuntimeError {
+  return createRuntimeError(
+    "migration_required",
+    MIGRATION_HISTORY_MESSAGE,
+    false,
+    { reason }
+  );
+}
+
+function validateMigrationHistory(
+  appliedInput: readonly unknown[],
+  localInput: readonly MigrationMeta[],
+  requireComplete: boolean
+): string | undefined {
+  const appliedResult = z.array(AppliedMigrationSchema).safeParse(appliedInput);
+  if (!appliedResult.success) {
+    return "invalid_applied_history";
+  }
+
+  const localResult = z.array(LocalMigrationSchema).safeParse(localInput);
+  if (!localResult.success) {
+    return "invalid_local_history";
+  }
+
+  const applied = appliedResult.data;
+  const local = localResult.data;
+
+  for (let index = 1; index < local.length; index += 1) {
+    const previous = local[index - 1]!;
+    const current = local[index]!;
+    if (previous.folderMillis >= current.folderMillis) {
+      return "invalid_local_history";
+    }
+  }
+
+  for (let index = 1; index < applied.length; index += 1) {
+    const previous = applied[index - 1]!;
+    const current = applied[index]!;
+    if (previous.createdAt >= current.createdAt) {
+      return "out_of_order_history";
+    }
+  }
+
+  if (applied.length > local.length) {
+    return "unknown_applied_migration";
+  }
+
+  for (let index = 0; index < applied.length; index += 1) {
+    const appliedMigration = applied[index]!;
+    const localMigration = local[index]!;
+
+    if (appliedMigration.createdAt !== localMigration.folderMillis) {
+      const matchingLocalIndex = local.findIndex(
+        (migration) => migration.folderMillis === appliedMigration.createdAt
+      );
+      if (matchingLocalIndex === -1) {
+        return "missing_local_migration";
+      }
+      return "missing_applied_migration";
+    }
+
+    if (appliedMigration.hash !== localMigration.hash) {
+      return "hash_mismatch";
+    }
+  }
+
+  if (requireComplete && applied.length !== local.length) {
+    return "missing_applied_migration";
+  }
+
+  return undefined;
+}
+
+function readAppliedMigrations(
+  nativeDatabase: BetterSqlite3.Database
+): AppliedMigration[] {
+  return nativeDatabase
+    .prepare(
+      "SELECT id, hash, created_at AS createdAt FROM __drizzle_migrations ORDER BY id ASC"
+    )
+    .all() as AppliedMigration[];
+}
+
+function migrateDatabase(
+  nativeDatabase: BetterSqlite3.Database,
+  migrationsFolder: string
+): Result<void, RuntimeError> {
+  let localMigrations: MigrationMeta[] | undefined;
+  try {
+    localMigrations = readMigrationFiles({ migrationsFolder });
+  } catch {
+    localMigrations = undefined;
+  }
+
+  try {
+    const runMigration = nativeDatabase.transaction((): void => {
+      nativeDatabase.exec(`
+        CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+          id INTEGER PRIMARY KEY,
+          hash TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        ) STRICT
+      `);
+
+      const appliedBefore = readAppliedMigrations(nativeDatabase);
+      if (localMigrations === undefined) {
+        if (appliedBefore.length > 0) {
+          throw new MigrationHistoryMismatch("missing_local_migration");
+        }
+        throw new Error("Runtime database migration files unavailable");
+      }
+
+      const historyError = validateMigrationHistory(
+        appliedBefore,
+        localMigrations,
+        false
+      );
+      if (historyError !== undefined) {
+        throw new MigrationHistoryMismatch(historyError);
+      }
+
+      const insertMigration = nativeDatabase.prepare(
+        "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)"
+      );
+      for (const migration of localMigrations.slice(appliedBefore.length)) {
+        for (const statement of migration.sql) {
+          nativeDatabase.exec(statement);
+        }
+        insertMigration.run(migration.hash, migration.folderMillis);
+      }
+
+      const completedHistoryError = validateMigrationHistory(
+        readAppliedMigrations(nativeDatabase),
+        localMigrations,
+        true
+      );
+      if (completedHistoryError !== undefined) {
+        throw new MigrationHistoryMismatch(completedHistoryError);
+      }
+    });
+
+    runMigration.immediate();
+    return ok(undefined);
+  } catch (error) {
+    if (error instanceof MigrationHistoryMismatch) {
+      return err(migrationRequired(error.reason));
+    }
+    return err(
+      persistenceFailure(
+        "Runtime database migration failed",
+        isSqliteContention(error)
+      )
+    );
+  }
+}
+
+function checkpointWalBestEffort(nativeDatabase: BetterSqlite3.Database): void {
+  try {
+    nativeDatabase.pragma("wal_checkpoint(PASSIVE)");
+  } catch {
+    return;
+  }
 }
 
 export function openRuntimeDatabase(
@@ -145,9 +372,13 @@ export function openRuntimeDatabase(
   let nativeDatabase: BetterSqlite3.Database;
 
   try {
-    nativeDatabase = new BetterSqlite3(parsed.data.filename);
-  } catch {
-    return err(persistenceFailure("Runtime database open failed"));
+    nativeDatabase = new BetterSqlite3(parsed.data.filename, {
+      timeout: BUSY_TIMEOUT_MILLISECONDS
+    });
+  } catch (error) {
+    return err(
+      persistenceFailure("Runtime database open failed", isSqliteContention(error))
+    );
   }
 
   try {
@@ -165,27 +396,15 @@ export function openRuntimeDatabase(
             return err(persistenceFailure("Cannot migrate a closed runtime database"));
           }
 
-          try {
-            nativeDatabase.exec(`
-              CREATE TABLE IF NOT EXISTS __drizzle_migrations (
-                id INTEGER PRIMARY KEY,
-                hash TEXT NOT NULL,
-                created_at INTEGER
-              ) STRICT
-            `);
-            runDrizzleMigrations(database, { migrationsFolder });
-            return ok(undefined);
-          } catch {
-            return err(persistenceFailure("Runtime database migration failed"));
-          }
+          return migrateDatabase(nativeDatabase, migrationsFolder);
         },
         close: (): Result<void, RuntimeError> => {
           if (!nativeDatabase.open) {
             return ok(undefined);
           }
 
+          checkpointWalBestEffort(nativeDatabase);
           try {
-            nativeDatabase.pragma("wal_checkpoint(PASSIVE)");
             nativeDatabase.close();
             return ok(undefined);
           } catch {
@@ -194,10 +413,12 @@ export function openRuntimeDatabase(
         }
       })
     );
-  } catch {
+  } catch (error) {
     if (nativeDatabase.open) {
       nativeDatabase.close();
     }
-    return err(persistenceFailure("Runtime database open failed"));
+    return err(
+      persistenceFailure("Runtime database open failed", isSqliteContention(error))
+    );
   }
 }

@@ -28,7 +28,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
-    "test": "vitest run --root ../.. --config vitest.config.ts --project runtime",
+    "test": "corepack pnpm build && vitest run --root ../.. --config vitest.config.ts --project runtime",
     "test:types": "tsc -p tsconfig.test.json --noEmit",
     "typecheck": "corepack pnpm test:types"
   },
