@@ -331,7 +331,10 @@ function expressionResolvesToAmbientReflect(node, checker, sourceFiles, seenSymb
 
 function bindingElementProperty(declaration) {
   const property = declaration.propertyName ?? declaration.name;
-  return ts.isIdentifier(property) ? property.text : stringLiteralText(property);
+  if (ts.isIdentifier(property)) {
+    return property.text;
+  }
+  return stringLiteralText(ts.isComputedPropertyName(property) ? property.expression : property);
 }
 
 function expressionResolvesToAmbientReflectGet(

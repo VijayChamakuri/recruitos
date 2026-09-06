@@ -77,7 +77,8 @@ describe("core architecture boundary", () => {
     ["reflect-get-function-constructor", "reflective property access capability Reflect.get"],
     ["retained-reflect-get", "reflective property access capability Reflect.get"],
     ["aliased-reflect-get", "reflective property access capability Reflect.get"],
-    ["destructured-reflect-get", "reflective property access capability Reflect.get"]
+    ["destructured-reflect-get", "reflective property access capability Reflect.get"],
+    ["computed-destructured-reflect-get", "reflective property access capability Reflect.get"]
   ])("rejects the %s fixture", (name, expected) => {
     expect(fixture(name)).toEqual(expect.arrayContaining([expect.stringContaining(expected)]));
   });
