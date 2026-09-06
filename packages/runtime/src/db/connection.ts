@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { performance } from "node:perf_hooks";
 
 import { err, ok, type Result } from "@recruitos/core";
 import BetterSqlite3 from "better-sqlite3";
@@ -10,7 +11,6 @@ import { createRuntimeError, type RuntimeError } from "../errors/index.js";
 
 const MINIMUM_SQLITE_VERSION = "3.51.3";
 const BUSY_TIMEOUT_MILLISECONDS = 5000;
-const CONFIGURATION_RETRY_ATTEMPTS = 50;
 const CONFIGURATION_RETRY_DELAY_MILLISECONDS = 10;
 const DEFAULT_MIGRATIONS_FOLDER = fileURLToPath(
   new URL("../../drizzle", import.meta.url)
@@ -102,6 +102,17 @@ const AppliedMigrationSchema = z
 
 type AppliedMigration = z.infer<typeof AppliedMigrationSchema>;
 
+const MigrationStateSchema = z
+  .object({
+    singleton: z.literal(1),
+    appliedCount: z.number().int().safe().nonnegative(),
+    lastHash: MigrationHashSchema.nullable(),
+    lastCreatedAt: z.number().int().safe().nonnegative().nullable()
+  })
+  .strict();
+
+type MigrationState = z.infer<typeof MigrationStateSchema>;
+
 class MigrationHistoryMismatch extends Error {
   readonly reason: string;
 
@@ -154,27 +165,48 @@ function readConfiguration(nativeDatabase: BetterSqlite3.Database): SqliteConfig
 
 function enableWalWithRetry(
   nativeDatabase: BetterSqlite3.Database,
-  remainingAttempts = CONFIGURATION_RETRY_ATTEMPTS
+  deadline: number
 ): void {
-  try {
-    nativeDatabase.pragma("journal_mode = WAL");
-  } catch (error) {
-    if (!isSqliteContention(error) || remainingAttempts === 1) {
-      throw error;
+  while (true) {
+    const remainingMilliseconds = Math.ceil(deadline - performance.now());
+    if (remainingMilliseconds <= 0) {
+      throw Object.assign(new Error("SQLite initialization contention budget exceeded"), {
+        code: "SQLITE_BUSY"
+      });
+    }
+
+    nativeDatabase.pragma(`busy_timeout = ${remainingMilliseconds}`);
+    try {
+      nativeDatabase.pragma("journal_mode = WAL");
+      return;
+    } catch (error) {
+      if (!isSqliteContention(error)) {
+        throw error;
+      }
+    }
+
+    const retryDelayMilliseconds = Math.min(
+      CONFIGURATION_RETRY_DELAY_MILLISECONDS,
+      Math.max(0, deadline - performance.now())
+    );
+    if (retryDelayMilliseconds === 0) {
+      throw Object.assign(new Error("SQLite initialization contention budget exceeded"), {
+        code: "SQLITE_BUSY"
+      });
     }
     Atomics.wait(
       new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)),
       0,
       0,
-      CONFIGURATION_RETRY_DELAY_MILLISECONDS
+      retryDelayMilliseconds
     );
-    enableWalWithRetry(nativeDatabase, remainingAttempts - 1);
   }
 }
 
 function configure(nativeDatabase: BetterSqlite3.Database): SqliteConfiguration {
+  const deadline = performance.now() + BUSY_TIMEOUT_MILLISECONDS;
+  enableWalWithRetry(nativeDatabase, deadline);
   nativeDatabase.pragma(`busy_timeout = ${BUSY_TIMEOUT_MILLISECONDS}`);
-  enableWalWithRetry(nativeDatabase);
   nativeDatabase.pragma("foreign_keys = ON");
   nativeDatabase.pragma("synchronous = FULL");
   nativeDatabase.pragma("wal_autocheckpoint = 1000");
@@ -276,6 +308,74 @@ function readAppliedMigrations(
     .all() as AppliedMigration[];
 }
 
+function readMigrationState(
+  nativeDatabase: BetterSqlite3.Database
+): MigrationState | undefined {
+  const state = nativeDatabase
+    .prepare(
+      "SELECT singleton, applied_count AS appliedCount, last_hash AS lastHash, last_created_at AS lastCreatedAt FROM __recruitos_migration_state WHERE singleton = 1"
+    )
+    .get();
+  if (state === undefined) {
+    return undefined;
+  }
+
+  const parsed = MigrationStateSchema.safeParse(state);
+  if (!parsed.success) {
+    throw new MigrationHistoryMismatch("invalid_applied_history");
+  }
+  return parsed.data;
+}
+
+function writeMigrationState(
+  nativeDatabase: BetterSqlite3.Database,
+  applied: readonly AppliedMigration[]
+): void {
+  const lastApplied = applied.at(-1);
+  nativeDatabase
+    .prepare(
+      `INSERT INTO __recruitos_migration_state
+        (singleton, applied_count, last_hash, last_created_at)
+       VALUES (1, ?, ?, ?)
+       ON CONFLICT(singleton) DO UPDATE SET
+        applied_count = excluded.applied_count,
+        last_hash = excluded.last_hash,
+        last_created_at = excluded.last_created_at`
+    )
+    .run(
+      applied.length,
+      lastApplied?.hash ?? null,
+      lastApplied?.createdAt ?? null
+    );
+}
+
+function validateMigrationState(
+  state: MigrationState,
+  applied: readonly AppliedMigration[]
+): string | undefined {
+  if (state.appliedCount > applied.length) {
+    return "missing_applied_migration";
+  }
+  if (state.appliedCount < applied.length) {
+    return "unknown_applied_migration";
+  }
+
+  const lastApplied = applied.at(-1);
+  if (lastApplied === undefined) {
+    return state.lastHash === null && state.lastCreatedAt === null
+      ? undefined
+      : "invalid_applied_history";
+  }
+  if (
+    state.lastHash !== lastApplied.hash ||
+    state.lastCreatedAt !== lastApplied.createdAt
+  ) {
+    return "invalid_applied_history";
+  }
+
+  return undefined;
+}
+
 function migrateDatabase(
   nativeDatabase: BetterSqlite3.Database,
   migrationsFolder: string
@@ -296,6 +396,14 @@ function migrateDatabase(
           created_at INTEGER NOT NULL
         ) STRICT
       `);
+      nativeDatabase.exec(`
+        CREATE TABLE IF NOT EXISTS __recruitos_migration_state (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          applied_count INTEGER NOT NULL CHECK (applied_count >= 0),
+          last_hash TEXT,
+          last_created_at INTEGER
+        ) STRICT
+      `);
 
       const appliedBefore = readAppliedMigrations(nativeDatabase);
       if (localMigrations === undefined) {
@@ -314,6 +422,16 @@ function migrateDatabase(
         throw new MigrationHistoryMismatch(historyError);
       }
 
+      const migrationState = readMigrationState(nativeDatabase);
+      if (migrationState === undefined) {
+        writeMigrationState(nativeDatabase, appliedBefore);
+      } else {
+        const stateError = validateMigrationState(migrationState, appliedBefore);
+        if (stateError !== undefined) {
+          throw new MigrationHistoryMismatch(stateError);
+        }
+      }
+
       const insertMigration = nativeDatabase.prepare(
         "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)"
       );
@@ -322,6 +440,7 @@ function migrateDatabase(
           nativeDatabase.exec(statement);
         }
         insertMigration.run(migration.hash, migration.folderMillis);
+        writeMigrationState(nativeDatabase, readAppliedMigrations(nativeDatabase));
       }
 
       const completedHistoryError = validateMigrationHistory(

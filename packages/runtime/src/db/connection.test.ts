@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import BetterSqlite3 from "better-sqlite3";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   SqliteConfigurationSchema,
@@ -421,6 +421,29 @@ describe("openRuntimeDatabase", () => {
     expect(result.value.close().ok).toBe(true);
   });
 
+  it("rejects a missing final applied migration entry", async () => {
+    const fixture = await createDatabaseFixture();
+    await addSecondTestMigration(fixture.migrationsFolder);
+    const result = openRuntimeDatabase(fixture);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.migrate()).toEqual({ ok: true, value: undefined });
+    getNativeDatabase(result)
+      .prepare(
+        "DELETE FROM __drizzle_migrations WHERE id = (SELECT max(id) FROM __drizzle_migrations)"
+      )
+      .run();
+
+    expect(result.value.migrate()).toEqual(
+      expectedMigrationRequired("missing_applied_migration")
+    );
+    expect(result.value.close().ok).toBe(true);
+  });
+
   it("rejects out-of-order applied migration history", async () => {
     const fixture = await createDatabaseFixture();
     await addSecondTestMigration(fixture.migrationsFolder);
@@ -536,7 +559,13 @@ describe("openRuntimeDatabase", () => {
   it("marks exhausted WAL negotiation contention as retryable", async () => {
     const filename = await createDatabaseFilename();
     const originalPragma = BetterSqlite3.prototype.pragma;
+    const performanceNow = vi.spyOn(performance, "now");
+    let elapsedMilliseconds = 0;
     let walAttempts = 0;
+    performanceNow.mockImplementation(() => {
+      elapsedMilliseconds += 1000;
+      return elapsedMilliseconds;
+    });
     BetterSqlite3.prototype.pragma = function patchedPragma(
       this: BetterSqlite3.Database,
       source: string,
@@ -558,11 +587,34 @@ describe("openRuntimeDatabase", () => {
           retryable: true
         }
       });
-      expect(walAttempts).toBe(50);
+      expect(walAttempts).toBeGreaterThan(1);
     } finally {
       BetterSqlite3.prototype.pragma = originalPragma;
+      performanceNow.mockRestore();
     }
   });
+
+  it("bounds WAL contention by the initialization budget", async () => {
+    const filename = await createDatabaseFilename();
+    const competingDatabase = new BetterSqlite3(filename);
+    competingDatabase.exec("CREATE TABLE lock_holder (id INTEGER); BEGIN EXCLUSIVE");
+    const startedAt = performance.now();
+
+    try {
+      expect(openRuntimeDatabase({ filename })).toEqual({
+        ok: false,
+        error: {
+          code: "persistence_failed",
+          message: "Runtime database open failed",
+          retryable: true
+        }
+      });
+      expect(performance.now() - startedAt).toBeLessThan(7000);
+    } finally {
+      competingDatabase.exec("ROLLBACK");
+      competingDatabase.close();
+    }
+  }, 10_000);
 
   it("marks transient migration contention as retryable", async () => {
     const filename = await createDatabaseFilename();
