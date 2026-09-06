@@ -18,7 +18,7 @@ import {
   type RuntimeDatabaseConnection
 } from "../db/index.js";
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
-import { appendAuditEvent, readAuditEvent } from "./store.js";
+import { appendAuditEvent, prepareAuditEvent, readAuditEvent } from "./store.js";
 import {
   AuditEventDraftSchema,
   AuditEventNameSchema,
@@ -75,6 +75,18 @@ function draft(overrides: Record<string, unknown> = {}): AuditEventDraft {
   });
 }
 
+function prepareDraft(
+  clock = fixedClock(),
+  input: unknown = draft()
+) {
+  const prepared = prepareAuditEvent(clock, input);
+  expect(prepared.ok).toBe(true);
+  if (!prepared.ok) {
+    throw new Error(prepared.error.message);
+  }
+  return prepared.value;
+}
+
 function createTestAggregate(connection: RuntimeDatabaseConnection): void {
   nativeDatabase(connection).exec(`
     CREATE TABLE test_only_audit_aggregate (
@@ -121,6 +133,14 @@ function executeAuditedIncrement(
     commandName: "test.increment",
     payload: { increment: 1 }
   });
+  const preparedAuditEvent = prepareDraft(
+    fixedClock(),
+    draft({
+      auditEventId,
+      commandId: command.commandId,
+      eventOrdinal: 0
+    })
+  );
   return executeCommand({
     connection,
     command,
@@ -134,15 +154,7 @@ function executeAuditedIncrement(
           "UPDATE test_only_audit_aggregate SET version = version + 1 WHERE singleton = 1"
         )
         .run();
-      const appended = appendAuditEvent(
-        context,
-        fixedClock(),
-        draft({
-          auditEventId,
-          commandId: command.commandId,
-          eventOrdinal: 0
-        })
-      );
+      const appended = appendAuditEvent(context, preparedAuditEvent);
       if (!appended.ok) {
         return appended;
       }
@@ -199,9 +211,19 @@ afterEach(async () => {
 describe("audit envelope foundation", () => {
   it("appends and reads canonical payload bytes with an internally computed hash", async () => {
     const connection = await openMigratedDatabase();
-    const clock = fixedClock();
+    const clock = {
+      now: vi.fn(() => {
+        expect(nativeDatabase(connection).inTransaction).toBe(false);
+        return 1_788_700_000_100;
+      })
+    };
+    const prepared = prepareAuditEvent(clock, draft());
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) {
+      throw new Error(prepared.error.message);
+    }
     const appended = runImmediateTransaction(connection, (context) =>
-      appendAuditEvent(context, clock, draft())
+      appendAuditEvent(context, prepared.value)
     );
 
     expect(appended).toEqual({
@@ -232,7 +254,8 @@ describe("audit envelope foundation", () => {
   it("rejects invalid event input, payloads, clocks, and transaction contexts", async () => {
     const connection = await openMigratedDatabase();
     const invalidContext = { nativeDatabase: { inTransaction: false } };
-    expect(appendAuditEvent(invalidContext as never, fixedClock(), draft())).toMatchObject({
+    const prepared = prepareDraft();
+    expect(appendAuditEvent(invalidContext, prepared)).toMatchObject({
       ok: false,
       error: { message: "Audit events require an active command transaction" }
     });
@@ -240,62 +263,77 @@ describe("audit envelope foundation", () => {
       ok: false,
       error: { message: "Audit events require an active command transaction" }
     });
+    for (const malformedContext of [null, undefined, 1]) {
+      expect(appendAuditEvent(malformedContext, prepared)).toMatchObject({
+        ok: false,
+        error: { message: "Audit events require an active command transaction" }
+      });
+      expect(readAuditEvent(malformedContext, "test-audit-event-1")).toMatchObject({
+        ok: false,
+        error: { message: "Audit events require an active command transaction" }
+      });
+    }
 
+    expect(prepareAuditEvent(null, draft())).toMatchObject({
+      ok: false,
+      error: { message: "Invalid audit clock" }
+    });
+    for (const malformedClock of [undefined, 1, {}]) {
+      expect(prepareAuditEvent(malformedClock, draft())).toMatchObject({
+        ok: false,
+        error: { message: "Invalid audit clock" }
+      });
+    }
     expect(
-      runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(context, null as never, draft())
-      )
-    ).toMatchObject({ ok: false, error: { message: "Invalid audit clock" } });
-    expect(
-      runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(context, fixedClock(), { ...draft(), commandId: "command-only" })
-      )
+      prepareAuditEvent(fixedClock(), { ...draft(), commandId: "command-only" })
     ).toMatchObject({ ok: false, error: { message: "Invalid audit event input" } });
     expect(
-      runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(context, fixedClock(), {
-          ...draft(),
-          payload: { unsupported: 1n }
-        })
-      )
+      prepareAuditEvent(fixedClock(), {
+        ...draft(),
+        payload: { unsupported: 1n }
+      })
     ).toMatchObject({
       ok: false,
       error: { message: "Audit event payload is not canonical JSON" }
     });
-    expect(
-      runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(context, { now: () => -1 }, draft())
-      )
-    ).toMatchObject({
+    expect(prepareAuditEvent({ now: () => -1 }, draft())).toMatchObject({
       ok: false,
       error: { message: "Audit clock returned an invalid timestamp" }
     });
+    expect(prepareAuditEvent(fixedClock(1), draft())).toMatchObject({
+      ok: false,
+      error: { message: "Invalid audit event input" }
+    });
+    expect(
+      prepareAuditEvent(
+        {
+          now: () => {
+            throw new Error("test clock failure");
+          }
+        },
+        draft()
+      )
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Audit event preparation failed" }
+    });
     expect(
       runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(context, fixedClock(1), draft())
+        appendAuditEvent(context, draft())
       )
-    ).toMatchObject({ ok: false, error: { message: "Invalid audit event input" } });
-    expect(
-      runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(
-          context,
-          {
-            now: () => {
-              throw new Error("test clock failure");
-            }
-          },
-          draft()
-        )
-      )
-    ).toMatchObject({ ok: false, error: { message: "Audit event append failed" } });
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Invalid prepared audit event" }
+    });
     expect(connection.close().ok).toBe(true);
   });
 
   it("rejects update and delete at the SQLite boundary", async () => {
     const connection = await openMigratedDatabase();
+    const prepared = prepareDraft();
     expect(
       runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(context, fixedClock(), draft())
+        appendAuditEvent(context, prepared)
       ).ok
     ).toBe(true);
     const database = nativeDatabase(connection);
@@ -366,13 +404,13 @@ describe("audit envelope foundation", () => {
   it("rolls back command success when audit append fails", async () => {
     const connection = await openMigratedDatabase();
     createTestAggregate(connection);
+    const prepared = prepareDraft(
+      fixedClock(),
+      draft({ auditEventId: "test-duplicate-audit-event" })
+    );
     expect(
       runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(
-          context,
-          fixedClock(),
-          draft({ auditEventId: "test-duplicate-audit-event" })
-        )
+        appendAuditEvent(context, prepared)
       ).ok
     ).toBe(true);
 
@@ -445,7 +483,34 @@ describe("audit envelope foundation", () => {
     expect(connection.close().ok).toBe(true);
   });
 
-  it("maps low-level read failures into typed errors", () => {
+  it("maps hostile JavaScript property access into typed errors", () => {
+    const prepared = prepareDraft();
+    const hostileContext = Object.defineProperty({}, "nativeDatabase", {
+      get() {
+        throw new TypeError("test context getter failure");
+      }
+    });
+    const hostileClock = Object.defineProperty({}, "now", {
+      get() {
+        throw new TypeError("test clock getter failure");
+      }
+    });
+    expect(() => appendAuditEvent(hostileContext, prepared)).not.toThrow();
+    expect(appendAuditEvent(hostileContext, prepared)).toMatchObject({
+      ok: false,
+      error: { message: "Audit event append failed" }
+    });
+    expect(() => readAuditEvent(hostileContext, "test-audit-event-1")).not.toThrow();
+    expect(readAuditEvent(hostileContext, "test-audit-event-1")).toMatchObject({
+      ok: false,
+      error: { message: "Audit event read failed" }
+    });
+    expect(() => prepareAuditEvent(hostileClock, draft())).not.toThrow();
+    expect(prepareAuditEvent(hostileClock, draft())).toMatchObject({
+      ok: false,
+      error: { message: "Audit event preparation failed" }
+    });
+
     const context = {
       nativeDatabase: {
         inTransaction: true,

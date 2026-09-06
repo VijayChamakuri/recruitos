@@ -20,6 +20,8 @@ export type AuditClock = Readonly<{
   now: () => number;
 }>;
 
+const preparedAuditEvents = new WeakSet<object>();
+
 type AuditEventRow = Readonly<{
   auditEventId: unknown;
   commandId: unknown;
@@ -39,38 +41,37 @@ function persistenceFailure(message: string): RuntimeError {
 }
 
 function validateContext(
-  context: ImmediateTransactionContext
+  contextInput: unknown
 ): Result<ImmediateTransactionContext, RuntimeError> {
   if (
-    typeof context !== "object" ||
-    context === null ||
+    typeof contextInput !== "object" ||
+    contextInput === null
+  ) {
+    return err(persistenceFailure("Audit events require an active command transaction"));
+  }
+  const context = contextInput as Partial<ImmediateTransactionContext>;
+  if (
     typeof context.nativeDatabase !== "object" ||
     context.nativeDatabase === null ||
     context.nativeDatabase.inTransaction !== true
   ) {
     return err(persistenceFailure("Audit events require an active command transaction"));
   }
-  return ok(context);
+  return ok(context as ImmediateTransactionContext);
 }
 
-export function appendAuditEvent(
-  context: ImmediateTransactionContext,
-  clock: AuditClock,
+export function prepareAuditEvent(
+  clockInput: unknown,
   draftInput: unknown
 ): Result<AuditEvent, RuntimeError> {
-  const validatedContext = validateContext(context);
-  if (!validatedContext.ok) {
-    return validatedContext;
-  }
-  if (
-    typeof clock !== "object" ||
-    clock === null ||
-    typeof clock.now !== "function"
-  ) {
-    return err(persistenceFailure("Invalid audit clock"));
-  }
-
   try {
+    if (typeof clockInput !== "object" || clockInput === null) {
+      return err(persistenceFailure("Invalid audit clock"));
+    }
+    const clock = clockInput as Partial<AuditClock>;
+    if (typeof clock.now !== "function") {
+      return err(persistenceFailure("Invalid audit clock"));
+    }
     const draft = AuditEventDraftSchema.safeParse(draftInput);
     if (!draft.success) {
       return err(persistenceFailure("Invalid audit event input"));
@@ -100,6 +101,32 @@ export function appendAuditEvent(
       return err(persistenceFailure("Invalid audit event input"));
     }
 
+    const prepared = Object.freeze(event.data);
+    preparedAuditEvents.add(prepared);
+    return ok(prepared);
+  } catch {
+    return err(persistenceFailure("Audit event preparation failed"));
+  }
+}
+
+export function appendAuditEvent(
+  contextInput: unknown,
+  preparedInput: unknown
+): Result<AuditEvent, RuntimeError> {
+  try {
+    const validatedContext = validateContext(contextInput);
+    if (!validatedContext.ok) {
+      return validatedContext;
+    }
+    if (
+      typeof preparedInput !== "object" ||
+      preparedInput === null ||
+      !preparedAuditEvents.has(preparedInput)
+    ) {
+      return err(persistenceFailure("Invalid prepared audit event"));
+    }
+    const event = preparedInput as AuditEvent;
+
     validatedContext.value.nativeDatabase
       .prepare(
         `INSERT INTO audit_event (
@@ -117,35 +144,34 @@ export function appendAuditEvent(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
-        event.data.auditEventId,
-        event.data.commandId,
-        event.data.eventOrdinal,
-        event.data.actorId,
-        event.data.actorDisplayName,
-        event.data.eventName,
-        event.data.eventVersion,
-        event.data.payloadJson,
-        event.data.payloadHash,
-        event.data.occurredAt,
-        event.data.recordedAt
+        event.auditEventId,
+        event.commandId,
+        event.eventOrdinal,
+        event.actorId,
+        event.actorDisplayName,
+        event.eventName,
+        event.eventVersion,
+        event.payloadJson,
+        event.payloadHash,
+        event.occurredAt,
+        event.recordedAt
       );
 
-    return ok(Object.freeze(event.data));
+    return ok(event);
   } catch {
     return err(persistenceFailure("Audit event append failed"));
   }
 }
 
 export function readAuditEvent(
-  context: ImmediateTransactionContext,
+  contextInput: unknown,
   auditEventIdInput: unknown
 ): Result<AuditEvent | undefined, RuntimeError> {
-  const validatedContext = validateContext(context);
-  if (!validatedContext.ok) {
-    return validatedContext;
-  }
-
   try {
+    const validatedContext = validateContext(contextInput);
+    if (!validatedContext.ok) {
+      return validatedContext;
+    }
     const auditEventId = AuditEventIdSchema.safeParse(auditEventIdInput);
     if (!auditEventId.success) {
       return err(persistenceFailure("Invalid audit event ID"));

@@ -23,6 +23,7 @@ describe("runtime public API", () => {
       "createRuntimeError",
       "executeCommand",
       "openRuntimeDatabase",
+      "prepareAuditEvent",
       "readAuditEvent",
       "runImmediateTransaction",
       "runtimeMigrationSmoke"
