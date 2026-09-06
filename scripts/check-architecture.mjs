@@ -12,6 +12,8 @@ const testSourceExtension = /\.(?:spec|test)\.(?:cts|mts|ts|tsx)$/u;
 
 const forbiddenDeclarationFile =
   /(?:\/typescript\/lib\/lib\.(?:dom|webworker|scripthost)[^/]*\.d\.ts$|\/node_modules\/(?:@types\/node|undici-types)\/)/u;
+const approvedDeclarationFile =
+  /(?:\/typescript\/lib\/lib\.(?:es[^/]*|decorators(?:\.legacy)?)\.d\.ts$|\/node_modules\/zod\/)/u;
 
 function portablePath(file) {
   return file.replaceAll("\\", "/");
@@ -64,6 +66,10 @@ function resolvedSymbol(node, checker) {
     : checker.getAliasedSymbol(symbol);
 }
 
+function isPropertyNameIdentifier(node) {
+  return ts.isPropertyAccessExpression(node.parent) && node.parent.name === node;
+}
+
 function declarationIsAmbient(declaration) {
   if (declaration.getSourceFile().isDeclarationFile) {
     return true;
@@ -87,7 +93,7 @@ function symbolHasEmittedLocalDeclaration(symbol, sourceFiles) {
 }
 
 function ambientCapability(node, checker, sourceFiles) {
-  if (!ts.isIdentifier(node)) {
+  if (!ts.isIdentifier(node) || isPropertyNameIdentifier(node)) {
     return undefined;
   }
   const symbol = resolvedSymbol(node, checker);
@@ -129,18 +135,27 @@ function ambientCapability(node, checker, sourceFiles) {
   if (localAmbient) {
     return `erased ambient capability ${name}`;
   }
-  const declarationFile = declarations.find((declaration) =>
+  const ambientDeclarations = declarations.filter(declarationIsAmbient);
+  const declarationFile = ambientDeclarations.find((declaration) =>
     forbiddenDeclarationFile.test(portablePath(declaration.getSourceFile().fileName))
   );
-  if (declarationFile === undefined) {
-    return undefined;
+  if (declarationFile !== undefined) {
+    const origin = portablePath(declarationFile.getSourceFile().fileName).includes(
+      "/typescript/lib/lib."
+    )
+      ? "browser"
+      : "Node";
+    return `${origin} ambient capability ${name}`;
   }
-  const origin = portablePath(declarationFile.getSourceFile().fileName).includes(
-    "/typescript/lib/lib."
-  )
-    ? "browser"
-    : "Node";
-  return `${origin} ambient capability ${name}`;
+
+  const unknownAmbientDeclaration = ambientDeclarations.find(
+    (declaration) =>
+      !sourceFiles.has(resolve(declaration.getSourceFile().fileName)) &&
+      !approvedDeclarationFile.test(portablePath(declaration.getSourceFile().fileName))
+  );
+  return unknownAmbientDeclaration === undefined
+    ? undefined
+    : `unknown ambient declaration capability ${name}`;
 }
 
 function isAmbientRequire(node, checker, sourceFiles) {
@@ -197,6 +212,27 @@ function importViolation(specifier, file, sourceRoot) {
   return specifier === "zod" ? undefined : `forbidden import ${specifier}`;
 }
 
+function addReferenceDirectiveViolations(sourceFile, file, sourceRoot, relativeFile, violations) {
+  for (const reference of sourceFile.referencedFiles) {
+    const target = resolve(dirname(file), reference.fileName);
+    if (!isInside(sourceRoot, target)) {
+      violations.push(
+        `${relativeFile}: external path reference escapes core: ${reference.fileName}`
+      );
+    }
+  }
+  for (const reference of sourceFile.typeReferenceDirectives) {
+    violations.push(
+      `${relativeFile}: external type-reference directives are not allowed: ${reference.fileName}`
+    );
+  }
+  for (const reference of sourceFile.libReferenceDirectives) {
+    violations.push(
+      `${relativeFile}: external lib-reference directives are not allowed: ${reference.fileName}`
+    );
+  }
+}
+
 function accessedProperty(node) {
   if (ts.isPropertyAccessExpression(node)) {
     return node.name.text;
@@ -207,8 +243,85 @@ function accessedProperty(node) {
   return undefined;
 }
 
+function unwrapExpression(node) {
+  let current = node;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function typeMayBeCallable(type, checker) {
+  if ((type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !== 0) {
+    return true;
+  }
+  if (type.isUnionOrIntersection()) {
+    return type.types.some((member) => typeMayBeCallable(member, checker));
+  }
+  return (
+    checker.getSignaturesOfType(type, ts.SignatureKind.Call).length > 0 ||
+    checker.getSignaturesOfType(type, ts.SignatureKind.Construct).length > 0
+  );
+}
+
+function expressionMayBeCallable(node, checker) {
+  const expression = unwrapExpression(node);
+  return (
+    ts.isArrowFunction(expression) ||
+    ts.isFunctionExpression(expression) ||
+    typeMayBeCallable(checker.getTypeAtLocation(expression), checker)
+  );
+}
+
+function prototypeReflectionOnCallable(node, checker, sourceFiles) {
+  const expression = unwrapExpression(node);
+  if (!ts.isCallExpression(expression) || expression.arguments.length < 1) {
+    return false;
+  }
+  const callee = unwrapExpression(expression.expression);
+  if (!ts.isPropertyAccessExpression(callee) && !ts.isElementAccessExpression(callee)) {
+    return false;
+  }
+  const owner = unwrapExpression(callee.expression);
+  const property = accessedProperty(callee);
+  const argument = expression.arguments[0];
+  return (
+    ts.isIdentifier(owner) &&
+    (owner.text === "Object" || owner.text === "Reflect") &&
+    !symbolHasEmittedLocalDeclaration(resolvedSymbol(owner, checker), sourceFiles) &&
+    property === "getPrototypeOf" &&
+    argument !== undefined &&
+    expressionMayBeCallable(argument, checker)
+  );
+}
+
+function indirectDynamicCodeCapability(node, checker, sourceFiles) {
+  if (prototypeReflectionOnCallable(node, checker, sourceFiles)) {
+    return "prototype reflection on callable value";
+  }
+  if (!ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node)) {
+    return undefined;
+  }
+  const property = accessedProperty(node);
+  if (property !== "constructor" && !(ts.isElementAccessExpression(node) && property === undefined)) {
+    return undefined;
+  }
+  return expressionMayBeCallable(node.expression, checker)
+    ? "indirect Function constructor capability"
+    : undefined;
+}
+
 function runtimeEffect(node, checker, sourceFiles) {
-  return ambientCapability(node, checker, sourceFiles);
+  return (
+    ambientCapability(node, checker, sourceFiles) ??
+    indirectDynamicCodeCapability(node, checker, sourceFiles)
+  );
 }
 
 export function checkCoreArchitecture({
@@ -250,6 +363,14 @@ export function checkCoreArchitecture({
         true,
         scriptKind(file)
       );
+
+    addReferenceDirectiveViolations(
+      sourceFile,
+      file,
+      resolvedSourceRoot,
+      relativeFile,
+      violations
+    );
 
     function visit(node) {
       const specifier = moduleSpecifier(node, checker, sourceFileSet);

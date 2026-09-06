@@ -65,7 +65,15 @@ describe("core architecture boundary", () => {
     ["module-require", "Node ambient capability module"],
     ["aliased-require-call", "Node ambient capability require"],
     ["retained-require", "Node ambient capability require"],
-    ["retained-module-require", "Node ambient capability module"]
+    ["retained-module-require", "Node ambient capability module"],
+    ["external-path-reference", "external path reference escapes core"],
+    ["external-type-reference", "external type-reference directives are not allowed"],
+    ["external-lib-reference", "external lib-reference directives are not allowed"],
+    ["unknown-ambient-loader", "unknown ambient declaration capability loadUnknownModule"],
+    ["function-constructor", "indirect Function constructor capability"],
+    ["retained-function-constructor", "indirect Function constructor capability"],
+    ["constructor-global-access", "indirect Function constructor capability"],
+    ["prototype-function-constructor", "prototype reflection on callable value"]
   ])("rejects the %s fixture", (name, expected) => {
     expect(fixture(name)).toEqual(expect.arrayContaining([expect.stringContaining(expected)]));
   });
@@ -80,7 +88,7 @@ describe("core architecture boundary", () => {
     );
   });
 
-  it.each(["shadowed-fetch", "shadowed-date", "shadowed-require"])(
+  it.each(["shadowed-fetch", "shadowed-date", "shadowed-require", "local-object-constructor"])(
     "allows the locally implemented %s fixture",
     (name) => {
       expect(fixture(name)).toEqual([]);
