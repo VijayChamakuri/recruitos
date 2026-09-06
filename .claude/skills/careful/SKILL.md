@@ -1,1 +1,1 @@
-/Users/vijaychamakuri/conductor/recruitOS/recruitos/.claude/skills/gstack/careful/SKILL.md
+/Users/vijaychamakuri/conductor/workspaces/recruitos/winnipeg/.claude/skills/gstack/careful/SKILL.md

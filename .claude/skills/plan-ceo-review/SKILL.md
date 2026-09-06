@@ -1,1 +1,1 @@
-/Users/vijaychamakuri/conductor/recruitOS/recruitos/.claude/skills/gstack/plan-ceo-review/SKILL.md
+/Users/vijaychamakuri/conductor/workspaces/recruitos/winnipeg/.claude/skills/gstack/plan-ceo-review/SKILL.md

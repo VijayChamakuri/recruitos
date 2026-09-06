@@ -1,1 +1,1 @@
-/Users/vijaychamakuri/conductor/recruitOS/recruitos/.claude/skills/gstack/browse/PLAN-snapshot-dropdown-interactive.md
+/Users/vijaychamakuri/conductor/workspaces/recruitos/winnipeg/.claude/skills/gstack/browse/PLAN-snapshot-dropdown-interactive.md
