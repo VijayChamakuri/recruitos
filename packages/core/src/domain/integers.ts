@@ -1,12 +1,12 @@
 import { z } from "zod";
 
-export const SafeIntegerSchema = z.number().int().safe();
+export const SafeIntegerSchema = z.number().int().safe().brand<"SafeInteger">();
 export type SafeInteger = z.infer<typeof SafeIntegerSchema>;
 
-export const NonnegativeIntegerSchema = SafeIntegerSchema.nonnegative();
+export const NonnegativeIntegerSchema = SafeIntegerSchema.nonnegative().brand<"NonnegativeInteger">();
 export type NonnegativeInteger = z.infer<typeof NonnegativeIntegerSchema>;
 
-export const PositiveIntegerSchema = SafeIntegerSchema.positive();
+export const PositiveIntegerSchema = SafeIntegerSchema.positive().brand<"PositiveInteger">();
 export type PositiveInteger = z.infer<typeof PositiveIntegerSchema>;
 
 export const BasisPointsSchema = NonnegativeIntegerSchema.max(10_000).brand<"BasisPoints">();

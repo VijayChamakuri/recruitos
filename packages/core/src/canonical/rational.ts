@@ -31,6 +31,7 @@ export const RationalSchema = z
       context.addIssue({ code: "custom", message: "Rational must be reduced" });
     }
   })
+  .readonly()
   .brand<"Rational">();
 
 export type Rational = z.infer<typeof RationalSchema>;

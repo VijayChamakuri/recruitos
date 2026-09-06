@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { SafeIntegerSchema, type SafeInteger } from "../domain/integers.js";
+
 export const OrderingSchema = z.union([z.literal(-1), z.literal(0), z.literal(1)]);
 export type Ordering = z.infer<typeof OrderingSchema>;
 
@@ -9,7 +11,9 @@ export function compareBigInt(left: bigint, right: bigint): Ordering {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-export function compareSafeInteger(left: number, right: number): Ordering {
+export function compareSafeInteger(left: SafeInteger, right: SafeInteger): Ordering {
+  SafeIntegerSchema.parse(left);
+  SafeIntegerSchema.parse(right);
   return left < right ? -1 : left > right ? 1 : 0;
 }
 

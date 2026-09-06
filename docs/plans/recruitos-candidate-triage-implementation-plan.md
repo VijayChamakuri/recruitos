@@ -1,6 +1,6 @@
 # RecruitOS Candidate Triage Control Plane: Build-Ready Implementation Plan
 
-Status: Engineering architecture approved, implementation not started
+Status: Engineering architecture approved, implementation in progress
 
 Reviewed source: `51acb79:docs/designs/recruitos-candidate-triage-control-plane.md`
 

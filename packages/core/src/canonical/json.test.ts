@@ -1,7 +1,44 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import { canonicalJsonSha256 } from "./hash.js";
 import { canonicalJsonStringify } from "./json.js";
+
+type SupportedJson = null | boolean | string | number | readonly SupportedJson[] | {
+  readonly [key: string]: SupportedJson;
+};
+
+const keyArbitrary = fc.oneof(
+  fc.constantFrom("A", "a", "é", "e\u0301", "😀", "\ud83d", "\ude00"),
+  fc.string({ maxLength: 5 })
+);
+
+const supportedJsonArbitrary: fc.Arbitrary<SupportedJson> = fc.letrec((tie) => ({
+  value: fc.oneof(
+    { depthSize: "small" },
+    fc.constant(null),
+    fc.boolean(),
+    fc.string({ maxLength: 12 }),
+    fc.integer({ min: -1_000_000, max: 1_000_000 }),
+    tie("array"),
+    tie("record")
+  ),
+  array: fc.array(tie("value"), { maxLength: 4 }),
+  record: fc.dictionary(keyArbitrary, tie("value"), { maxKeys: 4 })
+})).value as fc.Arbitrary<SupportedJson>;
+
+function reverseObjectInsertionOrder(value: SupportedJson): SupportedJson {
+  if (Array.isArray(value)) {
+    return value.map(reverseObjectInsertionOrder);
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).reverse();
+    return Object.fromEntries(
+      entries.map(([key, item]) => [key, reverseObjectInsertionOrder(item)])
+    );
+  }
+  return value;
+}
 
 describe("canonical JSON", () => {
   it("sorts object keys recursively and preserves array order", () => {
@@ -18,6 +55,14 @@ describe("canonical JSON", () => {
     expect(canonicalJsonStringify({ 'a"': "line\nnext" })).toEqual({
       ok: true,
       value: '{"a\\\"":"line\\nnext"}'
+    });
+  });
+
+  it("sorts code-unit-sensitive keys without locale state", () => {
+    const value = { "\ude00": 4, "😀": 3, "\ud83d": 2, a: 1, A: 0 };
+    expect(canonicalJsonStringify(value)).toEqual({
+      ok: true,
+      value: '{"A":0,"a":1,"\\ud83d":2,"😀":3,"\\ude00":4}'
     });
   });
 
@@ -60,5 +105,40 @@ describe("canonical JSON", () => {
     const withAccessor = {};
     Object.defineProperty(withAccessor, "value", { enumerable: true, get: () => 1 });
     expect(canonicalJsonStringify(withAccessor).ok).toBe(false);
+  });
+
+  it("rejects array accessors and decorated arrays without executing getters", () => {
+    let reads = 0;
+    const withAccessor: number[] = [];
+    Object.defineProperty(withAccessor, 0, {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return reads;
+      }
+    });
+    withAccessor.length = 1;
+    expect(canonicalJsonStringify(withAccessor).ok).toBe(false);
+    expect(canonicalJsonStringify(withAccessor).ok).toBe(false);
+    expect(reads).toBe(0);
+
+    const withCustomProperty = [1] as number[] & { extra?: number };
+    withCustomProperty.extra = 2;
+    expect(canonicalJsonStringify(withCustomProperty).ok).toBe(false);
+
+    const withSymbol = [1];
+    Object.defineProperty(withSymbol, Symbol("hidden"), { value: 2 });
+    expect(canonicalJsonStringify(withSymbol).ok).toBe(false);
+  });
+
+  it("is stable under recursively shuffled object insertion order", () => {
+    fc.assert(
+      fc.property(supportedJsonArbitrary, (value) => {
+        const shuffled = reverseObjectInsertionOrder(value);
+        expect(canonicalJsonStringify(shuffled)).toEqual(canonicalJsonStringify(value));
+        expect(canonicalJsonSha256(shuffled)).toEqual(canonicalJsonSha256(value));
+      }),
+      { numRuns: 250, seed: 20_260_905 }
+    );
   });
 });

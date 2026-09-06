@@ -39,12 +39,19 @@ function canonicalize(value: unknown, state: CanonicalizationState): Result<stri
   nextAncestors.add(value);
 
   if (Array.isArray(value)) {
+    const expectedKeys = new Set<string>(["length"]);
     const parts: string[] = [];
     for (let index = 0; index < value.length; index += 1) {
-      if (!Object.hasOwn(value, index)) {
+      const key = index.toString(10);
+      expectedKeys.add(key);
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined) {
         return invalidJson(`${state.path}[${index}]`, "sparse arrays are not supported");
       }
-      const item = canonicalize(value[index], {
+      if (descriptor.get !== undefined || descriptor.set !== undefined) {
+        return invalidJson(`${state.path}[${index}]`, "accessor properties are not supported");
+      }
+      const item = canonicalize(descriptor.value, {
         ancestors: nextAncestors,
         path: `${state.path}[${index}]`
       });
@@ -52,6 +59,11 @@ function canonicalize(value: unknown, state: CanonicalizationState): Result<stri
         return item;
       }
       parts.push(item.value);
+    }
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== "string" || !expectedKeys.has(key)) {
+        return invalidJson(state.path, "unexpected array properties are not supported");
+      }
     }
     return ok(`[${parts.join(",")}]`);
   }

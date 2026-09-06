@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import { sha256Hex } from "./sha256.js";
@@ -22,5 +24,28 @@ describe("SHA-256", () => {
     expect(sha256Hex("a".repeat(1_000))).toBe(
       "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3"
     );
+  });
+
+  it.each([123, {}, [], null, undefined])("rejects non-string runtime input %j", (value) => {
+    expect(() => sha256Hex(value as unknown as string)).toThrow(TypeError);
+  });
+
+  it("matches an independent implementation at padding and Unicode boundaries", () => {
+    const lengths = [0, 1, 2, 3, 31, 32, 55, 56, 57, 63, 64, 65, 119, 120, 121, 127, 128, 129, 255];
+    const atoms = ["a", "é", "😀", "\u0000", "\ud800", "\udc00", "漢"];
+    const values = lengths.map((length) => "a".repeat(length));
+    let state = 0x6d2b79f5;
+    for (let index = 0; index < 250; index += 1) {
+      let value = "";
+      for (let offset = 0; offset < index % 89; offset += 1) {
+        state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+        value += atoms[state % atoms.length];
+      }
+      values.push(value);
+    }
+
+    for (const value of values) {
+      expect(sha256Hex(value)).toBe(createHash("sha256").update(value, "utf8").digest("hex"));
+    }
   });
 });

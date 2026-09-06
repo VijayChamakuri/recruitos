@@ -39,7 +39,15 @@ function isLowSurrogate(codeUnit: number): boolean {
 }
 
 export function isUtf16CodePointBoundary(text: string, offset: number): boolean {
-  if (offset <= 0 || offset >= text.length) {
+  if (
+    !Number.isFinite(offset) ||
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    offset > text.length
+  ) {
+    return false;
+  }
+  if (offset === 0 || offset === text.length) {
     return true;
   }
   return !(

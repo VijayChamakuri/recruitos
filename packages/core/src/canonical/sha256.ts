@@ -81,6 +81,9 @@ function utf8Bytes(value: string): number[] {
 }
 
 export function sha256Hex(value: string): Sha256Hex {
+  if (typeof value !== "string") {
+    throw new TypeError("SHA-256 input must be a string");
+  }
   const bytes = utf8Bytes(value);
   const bitLength = BigInt(bytes.length) * 8n;
   bytes.push(0x80);

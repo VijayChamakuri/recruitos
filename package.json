@@ -10,8 +10,9 @@
   },
   "scripts": {
     "build": "corepack pnpm --filter @recruitos/core build",
-    "check": "corepack pnpm test:types && corepack pnpm check:architecture && corepack pnpm test",
+    "check": "corepack pnpm test:types && corepack pnpm check:architecture && corepack pnpm check:browser && corepack pnpm test",
     "check:architecture": "node scripts/check-architecture.mjs",
+    "check:browser": "corepack pnpm build && node scripts/check-browser-bundle.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:types": "corepack pnpm --filter @recruitos/core test:types",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@types/node": "24.3.1",
     "@vitest/coverage-v8": "3.2.4",
+    "esbuild": "0.28.2",
     "fast-check": "4.3.0",
     "typescript": "5.9.2",
     "vitest": "3.2.4"

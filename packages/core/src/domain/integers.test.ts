@@ -6,7 +6,8 @@ import {
   NonnegativeIntegerSchema,
   PositiveIntegerSchema,
   PositiveWeightSchema,
-  SafeIntegerSchema
+  SafeIntegerSchema,
+  type SafeInteger
 } from "./integers.js";
 
 describe("integer schemas", () => {
@@ -16,6 +17,16 @@ describe("integer schemas", () => {
     expect(PositiveIntegerSchema.parse(1)).toBe(1);
     expect(BasisPointsSchema.parse(10_000)).toBe(10_000);
     expect(PositiveWeightSchema.parse(3)).toBe(3);
+  });
+
+  it("keeps narrower integer brands assignable to safe integers", () => {
+    const values: readonly SafeInteger[] = [
+      NonnegativeIntegerSchema.parse(0),
+      PositiveIntegerSchema.parse(1),
+      BasisPointsSchema.parse(10_000),
+      PositiveWeightSchema.parse(3)
+    ];
+    expect(values).toEqual([0, 1, 10_000, 3]);
   });
 
   it("rejects fractional, unsafe, negative, zero, and out-of-range values", () => {

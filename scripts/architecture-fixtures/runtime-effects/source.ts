@@ -1,0 +1,16 @@
+export const timestamp = Date.now();
+export const constructed = new Date();
+export const called = Date();
+export const random = Math.random();
+export const environment = process.env.RECRUITOS_TEST;
+export const location = window.location;
+export const body = document.body;
+export const stored = localStorage.getItem("key");
+export const agent = navigator.userAgent;
+export const ambientCrypto = globalThis.crypto;
+export const buffer = Buffer.from("value");
+export const request = fetch("https://example.invalid");
+export const socket = new WebSocket("wss://example.invalid");
+export const calledSocket = WebSocket("wss://example.invalid");
+export const measured = performance.now();
+export const timer = setTimeout(() => undefined, 1);

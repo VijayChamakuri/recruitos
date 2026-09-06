@@ -29,6 +29,21 @@ describe("UTF-16 intervals", () => {
     expect(isUtf16CodePointBoundary(text, text.length)).toBe(true);
   });
 
+  it.each([-1, 1.5, NaN, Infinity, -Infinity, 5])(
+    "rejects invalid direct boundary offset %s",
+    (offset) => {
+      expect(isUtf16CodePointBoundary(text, offset)).toBe(false);
+    }
+  );
+
+  it("identifies every boundary around a valid surrogate pair", () => {
+    expect(isUtf16CodePointBoundary(text, 0)).toBe(true);
+    expect(isUtf16CodePointBoundary(text, 1)).toBe(true);
+    expect(isUtf16CodePointBoundary(text, 2)).toBe(false);
+    expect(isUtf16CodePointBoundary(text, 3)).toBe(true);
+    expect(isUtf16CodePointBoundary(text, 4)).toBe(true);
+  });
+
   it("rejects invalid shapes, reversed ranges, and empty matched slices", () => {
     expect(Utf16IntervalSchema.safeParse({ start: 2, end: 1 }).success).toBe(false);
     expect(Utf16SliceSchema.safeParse({ start: 1, end: 1, matchedText: "" }).success).toBe(false);
