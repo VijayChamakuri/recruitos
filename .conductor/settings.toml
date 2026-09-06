@@ -1,0 +1,10 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+# Serves the approved design mockups so they can be opened from inside Conductor
+# instead of hunting for a file path. Zero dependencies, so it works before any
+# application code exists. Remove this once apps/web has a real dev server.
+[scripts.run.design]
+command = "python3 -m http.server $CONDUCTOR_PORT --directory docs/designs/recruitos-visual-variants"
+available_in = [ "local" ]
+default = true
+icon = "layout-dashboard"
