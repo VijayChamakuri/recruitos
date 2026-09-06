@@ -15,9 +15,10 @@ describe("SHA-256", () => {
     expect(sha256Hex(value)).toBe(expected);
   });
 
-  it("encodes unmatched surrogates as the replacement character", () => {
-    expect(sha256Hex("\ud800")).toBe(sha256Hex("�"));
-    expect(sha256Hex("\udc00")).toBe(sha256Hex("�"));
+  it("rejects malformed UTF-16 while accepting a literal replacement character", () => {
+    expect(() => sha256Hex("\ud800")).toThrow(TypeError);
+    expect(() => sha256Hex("\udc00")).toThrow(TypeError);
+    expect(sha256Hex("�")).toBe("83d544ccc223c057d2bf80d3f2a32982c32c3c0db8e2674820da5064783fb097");
   });
 
   it("hashes inputs spanning multiple blocks", () => {
@@ -32,7 +33,7 @@ describe("SHA-256", () => {
 
   it("matches an independent implementation at padding and Unicode boundaries", () => {
     const lengths = [0, 1, 2, 3, 31, 32, 55, 56, 57, 63, 64, 65, 119, 120, 121, 127, 128, 129, 255];
-    const atoms = ["a", "é", "😀", "\u0000", "\ud800", "\udc00", "漢"];
+    const atoms = ["a", "é", "😀", "\u0000", "�", "漢"];
     const values = lengths.map((length) => "a".repeat(length));
     let state = 0x6d2b79f5;
     for (let index = 0; index < 250; index += 1) {

@@ -1,4 +1,5 @@
 import { Sha256HexSchema, type Sha256Hex } from "../domain/hashes.js";
+import { isWellFormedUtf16 } from "./text.js";
 
 const SHA256_INITIAL = new Uint32Array([
   0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
@@ -65,14 +66,8 @@ function utf8Bytes(value: string): number[] {
     const first = value.charCodeAt(index);
     if (first >= 0xd800 && first <= 0xdbff) {
       const second = value.charCodeAt(index + 1);
-      if (second >= 0xdc00 && second <= 0xdfff) {
-        appendUtf8(bytes, 0x10000 + ((first - 0xd800) << 10) + (second - 0xdc00));
-        index += 1;
-      } else {
-        appendUtf8(bytes, 0xfffd);
-      }
-    } else if (first >= 0xdc00 && first <= 0xdfff) {
-      appendUtf8(bytes, 0xfffd);
+      appendUtf8(bytes, 0x10000 + ((first - 0xd800) << 10) + (second - 0xdc00));
+      index += 1;
     } else {
       appendUtf8(bytes, first);
     }
@@ -80,9 +75,13 @@ function utf8Bytes(value: string): number[] {
   return bytes;
 }
 
+// This hashes well-formed text as UTF-8. Raw source bytes require a separate runtime boundary.
 export function sha256Hex(value: string): Sha256Hex {
   if (typeof value !== "string") {
     throw new TypeError("SHA-256 input must be a string");
+  }
+  if (!isWellFormedUtf16(value)) {
+    throw new TypeError("SHA-256 text input must be well-formed UTF-16");
   }
   const bytes = utf8Bytes(value);
   const bitLength = BigInt(bytes.length) * 8n;

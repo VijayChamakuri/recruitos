@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import ts from "typescript";
@@ -10,14 +10,38 @@ const coreSourceRoot = resolve(repositoryRoot, "packages/core/src");
 const supportedSourceExtension = /\.(?:cts|mts|ts|tsx)$/u;
 const testSourceExtension = /\.(?:spec|test)\.(?:cts|mts|ts|tsx)$/u;
 
-const forbiddenBareImports = new Set([
-  "better-sqlite3",
-  "crypto",
-  "drizzle-orm",
-  "fs",
-  "next",
-  "path",
-  "react"
+const ambientEffects = new Map([
+  ["Buffer", "binary runtime buffer"],
+  ["crypto", "ambient crypto"],
+  ["document", "browser document"],
+  ["fetch", "network fetch"],
+  ["globalThis", "ambient global object"],
+  ["localStorage", "browser storage"],
+  ["navigator", "browser navigator"],
+  ["performance", "performance clock"],
+  ["process", "process access"],
+  ["randomUUID", "random UUID"],
+  ["setInterval", "timer"],
+  ["setTimeout", "timer"],
+  ["WebSocket", "web socket"],
+  ["window", "browser window"]
+]);
+
+const globalThisEffects = new Map([
+  ["Buffer", "binary runtime buffer"],
+  ["crypto", "ambient crypto"],
+  ["Date", "clock construction"],
+  ["document", "browser document"],
+  ["fetch", "network fetch"],
+  ["localStorage", "browser storage"],
+  ["Math", "randomness capability"],
+  ["navigator", "browser navigator"],
+  ["performance", "performance clock"],
+  ["process", "process access"],
+  ["setInterval", "timer"],
+  ["setTimeout", "timer"],
+  ["WebSocket", "web socket"],
+  ["window", "browser window"]
 ]);
 
 function displayPath(file, displayRoot) {
@@ -90,62 +114,107 @@ function isModuleLoadCall(node) {
   );
 }
 
-function isForbiddenImport(specifier) {
+function isInside(root, target) {
+  const path = relative(root, target);
+  return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`));
+}
+
+function importViolation(specifier, file, sourceRoot) {
+  if (specifier.startsWith(".")) {
+    const target = resolve(dirname(file), specifier);
+    return isInside(sourceRoot, target) ? undefined : `relative import escapes core: ${specifier}`;
+  }
+  return specifier === "zod" ? undefined : `forbidden import ${specifier}`;
+}
+
+function symbolIsLocal(symbol, checker, sourceFiles) {
+  if (symbol === undefined) {
+    return false;
+  }
+  const resolved =
+    (symbol.flags & ts.SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol);
   return (
-    specifier.startsWith("node:") ||
-    forbiddenBareImports.has(specifier) ||
-    [...forbiddenBareImports].some((name) => specifier.startsWith(`${name}/`)) ||
-    specifier.startsWith("@recruitos/") ||
-    (!specifier.startsWith(".") && specifier !== "zod")
+    resolved.declarations?.some((declaration) =>
+      sourceFiles.has(resolve(declaration.getSourceFile().fileName))
+    ) === true
   );
 }
 
-function accessPath(node) {
-  if (ts.isIdentifier(node)) {
-    return [node.text];
-  }
+function isAmbientIdentifier(node, checker, sourceFiles) {
+  return (
+    ts.isIdentifier(node) &&
+    !symbolIsLocal(checker.getSymbolAtLocation(node), checker, sourceFiles)
+  );
+}
+
+function accessedProperty(node) {
   if (ts.isPropertyAccessExpression(node)) {
-    const base = accessPath(node.expression);
-    return base === undefined ? undefined : [...base, node.name.text];
+    return node.name.text;
   }
-  if (ts.isElementAccessExpression(node)) {
-    const base = accessPath(node.expression);
-    const property =
-      node.argumentExpression === undefined ? undefined : stringLiteralText(node.argumentExpression);
-    return base === undefined || property === undefined ? undefined : [...base, property];
+  if (ts.isElementAccessExpression(node) && node.argumentExpression !== undefined) {
+    return stringLiteralText(node.argumentExpression);
   }
   return undefined;
 }
 
-function runtimeEffect(node) {
-  if (ts.isCallExpression(node)) {
-    const path = accessPath(node.expression)?.join(".");
-    if (path === "Date.now") return "clock access";
-    if (path === "Date") return "clock construction";
-    if (path === "Math.random") return "randomness";
-    if (path === "randomUUID" || path?.endsWith(".randomUUID") === true) return "random UUID";
-    if (path === "fetch") return "network fetch";
-    if (path === "performance.now") return "performance clock";
-    if (path === "setTimeout" || path === "setInterval") return "timer";
-    if (path === "WebSocket") return "web socket";
+function globalThisEffect(node, checker, sourceFiles) {
+  if (!ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node)) {
+    return undefined;
   }
-  if (ts.isNewExpression(node)) {
-    const path = accessPath(node.expression)?.join(".");
-    if (path === "Date") return "clock construction";
-    if (path === "WebSocket") return "web socket";
+  if (
+    !isAmbientIdentifier(node.expression, checker, sourceFiles) ||
+    node.expression.text !== "globalThis"
+  ) {
+    return undefined;
   }
-  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
-    const path = accessPath(node);
-    const root = path?.[0];
-    if (root === "process") return "process access";
-    if (root === "window") return "browser window";
-    if (root === "document") return "browser document";
-    if (root === "localStorage") return "browser storage";
-    if (root === "navigator") return "browser navigator";
-    if (root === "Buffer") return "binary runtime buffer";
-    if (root === "crypto" || path?.join(".") === "globalThis.crypto") return "ambient crypto";
+  const property = accessedProperty(node);
+  return property === undefined ? "dynamic ambient global access" : globalThisEffects.get(property);
+}
+
+function dateEffect(node) {
+  const parent = node.parent;
+  if (
+    (ts.isCallExpression(parent) || ts.isNewExpression(parent)) &&
+    parent.expression === node
+  ) {
+    return "clock construction";
   }
-  return undefined;
+  if (
+    (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) &&
+    parent.expression === node &&
+    accessedProperty(parent) === "now"
+  ) {
+    return "clock access";
+  }
+  return "retained clock capability";
+}
+
+function mathEffect(node) {
+  const parent = node.parent;
+  if (
+    (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) &&
+    parent.expression === node
+  ) {
+    return accessedProperty(parent) === "random" ? "randomness" : undefined;
+  }
+  return "retained randomness capability";
+}
+
+function runtimeEffect(node, checker, sourceFiles) {
+  const globalEffect = globalThisEffect(node, checker, sourceFiles);
+  if (globalEffect !== undefined) {
+    return globalEffect;
+  }
+  if (!isAmbientIdentifier(node, checker, sourceFiles)) {
+    return undefined;
+  }
+  if (node.text === "Date") {
+    return dateEffect(node);
+  }
+  if (node.text === "Math") {
+    return mathEffect(node);
+  }
+  return ambientEffects.get(node.text);
 }
 
 export function checkCoreArchitecture({
@@ -155,26 +224,49 @@ export function checkCoreArchitecture({
   const resolvedSourceRoot = resolve(sourceRoot);
   const resolvedDisplayRoot = resolve(displayRoot);
   const violations = [];
+  if (lstatSync(resolvedSourceRoot).isSymbolicLink()) {
+    return [
+      `${displayPath(resolvedSourceRoot, resolvedDisplayRoot)}: symbolic links are not allowed in core source`
+    ];
+  }
+  const files = sourceFiles(resolvedSourceRoot, resolvedDisplayRoot, violations);
+  const sourceFileSet = new Set(files.map((file) => resolve(file)));
+  const program = ts.createProgram({
+    rootNames: files,
+    options: {
+      jsx: ts.JsxEmit.Preserve,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      noEmit: true,
+      skipLibCheck: true,
+      target: ts.ScriptTarget.ES2023,
+      types: ["node"]
+    }
+  });
+  const checker = program.getTypeChecker();
 
-  for (const file of sourceFiles(resolvedSourceRoot, resolvedDisplayRoot, violations)) {
-    const source = readFileSync(file, "utf8");
+  for (const file of files) {
     const relativeFile = displayPath(file, resolvedDisplayRoot);
-    const sourceFile = ts.createSourceFile(
-      file,
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-      scriptKind(file)
-    );
+    const sourceFile =
+      program.getSourceFile(file) ??
+      ts.createSourceFile(
+        file,
+        readFileSync(file, "utf8"),
+        ts.ScriptTarget.Latest,
+        true,
+        scriptKind(file)
+      );
 
     function visit(node) {
       const specifier = moduleSpecifier(node);
-      if (specifier !== undefined && isForbiddenImport(specifier)) {
-        violations.push(`${relativeFile}: forbidden import ${specifier}`);
+      const moduleViolation =
+        specifier === undefined ? undefined : importViolation(specifier, file, resolvedSourceRoot);
+      if (moduleViolation !== undefined) {
+        violations.push(`${relativeFile}: ${moduleViolation}`);
       } else if (specifier === undefined && isModuleLoadCall(node)) {
         violations.push(`${relativeFile}: nonliteral module loads are not allowed`);
       }
-      const effect = runtimeEffect(node);
+      const effect = runtimeEffect(node, checker, sourceFileSet);
       if (effect !== undefined) {
         violations.push(`${relativeFile}: forbidden ${effect}`);
       }

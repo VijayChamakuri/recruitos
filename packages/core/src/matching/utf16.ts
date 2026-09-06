@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isWellFormedUtf16 } from "../canonical/text.js";
 import type { DomainError } from "../errors/domain-error.js";
 import { createDomainError } from "../errors/domain-error.js";
 import { err, ok, type Result } from "../errors/result.js";
@@ -38,8 +39,10 @@ function isLowSurrogate(codeUnit: number): boolean {
   return codeUnit >= 0xdc00 && codeUnit <= 0xdfff;
 }
 
-export function isUtf16CodePointBoundary(text: string, offset: number): boolean {
+export function isUtf16CodePointBoundary(text: unknown, offset: number): boolean {
   if (
+    typeof text !== "string" ||
+    !isWellFormedUtf16(text) ||
     !Number.isFinite(offset) ||
     !Number.isSafeInteger(offset) ||
     offset < 0 ||
@@ -64,9 +67,12 @@ function integrityFailure(message: string, start?: number, end?: number): Domain
 }
 
 export function validateUtf16Interval(
-  text: string,
+  text: unknown,
   input: unknown
 ): Result<Utf16Interval, DomainError> {
+  if (typeof text !== "string" || !isWellFormedUtf16(text)) {
+    return err(integrityFailure("UTF-16 source text is invalid"));
+  }
   const parsed = Utf16IntervalSchema.safeParse(input);
   if (!parsed.success) {
     return err(integrityFailure("UTF-16 interval is invalid"));
@@ -82,9 +88,12 @@ export function validateUtf16Interval(
 }
 
 export function validateUtf16Slice(
-  text: string,
+  text: unknown,
   input: unknown
 ): Result<Utf16Slice, DomainError> {
+  if (typeof text !== "string" || !isWellFormedUtf16(text)) {
+    return err(integrityFailure("UTF-16 source text is invalid"));
+  }
   const parsed = Utf16SliceSchema.safeParse(input);
   if (!parsed.success) {
     return err(integrityFailure("UTF-16 slice is invalid"));

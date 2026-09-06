@@ -13,5 +13,8 @@ export function parseCanonicalInteger(value: unknown): Result<bigint, DomainErro
 }
 
 export function formatCanonicalInteger(value: bigint): CanonicalIntegerString {
+  if (typeof value !== "bigint") {
+    throw new TypeError("Canonical integer input must be a bigint");
+  }
   return CanonicalIntegerStringSchema.parse(value.toString(10));
 }

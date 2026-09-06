@@ -29,7 +29,7 @@ describe("UTF-16 intervals", () => {
     expect(isUtf16CodePointBoundary(text, text.length)).toBe(true);
   });
 
-  it.each([-1, 1.5, NaN, Infinity, -Infinity, 5])(
+  it.each([-1, 1.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, 5])(
     "rejects invalid direct boundary offset %s",
     (offset) => {
       expect(isUtf16CodePointBoundary(text, offset)).toBe(false);
@@ -69,5 +69,26 @@ describe("UTF-16 intervals", () => {
         details: { start: 1, end: 3 }
       });
     }
+  });
+
+  it.each(["\ud800", "\udc00", "A\ud800B", "A\udc00B"])(
+    "rejects malformed UTF-16 source text %j",
+    (source) => {
+      expect(isUtf16CodePointBoundary(source, 0)).toBe(false);
+      expect(validateUtf16Interval(source, { start: 0, end: 0 }).ok).toBe(false);
+      expect(validateUtf16Slice(source, { start: 0, end: 1, matchedText: source[0] }).ok).toBe(
+        false
+      );
+    }
+  );
+
+  it("accepts literal replacement characters as browser-compatible source text", () => {
+    expect(validateUtf16Slice("A�B", { start: 1, end: 2, matchedText: "�" }).ok).toBe(true);
+  });
+
+  it.each([7, {}, [], null, undefined])("rejects non-string source text %j", (source) => {
+    expect(isUtf16CodePointBoundary(source, 0)).toBe(false);
+    expect(validateUtf16Interval(source, { start: 0, end: 0 }).ok).toBe(false);
+    expect(validateUtf16Slice(source, { start: 0, end: 1, matchedText: "x" }).ok).toBe(false);
   });
 });

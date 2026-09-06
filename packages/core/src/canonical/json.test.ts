@@ -2,7 +2,11 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import { canonicalJsonSha256 } from "./hash.js";
-import { canonicalJsonStringify } from "./json.js";
+import {
+  CANONICAL_JSON_MAX_DEPTH,
+  CANONICAL_JSON_MAX_NODES,
+  canonicalJsonStringify
+} from "./json.js";
 
 type SupportedJson = null | boolean | string | number | readonly SupportedJson[] | {
   readonly [key: string]: SupportedJson;
@@ -129,6 +133,68 @@ describe("canonical JSON", () => {
     const withSymbol = [1];
     Object.defineProperty(withSymbol, Symbol("hidden"), { value: 2 });
     expect(canonicalJsonStringify(withSymbol).ok).toBe(false);
+  });
+
+  it("rejects non-enumerable own string properties", () => {
+    const value = {};
+    Object.defineProperty(value, "hidden", { enumerable: false, value: 1 });
+    expect(canonicalJsonStringify(value)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" }
+    });
+  });
+
+  it("returns typed failures for excessive depth and node count", () => {
+    let deep: unknown = 0;
+    for (let index = 0; index <= CANONICAL_JSON_MAX_DEPTH; index += 1) {
+      deep = [deep];
+    }
+    expect(canonicalJsonStringify(deep)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" }
+    });
+
+    const wide = Array.from({ length: CANONICAL_JSON_MAX_NODES }, () => null);
+    expect(canonicalJsonStringify(wide)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" }
+    });
+  });
+
+  it("converts hostile proxy inspection failures into typed failures", () => {
+    const values = [
+      new Proxy(
+        {},
+        {
+          getPrototypeOf: () => {
+            throw new Error("blocked");
+          }
+        }
+      ),
+      new Proxy(
+        [],
+        {
+          getOwnPropertyDescriptor: () => {
+            throw new Error("blocked");
+          }
+        }
+      ),
+      new Proxy(
+        {},
+        {
+          ownKeys: () => {
+            throw new Error("blocked");
+          }
+        }
+      )
+    ];
+    for (const value of values) {
+      expect(() => canonicalJsonStringify(value)).not.toThrow();
+      expect(canonicalJsonStringify(value)).toMatchObject({
+        ok: false,
+        error: { code: "invalid_input" }
+      });
+    }
   });
 
   it("is stable under recursively shuffled object insertion order", () => {

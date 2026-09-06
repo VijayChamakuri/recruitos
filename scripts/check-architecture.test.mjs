@@ -22,7 +22,8 @@ describe("core architecture boundary", () => {
     ["import-assignment", "forbidden import node:fs"],
     ["tsx-source", "forbidden import react"],
     ["mts-source", "forbidden import node:path"],
-    ["self-import", "forbidden import @recruitos/core"]
+    ["self-import", "forbidden import @recruitos/core"],
+    ["relative-escape", "relative import escapes core"]
   ])("rejects the %s fixture", (name, expected) => {
     expect(fixture(name)).toEqual(expect.arrayContaining([expect.stringContaining(expected)]));
   });
@@ -57,6 +58,24 @@ describe("core architecture boundary", () => {
     ]) {
       expect(violations).toEqual(expect.arrayContaining([expect.stringContaining(effect)]));
     }
+  });
+
+  it("rejects retained, aliased, destructured, and globalThis capabilities", () => {
+    const violations = fixture("retained-capabilities");
+    for (const effect of [
+      "clock access",
+      "network fetch",
+      "process access",
+      "randomness",
+      "timer",
+      "ambient global object"
+    ]) {
+      expect(violations).toEqual(expect.arrayContaining([expect.stringContaining(effect)]));
+    }
+  });
+
+  it("allows locally shadowed capability names", () => {
+    expect(fixture("shadowed-capabilities")).toEqual([]);
   });
 
   it("rejects symbolic links without following them", () => {

@@ -20,4 +20,23 @@ describe("canonical integers", () => {
       expect(result.error.code).toBe("invalid_input");
     }
   });
+
+  it.each([1, Number.MAX_SAFE_INTEGER + 1, "42", null, undefined])(
+    "rejects non-bigint runtime input %s",
+    (value) => {
+      expect(() => formatCanonicalInteger(value as unknown as bigint)).toThrow(TypeError);
+    }
+  );
+
+  it("rejects objects without invoking custom string conversion", () => {
+    let conversions = 0;
+    const value = {
+      toString: () => {
+        conversions += 1;
+        return "42";
+      }
+    };
+    expect(() => formatCanonicalInteger(value as unknown as bigint)).toThrow(TypeError);
+    expect(conversions).toBe(0);
+  });
 });
