@@ -9,14 +9,15 @@
     "pnpm": "10.17.1"
   },
   "scripts": {
-    "build": "corepack pnpm --filter @recruitos/core build",
+    "build": "corepack pnpm -r build",
     "check": "corepack pnpm test:types && corepack pnpm check:architecture && corepack pnpm check:browser && corepack pnpm check:dynamic-code && corepack pnpm test",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:browser": "corepack pnpm build && node scripts/check-browser-bundle.mjs",
     "check:dynamic-code": "node scripts/check-dynamic-code-denied.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:types": "corepack pnpm --filter @recruitos/core test:types",
+    "test:runtime": "corepack pnpm --filter @recruitos/runtime test",
+    "test:types": "corepack pnpm -r test:types",
     "typecheck": "corepack pnpm test:types"
   },
   "devDependencies": {

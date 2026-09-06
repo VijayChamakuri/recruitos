@@ -41,7 +41,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run --root ../.. --config vitest.config.ts",
+    "test": "vitest run --root ../.. --config vitest.config.ts --project core",
     "test:coverage": "vitest run --root ../.. --config vitest.config.ts --coverage",
     "test:types": "tsc -p tsconfig.test.json --noEmit",
     "typecheck": "corepack pnpm test:types"
