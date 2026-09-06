@@ -46,27 +46,23 @@
     text-transform: uppercase; color: var(--text-muted);
   }
 
-  /* B: the thread. one focused claim draws a visible line through all three panes. */
-  .thread {
-    position: absolute; left: 0; right: 0; top: 0; height: 100%;
-    pointer-events: none; z-index: 4;
+  /* B: the thread. one focused claim draws a visible line through all three panes.
+     Positions are MEASURED from the three anchor elements at runtime, never hardcoded.
+     A hardcoded offset silently connects the wrong arithmetic term to the wrong span,
+     which is worse than drawing no line at all. */
+  svg.thread {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 4; overflow: visible;
   }
-  .thread .seg {
-    position: absolute; height: 0;
-    border-top: 1px dashed var(--accent);
+  svg.thread .seg {
+    fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3;
   }
-  .thread .node {
-    position: absolute; width: 7px; height: 7px;
-    background: var(--surface-paper);
-    border: 2px solid var(--accent);
-    border-radius: 999px;
-    transform: translate(-3.5px, -4.5px);
+  svg.thread .node {
+    fill: var(--surface-paper); stroke: var(--accent); stroke-width: 2;
   }
-  .thread .tlabel {
-    position: absolute;
+  svg.thread .tlabel {
     font-family: var(--f-mono); font-size: 10px; letter-spacing: .04em;
-    color: var(--accent); background: var(--bg); padding: 0 4px;
-    transform: translateY(-8px);
+    fill: var(--accent); paint-order: stroke; stroke: var(--bg); stroke-width: 3px;
   }
 
   .arithbox { padding: 12px; }
@@ -265,17 +261,9 @@
 
     <div class="packet-b" style="flex:1;min-height:0">
 
-      <!-- the thread overlay: applied term -> E12 card -> E12 span -->
-      <div class="thread">
-        <div class="seg" style="left:20.5%;width:22%;top:214px"></div>
-        <div class="node" style="left:20.5%;top:214px"></div>
-        <div class="node" style="left:42.5%;top:214px"></div>
-        <div class="seg" style="left:60%;width:22%;top:214px"></div>
-        <div class="node" style="left:60%;top:214px"></div>
-        <div class="node" style="left:82%;top:214px"></div>
-        <div class="tlabel" style="left:31%;top:214px">E12</div>
-        <div class="tlabel" style="left:70%;top:214px">E12</div>
-      </div>
+      <!-- the thread overlay: applied term -> E12 card -> E12 span.
+           Drawn by measurement at the bottom of this file. Empty until then. -->
+      <svg class="thread" id="thread"></svg>
 
       <!-- A. arithmetic, graphite -->
       <section class="pane arith">
@@ -287,7 +275,7 @@
           <table class="terms">
             <thead><tr><th>dim</th><th>lvl</th><th style="text-align:right">w</th><th style="text-align:right">pts</th></tr></thead>
             <tbody>
-              <tr class="on"><td>applied</td><td>part</td><td class="n">3</td><td class="n">2.01</td></tr>
+              <tr class="on" id="term-applied"><td>applied</td><td>part</td><td class="n">3</td><td class="n">2.01</td></tr>
               <tr><td>prodeng</td><td>strong</td><td class="n">3</td><td class="n">3.00</td></tr>
               <tr><td>evalprac</td><td>none</td><td class="n">2</td><td class="n">0.00</td></tr>
               <tr><td>data</td><td>part</td><td class="n">2</td><td class="n">1.34</td></tr>
@@ -324,7 +312,7 @@
             <span class="mono muted" style="font-size:12px">partial</span><span class="mono faint" style="font-size:12px">w3</span></div>
 
           <div class="caps slotcaps">Supporting (2)</div>
-          <div class="card bracket sup focused">
+          <div class="card bracket sup focused" id="card-e12">
             <q>shipped an eval harness for our RAG pipeline</q>
             <div class="meta">resume.pdf 1204&ndash;1249 &middot; exact &middot; extracted &middot; not human-confirmed &middot; [E12]</div>
           </div>
@@ -388,7 +376,7 @@
           <span class="link mono" style="font-size:11px">View normalization log</span>
         </div>
         <div class="doc">
-          <p>Led the evaluation harness for our RAG pipeline. <mark class="sup">shipped an eval harness for our RAG pipeline<span class="tag">E12</span></mark> covering retrieval precision and answer groundedness across three release candidates.</p>
+          <p>Led the evaluation harness for our RAG pipeline. <mark class="sup" id="span-e12">shipped an eval harness for our RAG pipeline<span class="tag">E12</span></mark> covering retrieval precision and answer groundedness across three release candidates.</p>
           <p>Reported <mark class="con">4 years of applied ML<span class="tag">E31</span></mark> experience while listed roles run 2019-06 to 2021-11, then 2022-03 to present.</p>
           <p>Owned the deployment path for two production services, including <mark class="sup">on-call rotation for a service at 4k rps<span class="tag">E18</span></mark> during the migration quarter.</p>
           <div style="border-left:3px solid var(--contradict);padding-left:10px;margin:12px 0">
@@ -403,6 +391,102 @@
   </main>
 </div>
 </div>
+
+<script>
+// The thread, drawn by measurement.
+//
+// This is the technique T12 has to implement, shown here rather than faked. The
+// three anchors sit in three independently scrolling panes at three different
+// heights, so the connector is an orthogonal polyline, not a horizontal rule. An
+// earlier revision of this mockup hardcoded a single top offset and drew a line
+// from the evalprac term to the E12 span, asserting that the dimension with zero
+// evidence had produced the RAG-harness quote. Measure, or draw nothing.
+(function () {
+  var NS = 'http://www.w3.org/2000/svg';
+
+  function draw() {
+    var svg = document.getElementById('thread');
+    var host = svg && svg.parentElement;
+    var term = document.getElementById('term-applied');
+    var card = document.getElementById('card-e12');
+    var span = document.getElementById('span-e12');
+    if (!svg || !host || !term || !card || !span) return;
+
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    var base = host.getBoundingClientRect();
+    // firstLine matters for span anchors: a highlight that wraps returns a union
+    // box whose middle falls in the gap between lines, so the thread would point at
+    // whitespace. Anchor to the first line box, where the quote actually starts.
+    function box(el, firstLine) {
+      var rects = el.getClientRects();
+      var r = (firstLine && rects.length) ? rects[0] : el.getBoundingClientRect();
+      return {
+        l: r.left - base.left, r: r.right - base.left,
+        t: r.top - base.top, b: r.bottom - base.top,
+        midY: r.top - base.top + r.height / 2
+      };
+    }
+
+    var a = box(term), b = box(card), c = box(span, true);
+
+    // Anchors outside their pane's visible band mean the claim scrolled away.
+    // Refuse to draw rather than point at nothing.
+    var panes = host.querySelectorAll('.pane');
+    for (var i = 0; i < panes.length; i++) {
+      var p = box(panes[i]);
+      var anchor = [a, b, c][i];
+      if (!anchor) continue;
+      if (anchor.midY < p.t + 30 || anchor.midY > p.b) return;
+    }
+
+    var gut1 = (a.r + b.l) / 2;
+    var gut2 = (b.r + c.l) / 2;
+
+    function path(d) {
+      var el = document.createElementNS(NS, 'path');
+      el.setAttribute('class', 'seg');
+      el.setAttribute('d', d);
+      svg.appendChild(el);
+    }
+    function node(x, y) {
+      var el = document.createElementNS(NS, 'circle');
+      el.setAttribute('class', 'node');
+      el.setAttribute('cx', x); el.setAttribute('cy', y); el.setAttribute('r', 3.5);
+      svg.appendChild(el);
+    }
+    function label(x, y) {
+      var el = document.createElementNS(NS, 'text');
+      el.setAttribute('class', 'tlabel');
+      el.setAttribute('x', x); el.setAttribute('y', y - 5);
+      el.setAttribute('text-anchor', 'middle');
+      el.textContent = 'E12';
+      svg.appendChild(el);
+    }
+
+    // arithmetic term -> evidence card
+    path('M ' + a.r + ' ' + a.midY + ' H ' + gut1 + ' V ' + b.midY + ' H ' + b.l);
+    // evidence card -> source span
+    path('M ' + b.r + ' ' + b.midY + ' H ' + gut2 + ' V ' + c.midY + ' H ' + c.l);
+
+    node(a.r, a.midY); node(b.l, b.midY); node(b.r, b.midY); node(c.l, c.midY);
+    // One label only, in the arithmetic-to-ledger gutter. The card and the span both
+    // already carry a visible [E12] marker, so a second floating label is duplicate
+    // ink that lands on top of the document text.
+    label(gut1, Math.min(a.midY, b.midY));
+  }
+
+  function schedule() { requestAnimationFrame(draw); }
+
+  if (document.readyState === 'complete') schedule();
+  else window.addEventListener('load', schedule);
+  window.addEventListener('resize', schedule);
+  document.querySelectorAll('.packet-b .pane').forEach(function (p) {
+    p.addEventListener('scroll', schedule, { passive: true });
+  });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
+})();
+</script>
 
 </body>
 </html>
