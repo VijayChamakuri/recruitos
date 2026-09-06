@@ -135,6 +135,16 @@ describe("canonical JSON", () => {
     expect(canonicalJsonStringify(withSymbol).ok).toBe(false);
   });
 
+  it("rejects non-enumerable array entries", () => {
+    const value: unknown[] = [];
+    Object.defineProperty(value, "0", { enumerable: false, value: 1 });
+    value.length = 1;
+    expect(canonicalJsonStringify(value)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" }
+    });
+  });
+
   it("rejects non-enumerable own string properties", () => {
     const value = {};
     Object.defineProperty(value, "hidden", { enumerable: false, value: 1 });

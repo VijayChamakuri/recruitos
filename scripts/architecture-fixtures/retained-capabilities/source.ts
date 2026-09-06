@@ -1,9 +1,0 @@
-export const clock = Date.now;
-export const request = fetch;
-export const retainedProcess = process;
-export const { env } = process;
-export const { random } = Math;
-export const timer = globalThis.setTimeout;
-export const globalFetch = globalThis.fetch;
-export const globalProcess = globalThis.process;
-export const ambient = globalThis;

@@ -40,6 +40,9 @@ export function createRational(
   numerator: bigint,
   denominator: bigint
 ): Result<Rational, DomainError> {
+  if (typeof numerator !== "bigint" || typeof denominator !== "bigint") {
+    return err(createDomainError("invalid_input", "Rational inputs must be bigints"));
+  }
   if (denominator === 0n) {
     return err(createDomainError("invalid_input", "Rational denominator must not be zero"));
   }

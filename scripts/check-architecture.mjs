@@ -10,39 +10,12 @@ const coreSourceRoot = resolve(repositoryRoot, "packages/core/src");
 const supportedSourceExtension = /\.(?:cts|mts|ts|tsx)$/u;
 const testSourceExtension = /\.(?:spec|test)\.(?:cts|mts|ts|tsx)$/u;
 
-const ambientEffects = new Map([
-  ["Buffer", "binary runtime buffer"],
-  ["crypto", "ambient crypto"],
-  ["document", "browser document"],
-  ["fetch", "network fetch"],
-  ["globalThis", "ambient global object"],
-  ["localStorage", "browser storage"],
-  ["navigator", "browser navigator"],
-  ["performance", "performance clock"],
-  ["process", "process access"],
-  ["randomUUID", "random UUID"],
-  ["setInterval", "timer"],
-  ["setTimeout", "timer"],
-  ["WebSocket", "web socket"],
-  ["window", "browser window"]
-]);
+const forbiddenDeclarationFile =
+  /(?:\/typescript\/lib\/lib\.(?:dom|webworker|scripthost)[^/]*\.d\.ts$|\/node_modules\/(?:@types\/node|undici-types)\/)/u;
 
-const globalThisEffects = new Map([
-  ["Buffer", "binary runtime buffer"],
-  ["crypto", "ambient crypto"],
-  ["Date", "clock construction"],
-  ["document", "browser document"],
-  ["fetch", "network fetch"],
-  ["localStorage", "browser storage"],
-  ["Math", "randomness capability"],
-  ["navigator", "browser navigator"],
-  ["performance", "performance clock"],
-  ["process", "process access"],
-  ["setInterval", "timer"],
-  ["setTimeout", "timer"],
-  ["WebSocket", "web socket"],
-  ["window", "browser window"]
-]);
+function portablePath(file) {
+  return file.replaceAll("\\", "/");
+}
 
 function displayPath(file, displayRoot) {
   const path = relative(displayRoot, file);
@@ -81,7 +54,104 @@ function stringLiteralText(node) {
   return ts.isStringLiteralLike(node) ? node.text : undefined;
 }
 
-function moduleSpecifier(node) {
+function resolvedSymbol(node, checker) {
+  const symbol = checker.getSymbolAtLocation(node);
+  if (symbol === undefined) {
+    return undefined;
+  }
+  return (symbol.flags & ts.SymbolFlags.Alias) === 0
+    ? symbol
+    : checker.getAliasedSymbol(symbol);
+}
+
+function declarationIsAmbient(declaration) {
+  if (declaration.getSourceFile().isDeclarationFile) {
+    return true;
+  }
+  for (let current = declaration; !ts.isSourceFile(current); current = current.parent) {
+    if (current.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function symbolHasEmittedLocalDeclaration(symbol, sourceFiles) {
+  return (
+    symbol?.declarations?.some(
+      (declaration) =>
+        sourceFiles.has(resolve(declaration.getSourceFile().fileName)) &&
+        !declarationIsAmbient(declaration)
+    ) === true
+  );
+}
+
+function ambientCapability(node, checker, sourceFiles) {
+  if (!ts.isIdentifier(node)) {
+    return undefined;
+  }
+  const symbol = resolvedSymbol(node, checker);
+  if (symbolHasEmittedLocalDeclaration(symbol, sourceFiles)) {
+    return undefined;
+  }
+
+  const name = symbol?.getName() ?? node.text;
+  if (name === "globalThis") {
+    return "ambient global object";
+  }
+  if (name === "Date") {
+    return "clock capability Date";
+  }
+  if (name === "Math") {
+    const parent = node.parent;
+    if (
+      (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) &&
+      parent.expression === node
+    ) {
+      const property = accessedProperty(parent);
+      return property !== undefined && property !== "random"
+        ? undefined
+        : "randomness capability Math";
+    }
+    return "retained randomness capability Math";
+  }
+  if (name === "eval" || name === "Function") {
+    return `dynamic code capability ${name}`;
+  }
+
+  const declarations = symbol?.declarations ?? [];
+  const localAmbient = declarations.some(
+    (declaration) =>
+      sourceFiles.has(resolve(declaration.getSourceFile().fileName)) &&
+      declarationIsAmbient(declaration) &&
+      (symbol.flags & ts.SymbolFlags.Value) !== 0
+  );
+  if (localAmbient) {
+    return `erased ambient capability ${name}`;
+  }
+  const declarationFile = declarations.find((declaration) =>
+    forbiddenDeclarationFile.test(portablePath(declaration.getSourceFile().fileName))
+  );
+  if (declarationFile === undefined) {
+    return undefined;
+  }
+  const origin = portablePath(declarationFile.getSourceFile().fileName).includes(
+    "/typescript/lib/lib."
+  )
+    ? "browser"
+    : "Node";
+  return `${origin} ambient capability ${name}`;
+}
+
+function isAmbientRequire(node, checker, sourceFiles) {
+  return (
+    ts.isIdentifier(node) &&
+    (resolvedSymbol(node, checker)?.getName() ?? node.text) === "require" &&
+    ambientCapability(node, checker, sourceFiles) !== undefined
+  );
+}
+
+function moduleSpecifier(node, checker, sourceFiles) {
   if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
     return node.moduleSpecifier === undefined ? undefined : stringLiteralText(node.moduleSpecifier);
   }
@@ -100,17 +170,17 @@ function moduleSpecifier(node) {
   if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
     return stringLiteralText(argument);
   }
-  if (ts.isIdentifier(node.expression) && node.expression.text === "require") {
+  if (isAmbientRequire(node.expression, checker, sourceFiles)) {
     return stringLiteralText(argument);
   }
   return undefined;
 }
 
-function isModuleLoadCall(node) {
+function isModuleLoadCall(node, checker, sourceFiles) {
   return (
     ts.isCallExpression(node) &&
     (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-      (ts.isIdentifier(node.expression) && node.expression.text === "require"))
+      isAmbientRequire(node.expression, checker, sourceFiles))
   );
 }
 
@@ -127,26 +197,6 @@ function importViolation(specifier, file, sourceRoot) {
   return specifier === "zod" ? undefined : `forbidden import ${specifier}`;
 }
 
-function symbolIsLocal(symbol, checker, sourceFiles) {
-  if (symbol === undefined) {
-    return false;
-  }
-  const resolved =
-    (symbol.flags & ts.SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol);
-  return (
-    resolved.declarations?.some((declaration) =>
-      sourceFiles.has(resolve(declaration.getSourceFile().fileName))
-    ) === true
-  );
-}
-
-function isAmbientIdentifier(node, checker, sourceFiles) {
-  return (
-    ts.isIdentifier(node) &&
-    !symbolIsLocal(checker.getSymbolAtLocation(node), checker, sourceFiles)
-  );
-}
-
 function accessedProperty(node) {
   if (ts.isPropertyAccessExpression(node)) {
     return node.name.text;
@@ -157,64 +207,8 @@ function accessedProperty(node) {
   return undefined;
 }
 
-function globalThisEffect(node, checker, sourceFiles) {
-  if (!ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node)) {
-    return undefined;
-  }
-  if (
-    !isAmbientIdentifier(node.expression, checker, sourceFiles) ||
-    node.expression.text !== "globalThis"
-  ) {
-    return undefined;
-  }
-  const property = accessedProperty(node);
-  return property === undefined ? "dynamic ambient global access" : globalThisEffects.get(property);
-}
-
-function dateEffect(node) {
-  const parent = node.parent;
-  if (
-    (ts.isCallExpression(parent) || ts.isNewExpression(parent)) &&
-    parent.expression === node
-  ) {
-    return "clock construction";
-  }
-  if (
-    (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) &&
-    parent.expression === node &&
-    accessedProperty(parent) === "now"
-  ) {
-    return "clock access";
-  }
-  return "retained clock capability";
-}
-
-function mathEffect(node) {
-  const parent = node.parent;
-  if (
-    (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) &&
-    parent.expression === node
-  ) {
-    return accessedProperty(parent) === "random" ? "randomness" : undefined;
-  }
-  return "retained randomness capability";
-}
-
 function runtimeEffect(node, checker, sourceFiles) {
-  const globalEffect = globalThisEffect(node, checker, sourceFiles);
-  if (globalEffect !== undefined) {
-    return globalEffect;
-  }
-  if (!isAmbientIdentifier(node, checker, sourceFiles)) {
-    return undefined;
-  }
-  if (node.text === "Date") {
-    return dateEffect(node);
-  }
-  if (node.text === "Math") {
-    return mathEffect(node);
-  }
-  return ambientEffects.get(node.text);
+  return ambientCapability(node, checker, sourceFiles);
 }
 
 export function checkCoreArchitecture({
@@ -258,12 +252,12 @@ export function checkCoreArchitecture({
       );
 
     function visit(node) {
-      const specifier = moduleSpecifier(node);
+      const specifier = moduleSpecifier(node, checker, sourceFileSet);
       const moduleViolation =
         specifier === undefined ? undefined : importViolation(specifier, file, resolvedSourceRoot);
       if (moduleViolation !== undefined) {
         violations.push(`${relativeFile}: ${moduleViolation}`);
-      } else if (specifier === undefined && isModuleLoadCall(node)) {
+      } else if (specifier === undefined && isModuleLoadCall(node, checker, sourceFileSet)) {
         violations.push(`${relativeFile}: nonliteral module loads are not allowed`);
       }
       const effect = runtimeEffect(node, checker, sourceFileSet);

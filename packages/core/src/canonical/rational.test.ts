@@ -63,6 +63,35 @@ describe("exact rational arithmetic", () => {
     expect(RationalSchema.safeParse({ numerator: 2n, denominator: 4n }).success).toBe(false);
   });
 
+  it.each([1, "1", null, undefined, {}])("rejects non-bigint numerator %j", (value) => {
+    const result = createRational(value as unknown as bigint, 2n);
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+  });
+
+  it.each([1, "1", null, undefined, {}])("rejects non-bigint denominator %j", (value) => {
+    const result = createRational(1n, value as unknown as bigint);
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+  });
+
+  it("rejects rational conversion hooks without invoking them", () => {
+    let conversions = 0;
+    const value = {
+      [Symbol.toPrimitive]: () => {
+        conversions += 1;
+        return 1n;
+      }
+    };
+    expect(createRational(value as unknown as bigint, 2n)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" }
+    });
+    expect(createRational(1n, value as unknown as bigint)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_input" }
+    });
+    expect(conversions).toBe(0);
+  });
+
   it("returns readonly frozen values from every operation", () => {
     const oneHalf = rational(1n, 2n);
     const values = [

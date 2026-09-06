@@ -8,6 +8,9 @@ export type Ordering = z.infer<typeof OrderingSchema>;
 export type Comparator<T> = (left: T, right: T) => Ordering;
 
 export function compareBigInt(left: bigint, right: bigint): Ordering {
+  if (typeof left !== "bigint" || typeof right !== "bigint") {
+    throw new TypeError("Bigint comparison operands must be bigints");
+  }
   return left < right ? -1 : left > right ? 1 : 0;
 }
 

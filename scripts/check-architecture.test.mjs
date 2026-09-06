@@ -23,7 +23,49 @@ describe("core architecture boundary", () => {
     ["tsx-source", "forbidden import react"],
     ["mts-source", "forbidden import node:path"],
     ["self-import", "forbidden import @recruitos/core"],
-    ["relative-escape", "relative import escapes core"]
+    ["relative-value-escape", "relative import escapes core"],
+    ["relative-type-escape", "relative import escapes core"],
+    ["date-now", "clock capability Date"],
+    ["date-construction", "clock capability Date"],
+    ["math-random", "randomness capability Math"],
+    ["math-dynamic", "randomness capability Math"],
+    ["retained-date", "clock capability Date"],
+    ["retained-fetch", "browser ambient capability fetch"],
+    ["retained-process", "Node ambient capability process"],
+    ["destructured-process", "Node ambient capability process"],
+    ["destructured-math", "retained randomness capability Math"],
+    ["global-this", "ambient global object"],
+    ["global-this-fetch", "ambient global object"],
+    ["global-this-process", "ambient global object"],
+    ["global-this-timer", "ambient global object"],
+    ["browser-xml-http-request", "browser ambient capability XMLHttpRequest"],
+    ["browser-indexed-db", "browser ambient capability indexedDB"],
+    ["browser-session-storage", "browser ambient capability sessionStorage"],
+    ["browser-event-source", "browser ambient capability EventSource"],
+    ["browser-worker", "browser ambient capability Worker"],
+    ["browser-request", "browser ambient capability Request"],
+    ["browser-response", "browser ambient capability Response"],
+    ["browser-location", "browser ambient capability location"],
+    ["browser-history", "browser ambient capability history"],
+    ["browser-caches", "browser ambient capability caches"],
+    ["browser-queue-microtask", "browser ambient capability queueMicrotask"],
+    ["browser-document", "browser ambient capability document"],
+    ["browser-window", "browser ambient capability window"],
+    ["browser-local-storage", "browser ambient capability localStorage"],
+    ["browser-navigator", "browser ambient capability navigator"],
+    ["browser-crypto", "browser ambient capability crypto"],
+    ["browser-web-socket", "browser ambient capability WebSocket"],
+    ["browser-performance", "browser ambient capability performance"],
+    ["browser-timeout", "browser ambient capability setTimeout"],
+    ["node-buffer", "Node ambient capability Buffer"],
+    ["node-process", "Node ambient capability process"],
+    ["erased-buffer", "erased ambient capability Buffer"],
+    ["erased-process", "erased ambient capability process"],
+    ["erased-require", "forbidden import node:fs"],
+    ["module-require", "Node ambient capability module"],
+    ["aliased-require-call", "Node ambient capability require"],
+    ["retained-require", "Node ambient capability require"],
+    ["retained-module-require", "Node ambient capability module"]
   ])("rejects the %s fixture", (name, expected) => {
     expect(fixture(name)).toEqual(expect.arrayContaining([expect.stringContaining(expected)]));
   });
@@ -38,44 +80,15 @@ describe("core architecture boundary", () => {
     );
   });
 
-  it("rejects every forbidden runtime effect", () => {
-    const violations = fixture("runtime-effects");
-    for (const effect of [
-      "clock access",
-      "clock construction",
-      "randomness",
-      "process access",
-      "browser window",
-      "browser document",
-      "browser storage",
-      "browser navigator",
-      "ambient crypto",
-      "binary runtime buffer",
-      "network fetch",
-      "web socket",
-      "performance clock",
-      "timer"
-    ]) {
-      expect(violations).toEqual(expect.arrayContaining([expect.stringContaining(effect)]));
+  it.each(["shadowed-fetch", "shadowed-date", "shadowed-require"])(
+    "allows the locally implemented %s fixture",
+    (name) => {
+      expect(fixture(name)).toEqual([]);
     }
-  });
+  );
 
-  it("rejects retained, aliased, destructured, and globalThis capabilities", () => {
-    const violations = fixture("retained-capabilities");
-    for (const effect of [
-      "clock access",
-      "network fetch",
-      "process access",
-      "randomness",
-      "timer",
-      "ambient global object"
-    ]) {
-      expect(violations).toEqual(expect.arrayContaining([expect.stringContaining(effect)]));
-    }
-  });
-
-  it("allows locally shadowed capability names", () => {
-    expect(fixture("shadowed-capabilities")).toEqual([]);
+  it("allows deterministic Math methods", () => {
+    expect(fixture("deterministic-math")).toEqual([]);
   });
 
   it("rejects symbolic links without following them", () => {

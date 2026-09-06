@@ -74,6 +74,23 @@ describe("deterministic comparators", () => {
     compareSafeInteger(1, safeInteger(2));
   });
 
+  it.each([1, "1", null, undefined, {}])("rejects non-bigint runtime operand %j", (value) => {
+    expect(() => compareBigInt(value as unknown as bigint, 1n)).toThrow(TypeError);
+    expect(() => compareBigInt(1n, value as unknown as bigint)).toThrow(TypeError);
+  });
+
+  it("rejects bigint conversion hooks without invoking them", () => {
+    let conversions = 0;
+    const value = {
+      [Symbol.toPrimitive]: () => {
+        conversions += 1;
+        return 1n;
+      }
+    };
+    expect(() => compareBigInt(value as unknown as bigint, 1n)).toThrow(TypeError);
+    expect(conversions).toBe(0);
+  });
+
   it("is antisymmetric, transitive, and total for safe integers", () => {
     fc.assert(
       fc.property(

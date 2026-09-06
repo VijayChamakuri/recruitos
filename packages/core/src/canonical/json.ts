@@ -73,8 +73,15 @@ function canonicalize(value: unknown, state: CanonicalizationState): Result<stri
         if (descriptor === undefined) {
           return invalidJson(`${state.path}[${index}]`, "sparse arrays are not supported");
         }
-        if (descriptor.get !== undefined || descriptor.set !== undefined) {
-          return invalidJson(`${state.path}[${index}]`, "accessor properties are not supported");
+        if (
+          descriptor.get !== undefined ||
+          descriptor.set !== undefined ||
+          descriptor.enumerable !== true
+        ) {
+          return invalidJson(
+            `${state.path}[${index}]`,
+            "array entries must be enumerable data properties"
+          );
         }
         const item = canonicalize(descriptor.value, {
           ancestors: state.ancestors,

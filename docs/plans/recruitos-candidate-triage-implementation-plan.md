@@ -45,9 +45,9 @@ Current product-test coverage is zero. Current product-performance evidence is z
 
 The approved design exists in commit `51acb79` on branch `recruiting-pipeline-automation`. It establishes the product wedge, core formulas, recruiter flow, packet surfaces, fixture strategy, Trust Center intent, and the binding rubric-first sequence.
 
-The current worktree contains vendored gstack review tooling only. It has no RecruitOS package scaffold, application source, migrations, fixture corpus, eval implementation, product tests, CI pipeline, package manifest, or backlog. There is no existing application code to reuse or preserve.
+The current worktree now contains the pinned pnpm and Node workspace scaffold, package manifests, TypeScript and Vitest configuration, architecture checks, and the initial pure `@recruitos/core` foundation. That foundation includes branded structural domain schemas, typed results and errors, exact arithmetic, deterministic comparison, canonical JSON, text hashing, and UTF-16 interval validation.
 
-The local environment currently has Node 24 available. The implementation must still pin Node 24 LTS and the exact package-manager version in repository configuration so local state is not treated as the contract.
+Runtime packages, applications, migrations, CI, rubric-specific implementation, product fixtures, eval implementation, product tests, and product UI do not exist yet. T1 and T2 remain in progress because this slice completes only selected portions of those tasks.
 
 ## Package boundaries
 
