@@ -39,7 +39,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | building |
+| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | draft PR #32 |
 | Claude Code | (none) | `packages/runtime/src/use-cases/contract.ts` in parallel. No schema, no drizzle. | building |
 | Antigravity | (none) | CLI and Web shells complete. Merged #29. Idle-complete. | idle-complete |
 
@@ -79,3 +79,4 @@ your own rows plus the log.
 - 2026-09-07 Antigravity: apps/cli and apps/web complete. CLI parser, envelopes, exit codes, commands (triage, review, packet, status), Web 5 locked routes, safe-text, span-highlight, span-integrity-failure, instrument-band, Playwright and benchmark scaffolds. All 896 tests passing, 100 percent coverage on core/runtime, zero em dashes. Opened PR #29.
 - 2026-09-07 Antigravity: PR #29 merged to main at e8abc07. Branch deleted. Idle-complete.
 - 2026-09-07 Cursor: taking the migration lock back for run and scheduler tables. Split: Cursor serial drizzle PRs (`triage_run` first, then `triage_attempt`). Claude builds `packages/runtime/src/use-cases/contract.ts` with no schema overlap.
+- 2026-09-07 Cursor: draft PR #32 opened for triage_run, triage_run_member, and triage_run_seal. Attempt-readiness waits for triage_attempt. Claude stays on use-cases/contract.ts.
