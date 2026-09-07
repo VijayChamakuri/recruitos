@@ -16,7 +16,7 @@ your own rows plus the log.
 |---|---|
 | origin/main | a9179da |
 | Migration lock held by | none (chain step 7 merged in #46) |
-| Rubric v1 | Locking on `a/rubric-v1-lock` from the signed RubricAssumptionRecord. Structure unchanged. |
+| Rubric v1 | LOCKED on `a/rubric-v1-lock` (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. |
 
 ## Lanes and file locks
 
@@ -40,7 +40,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | a/rubric-v1-lock | Gate 2: lock rubric v1 in `packages/core/src/rubric/` | in progress |
+| Cursor | a/rubric-v1-lock | Gate 2: lock rubric v1 in `packages/core/src/rubric/` | ready PR |
 | Claude Code | b/core-shortlist-proposals | T9 part 2, step 6 of 6: shortlist_inclusion proposal derivation in `packages/core/src/pipeline/`. Last step of the pure decision pipeline. | ready PR |
 | Antigravity | (pending) | Wired eval span-matching and bench suites to real core matching and pipeline modules (PR #44 merged). Ready for next task. | idle |
 
@@ -115,3 +115,4 @@ your own rows plus the log.
 - 2026-09-07 Cursor: draft PR #46 opened for `demo_session` and `candidate_demographics`. Association gap-check: every plan association table already exists. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: #46 ready on 12f667e. pnpm check 1200 plus 24 integration exit 0, test:coverage 1046 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: PR #46 merged to main at a9179da. Migration lock released. Starting `a/rubric-v1-lock` for Gate 2 rubric v1 lock from the signed RubricAssumptionRecord. Lane is `packages/core/src/rubric/` only.
+- 2026-09-07 Cursor: `a/rubric-v1-lock` ready on a9179da (PR #47). RUBRIC_V1_HASH `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. pnpm check 1214 plus 24 integration exit 0, test:coverage 1060 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Frozen structure untouched. Pipeline owner note for OQ-7 is in the PR body.
