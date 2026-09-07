@@ -44,6 +44,11 @@
       "import": "./dist/errors/index.js",
       "default": "./dist/errors/index.js"
     },
+    "./evidence": {
+      "types": "./dist/evidence/index.d.ts",
+      "import": "./dist/evidence/index.js",
+      "default": "./dist/evidence/index.js"
+    },
     "./roles": {
       "types": "./dist/roles/index.d.ts",
       "import": "./dist/roles/index.js",
