@@ -1,4 +1,5 @@
 export * from "./evidence.js";
+export * from "./extraction.js";
 export * from "./hashes.js";
 export * from "./ids.js";
 export * from "./integers.js";

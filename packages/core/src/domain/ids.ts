@@ -51,8 +51,17 @@ export type EvidenceGapId = z.infer<typeof EvidenceGapIdSchema>;
 export const EvidenceSpanIdSchema = printableAsciiId.brand<"EvidenceSpanId">();
 export type EvidenceSpanId = z.infer<typeof EvidenceSpanIdSchema>;
 
+export const ExtractionArtifactIdSchema = printableAsciiId.brand<"ExtractionArtifactId">();
+export type ExtractionArtifactId = z.infer<typeof ExtractionArtifactIdSchema>;
+
+export const ExtractionFailureIdSchema = printableAsciiId.brand<"ExtractionFailureId">();
+export type ExtractionFailureId = z.infer<typeof ExtractionFailureIdSchema>;
+
 export const ExtractionRunIdSchema = printableAsciiId.brand<"ExtractionRunId">();
 export type ExtractionRunId = z.infer<typeof ExtractionRunIdSchema>;
+
+export const ExtractionSpecIdSchema = printableAsciiId.brand<"ExtractionSpecId">();
+export type ExtractionSpecId = z.infer<typeof ExtractionSpecIdSchema>;
 
 export const ProposalIdSchema = printableAsciiId.brand<"ProposalId">();
 export type ProposalId = z.infer<typeof ProposalIdSchema>;
