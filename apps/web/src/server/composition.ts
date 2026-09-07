@@ -1,6 +1,12 @@
-import { createStubComposition, type RecruitosComposition } from "@recruitos/cli";
+import {
+  createDefaultRuntimeComposition,
+  createStubComposition,
+  type RecruitosComposition
+} from "@recruitos/cli";
+import type { RuntimeComposition } from "@recruitos/runtime/composition";
 
 let activeComposition: RecruitosComposition | null = null;
+let activeRuntime: RuntimeComposition | null = null;
 
 /**
  * Server-only composition boundary.
@@ -8,11 +14,20 @@ let activeComposition: RecruitosComposition | null = null;
  */
 export function getServerComposition(): RecruitosComposition {
   if (!activeComposition) {
-    activeComposition = createStubComposition();
+    const result = createDefaultRuntimeComposition();
+    activeComposition = result.ok ? result.value : createStubComposition();
   }
-  return activeComposition;
+  return activeComposition ?? createStubComposition();
 }
 
 export function setServerComposition(composition: RecruitosComposition): void {
   activeComposition = composition;
+}
+
+export function getServerRuntime(): RuntimeComposition | null {
+  return activeRuntime;
+}
+
+export function setServerRuntime(runtime: RuntimeComposition): void {
+  activeRuntime = runtime;
 }

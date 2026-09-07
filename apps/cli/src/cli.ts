@@ -1,4 +1,9 @@
-import { createStubComposition } from "./composition/index.js";
+import {
+  createCompositionFromRuntime,
+  createDefaultRuntimeComposition,
+  createStubComposition,
+  type RuntimeComposition
+} from "./composition/index.js";
 import type { RecruitosComposition } from "./composition/types.js";
 import {
   formatHelp,
@@ -19,7 +24,8 @@ import { parseArgs } from "./parser.js";
 export const CLI_VERSION = "0.1.0";
 
 export type RunCliOptions = Readonly<{
-  composition?: RecruitosComposition;
+  composition?: RecruitosComposition | undefined;
+  runtime?: RuntimeComposition | undefined;
 }>;
 
 export async function runCli(
@@ -28,7 +34,21 @@ export async function runCli(
 ): Promise<CommandResult> {
   const startTime = Date.now();
   const parsed = parseArgs(argv);
-  const composition = options?.composition ?? createStubComposition();
+
+  let composition: RecruitosComposition;
+  if (options?.composition) {
+    composition = options.composition;
+  } else if (options?.runtime) {
+    composition = createCompositionFromRuntime(options.runtime);
+  } else if (parsed.options.db) {
+    const runtimeComp = createDefaultRuntimeComposition({
+      database: { filename: parsed.options.db }
+    });
+    composition = runtimeComp.ok ? runtimeComp.value : createStubComposition();
+  } else {
+    const runtimeComp = createDefaultRuntimeComposition();
+    composition = runtimeComp.ok ? runtimeComp.value : createStubComposition();
+  }
 
   if (parsed.unknownOptions.length > 0) {
     const durationMs = Date.now() - startTime;
