@@ -8,6 +8,7 @@ import {
   CandidateResultHardRequirementAssessmentIdSchema,
   CandidateResultKindSchema,
   CandidateResultReasonIdSchema,
+  CandidateResultSealIdSchema,
   CandidateResultStructuredFactIdSchema,
   CandidateTriageResultIdSchema,
   CandidateTriageStatusSchema,
@@ -305,6 +306,7 @@ export const CandidateTriageResultDraftSchema = z
       .array(CandidateResultHardRequirementAssessmentDraftSchema)
       .max(MAXIMUM_RESULT_REQUIREMENTS),
     score: ScoreResultDraftSchema.nullable(),
+    sealId: CandidateResultSealIdSchema,
     createdAt: NonnegativeIntegerSchema
   })
   .strict();
@@ -344,7 +346,20 @@ export const CandidateTriageResultSchema = z
     factConflicts: z.array(CandidateResultFactConflictSchema),
     hardRequirementAssessments: z.array(CandidateResultHardRequirementAssessmentSchema),
     score: ScoreResultSchema.nullable(),
+    sealId: CandidateResultSealIdSchema,
     createdAt: NonnegativeIntegerSchema
   })
   .strict();
 export type CandidateTriageResult = z.infer<typeof CandidateTriageResultSchema>;
+
+const candidateResultSealShape = {
+  candidateResultSealId: CandidateResultSealIdSchema,
+  candidateResultId: CandidateTriageResultIdSchema,
+  createdAt: NonnegativeIntegerSchema
+};
+
+export const CandidateResultSealDraftSchema = z.object(candidateResultSealShape).strict();
+export type CandidateResultSealDraft = z.infer<typeof CandidateResultSealDraftSchema>;
+
+export const CandidateResultSealSchema = z.object(candidateResultSealShape).strict();
+export type CandidateResultSeal = z.infer<typeof CandidateResultSealSchema>;

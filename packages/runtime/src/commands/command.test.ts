@@ -424,6 +424,7 @@ describe("command protocol", () => {
     const database = nativeDatabase(connection);
 
     const result = runImmediateTransaction(connection, (context) => {
+      expect(context.nativeDatabase.pragma("defer_foreign_keys", { simple: true })).toBe(1);
       context.nativeDatabase
         .prepare("INSERT INTO runtime_migration_smoke (singleton, applied) VALUES (2, 1)")
         .run();

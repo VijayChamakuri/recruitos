@@ -21,9 +21,11 @@ import { openRuntimeDatabase, type RuntimeDatabaseConnection } from "../db/index
 import {
   insertActor,
   insertCandidate,
+  insertCandidateDocument,
   insertSourceDocument,
   prepareActor,
   prepareCandidate,
+  prepareCandidateDocument,
   prepareSourceDocument
 } from "../entities/index.js";
 import { type RuntimeError } from "../errors/index.js";
@@ -44,10 +46,19 @@ import {
   prepareStructuredFact
 } from "../facts/index.js";
 import {
+  insertResolutionTask,
+  prepareResolutionTask
+} from "../resolution/index.js";
+import {
   hashCandidateTriageResultContent,
   hashScoreResultContent,
+  insertCandidateResultReason,
+  insertCandidateResultSeal,
   insertCandidateTriageResult,
+  prepareCandidateResultReason,
+  prepareCandidateResultSeal,
   prepareCandidateTriageResult,
+  readCandidateResultSeal,
   readCandidateTriageResult,
   readCandidateTriageResultByContentHash,
   validateCandidateTriageResultContent,
@@ -70,6 +81,7 @@ const CANDIDATE_TRIAGE_RESULT_COLUMNS = `
   supersedes_result_id text,
   content_json text NOT NULL,
   content_hash text NOT NULL,
+  seal_id text NOT NULL,
   created_at integer NOT NULL
 `;
 
@@ -84,6 +96,15 @@ const SCORE_RESULT_COLUMNS = `
   content_hash text NOT NULL,
   created_at integer NOT NULL
 `;
+
+const CANDIDATE_RESULT_SEAL_COLUMNS = `
+  candidate_result_seal_id text PRIMARY KEY NOT NULL,
+  candidate_result_id text NOT NULL,
+  created_at integer NOT NULL
+`;
+
+const SEAL_TRANSACTION_REQUIRED =
+  "Candidate result seal rows require an active command transaction";
 
 async function openMigratedDatabase(): Promise<RuntimeDatabaseConnection> {
   const directory = await mkdtemp(join(tmpdir(), "recruitos-results-test-"));
@@ -320,6 +341,7 @@ function unavailableResultDraft(overrides: Record<string, unknown> = {}) {
     factConflicts: [],
     hardRequirementAssessments: [],
     score: null,
+    sealId: "candidate-result-seal-1",
     createdAt: CREATED_AT,
     ...overrides
   };
@@ -360,6 +382,7 @@ function completeResultDraft(overrides: Record<string, unknown> = {}) {
       }
     ],
     score: computedScoreDraft(),
+    sealId: "candidate-result-seal-1",
     createdAt: CREATED_AT,
     ...overrides
   };
@@ -368,8 +391,73 @@ function completeResultDraft(overrides: Record<string, unknown> = {}) {
 function seedParents(context: ImmediateTransactionContext): void {
   unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
   unwrap(insertSourceDocument(context, unwrap(prepareSourceDocument(sourceDocumentDraft()))));
+  unwrap(
+    insertCandidateDocument(
+      context,
+      unwrap(
+        prepareCandidateDocument({
+          candidateDocumentId: "candidate-document-1",
+          candidateId: "candidate-1",
+          sourceDocumentId: "source-document-1",
+          documentKind: "resume",
+          label: "Resume",
+          documentOrdinal: 0,
+          createdAt: CREATED_AT
+        })
+      )
+    )
+  );
   unwrap(insertEvidenceSpan(context, unwrap(prepareEvidenceSpan(evidenceSpanDraft()))));
   unwrap(insertActor(context, unwrap(prepareActor(actorDraft()))));
+}
+
+function insertResultSeal(
+  context: ImmediateTransactionContext,
+  result: Readonly<{ candidateTriageResultId: string; sealId: string; createdAt: number }>
+): void {
+  unwrap(
+    insertCandidateResultSeal(
+      context,
+      unwrap(
+        prepareCandidateResultSeal({
+          candidateResultSealId: result.sealId,
+          candidateResultId: result.candidateTriageResultId,
+          createdAt: result.createdAt
+        })
+      )
+    )
+  );
+}
+
+function sealUnavailableResult(
+  context: ImmediateTransactionContext,
+  result: Readonly<{ candidateTriageResultId: string; sealId: string; createdAt: number }>
+): void {
+  const reason = unwrap(
+    prepareCandidateResultReason({
+      candidateResultReasonId: `candidate-result-reason-${result.candidateTriageResultId}`,
+      candidateResultId: result.candidateTriageResultId,
+      reasonCode: "assessment_unavailable",
+      reasonOrdinal: 0,
+      createdAt: result.createdAt
+    })
+  );
+  unwrap(insertCandidateResultReason(context, reason));
+  unwrap(
+    insertResolutionTask(
+      context,
+      unwrap(
+        prepareResolutionTask({
+          resolutionTaskId: `resolution-task-${result.candidateTriageResultId}`,
+          candidateResultId: result.candidateTriageResultId,
+          candidateResultReasonId: reason.candidateResultReasonId,
+          taskOrdinal: 0,
+          createdAt: result.createdAt
+        })
+      )
+    )
+  );
+  insertResultSeal(context, result);
 }
 
 function seedTwoTitleFacts(context: ImmediateTransactionContext): void {
@@ -487,9 +575,14 @@ function rebuildTableWithoutChecks(
     table === "candidate_triage_result"
       ? [
           "candidate_head_insert_result_owner",
-          "candidate_head_update_result_owner"
+          "candidate_head_update_result_owner",
+          "candidate_result_seal_reject_incomplete"
         ]
-      : [];
+      : table === "candidate_result_seal"
+        ? ["candidate_result_seal_reject_incomplete"]
+        : table === "score_result"
+          ? ["candidate_result_seal_reject_incomplete"]
+          : [];
   database.exec(`
     PRAGMA foreign_keys = OFF;
     DROP TRIGGER IF EXISTS ${table}_reject_update;
@@ -1114,6 +1207,7 @@ describe("candidate result persistence", () => {
         expect(
           unwrap(readCandidateTriageResultByContentHash(context, sha256Hex("missing-result")))
         ).toBeUndefined();
+        sealUnavailableResult(context, result);
         return ok(undefined);
       })
     );
@@ -1138,6 +1232,7 @@ describe("candidate result persistence", () => {
         expect(
           unwrap(readCandidateTriageResultByContentHash(context, result.contentHash))
         ).toEqual(result);
+        insertResultSeal(context, result);
         return ok(undefined);
       })
     );
@@ -1154,7 +1249,8 @@ describe("candidate result persistence", () => {
           kind: "correction",
           status: "rejected_hard_requirement",
           supersedesResultId: "candidate-result-1",
-          score: computedScoreDraft({ scoreResultId: "score-result-2" })
+          score: computedScoreDraft({ scoreResultId: "score-result-2" }),
+          sealId: "candidate-result-seal-2"
         })
       )
     );
@@ -1170,6 +1266,8 @@ describe("candidate result persistence", () => {
         if (stored !== undefined) {
           expect(stored.supersedesResultId).toBe(initial.candidateTriageResultId);
         }
+        sealUnavailableResult(context, initial);
+        insertResultSeal(context, correction);
         return ok(undefined);
       })
     );
@@ -1232,7 +1330,8 @@ describe("candidate result persistence", () => {
               prepareCandidateTriageResult(
                 unavailableResultDraft({
                   candidateTriageResultId: "candidate-result-other",
-                  candidateId: "candidate-2"
+                  candidateId: "candidate-2",
+                  sealId: "candidate-result-seal-other"
                 })
               )
             )
@@ -1260,6 +1359,22 @@ describe("candidate result persistence", () => {
           })
         });
         unwrap(insertSourceDocument(context, unwrap(prepareSourceDocument(sourceDocumentDraft()))));
+        unwrap(
+          insertCandidateDocument(
+            context,
+            unwrap(
+              prepareCandidateDocument({
+                candidateDocumentId: "candidate-document-1",
+                candidateId: "candidate-1",
+                sourceDocumentId: "source-document-1",
+                documentKind: "resume",
+                label: "Resume",
+                documentOrdinal: 0,
+                createdAt: CREATED_AT
+              })
+            )
+          )
+        );
         unwrap(insertEvidenceSpan(context, unwrap(prepareEvidenceSpan(evidenceSpanDraft()))));
         expect(insertCandidateTriageResult(context, complete)).toEqual({
           ok: false,
@@ -1594,6 +1709,12 @@ describe("candidate result persistence", () => {
           ok: false,
           error: expect.objectContaining({ message: "Candidate result insert failed" })
         });
+        sealUnavailableResult(context, {
+          candidateTriageResultId: "candidate-result-other",
+          sealId: "candidate-result-seal-other",
+          createdAt: CREATED_AT
+        });
+        insertResultSeal(context, complete);
         return ok(undefined);
       })
     );
@@ -1693,6 +1814,7 @@ describe("candidate result boundary failures", () => {
                 supersedesResultId: null,
                 contentJson: parentJson,
                 contentHash: sha256Hex(parentJson),
+                sealId: "candidate-result-seal-1",
                 createdAt: CREATED_AT
               })
             };
@@ -1722,6 +1844,7 @@ describe("candidate result schema checks and immutability", () => {
       runImmediateTransaction(connection, (context) => {
         unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
         unwrap(insertCandidateTriageResult(context, result));
+        sealUnavailableResult(context, result);
         return ok(undefined);
       })
     );
@@ -1744,8 +1867,8 @@ describe("candidate result schema checks and immutability", () => {
         .prepare(
           `INSERT INTO candidate_triage_result (
             candidate_triage_result_id, candidate_id, kind, availability, status,
-            supersedes_result_id, content_json, content_hash, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            supersedes_result_id, content_json, content_hash, seal_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           result.candidateTriageResultId,
@@ -1756,6 +1879,7 @@ describe("candidate result schema checks and immutability", () => {
           result.supersedesResultId,
           result.contentJson,
           result.contentHash,
+          result.sealId,
           CREATED_AT
         )
     ).toThrow(/immutable/u);
@@ -1776,6 +1900,7 @@ describe("candidate result schema checks and immutability", () => {
       runImmediateTransaction(connection, (context) => {
         unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
         unwrap(insertCandidateTriageResult(context, result));
+        sealUnavailableResult(context, result);
         return ok(undefined);
       })
     );
@@ -1802,6 +1927,7 @@ describe("candidate result schema checks and immutability", () => {
       runImmediateTransaction(connection, (context) => {
         unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
         unwrap(insertCandidateTriageResult(context, result));
+        sealUnavailableResult(context, result);
         return ok(undefined);
       })
     );
@@ -1932,6 +2058,7 @@ describe("candidate result schema checks and immutability", () => {
       runImmediateTransaction(connection, (context) => {
         seedRichParents(context);
         unwrap(insertCandidateTriageResult(context, result));
+        insertResultSeal(context, result);
         return ok(undefined);
       })
     );
@@ -2026,6 +2153,7 @@ describe("candidate result schema checks and immutability", () => {
       runImmediateTransaction(connection, (context) => {
         unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
         unwrap(insertCandidateTriageResult(context, unavailable));
+        sealUnavailableResult(context, unavailable);
         return ok(undefined);
       })
     );
@@ -2058,6 +2186,356 @@ describe("candidate result schema checks and immutability", () => {
         message: "Stored candidate result failed integrity validation"
       })
     });
+    expect(connection.close().ok).toBe(true);
+  });
+});
+
+describe("candidate result seal", () => {
+  it("rejects invalid and hostile drafts", () => {
+    expect(prepareCandidateResultSeal({ createdAt: -1 })).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Invalid candidate result seal input"
+      })
+    });
+    expect(
+      prepareCandidateResultSeal({
+        candidateResultSealId: "candidate-result-seal-1",
+        candidateResultId: "candidate-result-1'; DROP TABLE candidate_result_seal; --",
+        createdAt: 1
+      })
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Invalid candidate result seal input"
+      })
+    });
+    expect(
+      prepareCandidateResultSeal(withThrowingGetter({ createdAt: 1 }, "candidateResultSealId"))
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Candidate result seal preparation failed"
+      })
+    });
+  });
+
+  it("inserts a complete result and its seal in one deferred-FK transaction", async () => {
+    const connection = await openMigratedDatabase();
+    const result = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+    const seal = unwrap(
+      prepareCandidateResultSeal({
+        candidateResultSealId: result.sealId,
+        candidateResultId: result.candidateTriageResultId,
+        createdAt: result.createdAt
+      })
+    );
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        expect(context.nativeDatabase.pragma("defer_foreign_keys", { simple: true })).toBe(1);
+        seedRichParents(context);
+        unwrap(insertCandidateTriageResult(context, result));
+        unwrap(insertCandidateResultSeal(context, seal));
+        expect(unwrap(readCandidateResultSeal(context, seal.candidateResultSealId))).toEqual(seal);
+        expect(unwrap(readCandidateResultSeal(context, "candidate-result-seal-missing"))).toBeUndefined();
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("fails the transaction when a result commits without its seal", async () => {
+    const connection = await openMigratedDatabase();
+    const result = unwrap(prepareCandidateTriageResult(unavailableResultDraft()));
+    expect(
+      runImmediateTransaction(connection, (context) => {
+        unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
+        unwrap(insertCandidateTriageResult(context, result));
+        return ok(undefined);
+      })
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Runtime database transaction failed"
+      })
+    });
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a seal whose parent result is missing or mismatched", async () => {
+    const connection = await openMigratedDatabase();
+    const result = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+    const missingParent = unwrap(
+      prepareCandidateResultSeal({
+        candidateResultSealId: result.sealId,
+        candidateResultId: result.candidateTriageResultId,
+        createdAt: result.createdAt
+      })
+    );
+    const mismatched = unwrap(
+      prepareCandidateResultSeal({
+        candidateResultSealId: "candidate-result-seal-mismatch",
+        candidateResultId: result.candidateTriageResultId,
+        createdAt: result.createdAt
+      })
+    );
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedRichParents(context);
+        expect(insertCandidateResultSeal(context, missingParent)).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Candidate result seal requires a stored candidate result"
+          })
+        });
+        unwrap(insertCandidateTriageResult(context, result));
+        expect(insertCandidateResultSeal(context, mismatched)).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Candidate result seal ID does not match the result seal_id"
+          })
+        });
+        insertResultSeal(context, result);
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects an unprepared seal, a failing insert context, and a duplicate identity", async () => {
+    const connection = await openMigratedDatabase();
+    const result = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+    const seal = unwrap(
+      prepareCandidateResultSeal({
+        candidateResultSealId: result.sealId,
+        candidateResultId: result.candidateTriageResultId,
+        createdAt: result.createdAt
+      })
+    );
+    const duplicate = unwrap(
+      prepareCandidateResultSeal({
+        candidateResultSealId: result.sealId,
+        candidateResultId: result.candidateTriageResultId,
+        createdAt: result.createdAt + 1
+      })
+    );
+    expect(insertCandidateResultSeal({}, seal)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: SEAL_TRANSACTION_REQUIRED })
+    });
+    expect(
+      insertCandidateResultSeal(failingContext(), {
+        candidateResultSealId: "candidate-result-seal-1",
+        candidateResultId: "candidate-result-1",
+        createdAt: 1
+      })
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Invalid prepared candidate result seal"
+      })
+    });
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedRichParents(context);
+        unwrap(insertCandidateTriageResult(context, result));
+        expect(insertCandidateResultSeal(failingContext(), seal)).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Candidate result seal insert failed"
+          })
+        });
+        unwrap(insertCandidateResultSeal(context, seal));
+        expect(insertCandidateResultSeal(context, duplicate)).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Candidate result seal insert failed"
+          })
+        });
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a seal read outside a transaction and an invalid stored row", async () => {
+    const connection = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+    const result = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+    expect(readCandidateResultSeal({}, "candidate-result-seal-1")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: SEAL_TRANSACTION_REQUIRED })
+    });
+    expect(readCandidateResultSeal(failingContext(), "")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid candidate result seal ID" })
+    });
+    expect(readCandidateResultSeal(failingContext(), "candidate-result-seal-1")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Candidate result seal read failed" })
+    });
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedRichParents(context);
+        unwrap(insertCandidateTriageResult(context, result));
+        insertResultSeal(context, result);
+        return ok(undefined);
+      })
+    );
+    rebuildTableWithoutChecks(database, "candidate_result_seal", CANDIDATE_RESULT_SEAL_COLUMNS);
+    database.prepare("UPDATE candidate_result_seal SET created_at = -1").run();
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readCandidateResultSeal(context, result.sealId)
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Stored candidate result seal is invalid"
+      })
+    });
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects an unavailable result that has a reason but no resolution task", async () => {
+    const connection = await openMigratedDatabase();
+    const result = unwrap(prepareCandidateTriageResult(unavailableResultDraft()));
+    const seal = unwrap(
+      prepareCandidateResultSeal({
+        candidateResultSealId: result.sealId,
+        candidateResultId: result.candidateTriageResultId,
+        createdAt: result.createdAt
+      })
+    );
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
+        unwrap(insertCandidateTriageResult(context, result));
+        unwrap(
+          insertCandidateResultReason(
+            context,
+            unwrap(
+              prepareCandidateResultReason({
+                candidateResultReasonId: `candidate-result-reason-${result.candidateTriageResultId}`,
+                candidateResultId: result.candidateTriageResultId,
+                reasonCode: "assessment_unavailable",
+                reasonOrdinal: 0,
+                createdAt: result.createdAt
+              })
+            )
+          )
+        );
+        expect(insertCandidateResultSeal(context, seal)).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Candidate result seal insert failed"
+          })
+        });
+        unwrap(
+          insertResolutionTask(
+            context,
+            unwrap(
+              prepareResolutionTask({
+                resolutionTaskId: `resolution-task-${result.candidateTriageResultId}`,
+                candidateResultId: result.candidateTriageResultId,
+                candidateResultReasonId: `candidate-result-reason-${result.candidateTriageResultId}`,
+                taskOrdinal: 0,
+                createdAt: result.createdAt
+              })
+            )
+          )
+        );
+        unwrap(insertCandidateResultSeal(context, seal));
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects an incomplete unavailable result that is missing its required reason", async () => {
+    const connection = await openMigratedDatabase();
+    const result = unwrap(prepareCandidateTriageResult(unavailableResultDraft()));
+    const seal = unwrap(
+      prepareCandidateResultSeal({
+        candidateResultSealId: result.sealId,
+        candidateResultId: result.candidateTriageResultId,
+        createdAt: result.createdAt
+      })
+    );
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
+        unwrap(insertCandidateTriageResult(context, result));
+        expect(insertCandidateResultSeal(context, seal)).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Candidate result seal insert failed"
+          })
+        });
+        sealUnavailableResult(context, result);
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("keeps candidate_result_seal STRICT and the result seal_id FK deferred", async () => {
+    const connection = await openMigratedDatabase();
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        const database = context.nativeDatabase;
+        expect(
+          database
+            .prepare(
+              "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'candidate_result_seal'"
+            )
+            .pluck()
+            .get()
+        ).toContain("STRICT");
+        expect(
+          database
+            .prepare(
+              "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'candidate_triage_result'"
+            )
+            .pluck()
+            .get()
+        ).toContain("DEFERRABLE INITIALLY DEFERRED");
+        expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects raw mutation of a stored seal", async () => {
+    const connection = await openMigratedDatabase();
+    const result = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedRichParents(context);
+        unwrap(insertCandidateTriageResult(context, result));
+        insertResultSeal(context, result);
+        const database = context.nativeDatabase;
+        expect(() =>
+          database
+            .prepare("UPDATE candidate_result_seal SET created_at = 99 WHERE candidate_result_seal_id = ?")
+            .run(result.sealId)
+        ).toThrow(/candidate_result_seal is immutable/u);
+        expect(() =>
+          database
+            .prepare("DELETE FROM candidate_result_seal WHERE candidate_result_seal_id = ?")
+            .run(result.sealId)
+        ).toThrow(/candidate_result_seal is immutable/u);
+        expect(() =>
+          database.prepare("INSERT INTO candidate_result_seal VALUES (?, ?, ?)").run(
+            result.sealId,
+            result.candidateTriageResultId,
+            3
+          )
+        ).toThrow(/candidate_result_seal is immutable/u);
+        return ok(undefined);
+      })
+    );
     expect(connection.close().ok).toBe(true);
   });
 });

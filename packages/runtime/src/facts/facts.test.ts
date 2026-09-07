@@ -265,6 +265,7 @@ function rebuildTableWithoutChecks(
     DROP TRIGGER IF EXISTS ${table}_reject_update;
     DROP TRIGGER IF EXISTS ${table}_reject_delete;
     DROP TRIGGER IF EXISTS ${table}_reject_replace;
+    DROP TRIGGER IF EXISTS candidate_result_seal_reject_incomplete;
     CREATE TABLE ${table}_rebuilt (
       ${columns}
     ) STRICT;

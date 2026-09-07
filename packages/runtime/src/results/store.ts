@@ -477,6 +477,7 @@ export function prepareCandidateTriageResult(
         createdAt: draft.data.createdAt
       })),
       score,
+      sealId: draft.data.sealId,
       createdAt: draft.data.createdAt
     });
     return ok(register(preparedResults, result));
@@ -623,8 +624,9 @@ export function insertCandidateTriageResult(
           supersedes_result_id,
           content_json,
           content_hash,
+          seal_id,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         result.candidateTriageResultId,
@@ -635,6 +637,7 @@ export function insertCandidateTriageResult(
         result.supersedesResultId,
         result.contentJson,
         result.contentHash,
+        result.sealId,
         result.createdAt
       );
     const insertSpan = context.value.nativeDatabase.prepare(
@@ -798,6 +801,7 @@ function hydrateResult(row: {
   supersedesResultId: string | null;
   contentJson: string;
   contentHash: string;
+  sealId: string;
   createdAt: number;
   evidenceSpans: CandidateTriageResult["evidenceSpans"];
   evidenceGaps: CandidateTriageResult["evidenceGaps"];
@@ -883,6 +887,7 @@ export function readCandidateTriageResult(
           supersedes_result_id AS supersedesResultId,
           content_json AS contentJson,
           content_hash AS contentHash,
+          seal_id AS sealId,
           created_at AS createdAt
         FROM candidate_triage_result
         WHERE candidate_triage_result_id = ?`
@@ -897,6 +902,7 @@ export function readCandidateTriageResult(
           supersedesResultId: string | null;
           contentJson: string;
           contentHash: string;
+          sealId: string;
           createdAt: number;
         }
       | undefined;

@@ -16,6 +16,7 @@ import {
   candidateResultFactConflicts,
   candidateResultHardRequirementAssessments,
   candidateResultReasons,
+  candidateResultSeals,
   candidateResultStructuredFacts,
   candidateTriageResults,
   candidates,
@@ -245,6 +246,25 @@ function parseMigrations(): Map<string, SqlTable> {
         continue;
       }
 
+      const dropTable = /^DROP TABLE(?: IF EXISTS)? `([^`]+)`\s*;?$/u.exec(statement);
+      if (dropTable !== null) {
+        tables.delete(dropTable[1]!);
+        continue;
+      }
+
+      const renameTable =
+        /^ALTER TABLE `([^`]+)` RENAME TO `([^`]+)`\s*;?$/u.exec(statement);
+      if (renameTable !== null) {
+        const fromName = renameTable[1]!;
+        const toName = renameTable[2]!;
+        const renamed = tables.get(fromName);
+        expect(renamed, `rename of unknown table ${fromName}`).toBeDefined();
+        tables.delete(fromName);
+        renamed!.name = toName;
+        tables.set(toName, renamed!);
+        continue;
+      }
+
       const createIndex =
         /^CREATE (UNIQUE )?INDEX `([^`]+)` ON `([^`]+)` \(([^)]*)\)(?:\s+WHERE\s+([\s\S]+?))?\s*;?$/u.exec(
           statement
@@ -338,6 +358,7 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["hard_requirement_assessment", hardRequirementAssessments],
   ["hard_requirement_assessment_fact", hardRequirementAssessmentFacts],
   ["candidate_triage_result", candidateTriageResults],
+  ["candidate_result_seal", candidateResultSeals],
   ["score_result", scoreResults],
   ["candidate_result_evidence_span", candidateResultEvidenceSpans],
   ["candidate_result_evidence_gap", candidateResultEvidenceGaps],
@@ -390,5 +411,15 @@ describe("Drizzle schema matches the committed migrations", () => {
 
   it.each(tableCases)("%s is declared STRICT", (name) => {
     expect(migrationTables.get(name)!.strict).toBe(true);
+  });
+
+  it("keeps the candidate result seal cycle deferred to commit", () => {
+    const sql = readFileSync(
+      join(migrationsFolder, "0015_candidate_result_seal_foundation.sql"),
+      "utf8"
+    );
+    expect(sql).toMatch(
+      /FOREIGN KEY \(`seal_id`\) REFERENCES `candidate_result_seal`\(`candidate_result_seal_id`\)[^\n]*DEFERRABLE INITIALLY DEFERRED/u
+    );
   });
 });

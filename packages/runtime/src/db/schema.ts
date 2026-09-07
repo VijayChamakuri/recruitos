@@ -1100,10 +1100,18 @@ export const candidateTriageResults = sqliteTable(
     ),
     contentJson: text("content_json").notNull(),
     contentHash: text("content_hash").notNull(),
+    // Cyclic pair with candidate_result_seal: the seal row is inserted after
+    // this result's associations, reasons, tasks, and proposals, so this
+    // reference must be deferred to commit time. Omitting onDelete keeps
+    // drizzle-kit's SQLite generator on its deferred-by-default codegen path.
+    sealId: text("seal_id")
+      .notNull()
+      .references((): AnySQLiteColumn => candidateResultSeals.candidateResultSealId),
     createdAt: integer("created_at").notNull()
   },
   (table) => [
     uniqueIndex("candidate_triage_result_content_hash_unique").on(table.contentHash),
+    uniqueIndex("candidate_triage_result_seal_id_unique").on(table.sealId),
     index("candidate_triage_result_candidate_created").on(
       table.candidateId,
       table.createdAt,
@@ -1144,6 +1152,23 @@ export const candidateTriageResults = sqliteTable(
       sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
     ),
     check("candidate_triage_result_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidateResultSeals = sqliteTable(
+  "candidate_result_seal",
+  {
+    candidateResultSealId: text("candidate_result_seal_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_result_seal_result_unique").on(table.candidateResultId),
+    check("candidate_result_seal_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
 

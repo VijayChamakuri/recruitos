@@ -84,6 +84,10 @@ export function runImmediateTransaction<TResult>(
 
   try {
     const transaction = nativeDatabase.transaction((): TResult => {
+      // SQLite resets this pragma on every COMMIT, so each immediate
+      // transaction must turn it back on. DEFERRABLE INITIALLY DEFERRED
+      // cyclic seals (candidate_result_seal) need commit-time FK checks.
+      nativeDatabase.pragma("defer_foreign_keys = ON");
       const result = work(context);
       if (!result.ok) {
         throw new TransactionResultError(result.error);
