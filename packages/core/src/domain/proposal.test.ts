@@ -82,8 +82,12 @@ describe("proposal and review-decision payloads", () => {
         kind: "follow_up_draft",
         body: "Need years of experience.",
         evidenceGapId: "evidence-gap-1"
-      }).evidenceGapId
-    ).toBe("evidence-gap-1");
+      })
+    ).toEqual({
+      kind: "follow_up_draft",
+      body: "Need years of experience.",
+      evidenceGapId: "evidence-gap-1"
+    });
     expect(ProposalPayloadSchema.parse({ kind: "shortlist_inclusion" })).toEqual({
       kind: "shortlist_inclusion"
     });
@@ -100,8 +104,11 @@ describe("proposal and review-decision payloads", () => {
       ProposalPayloadSchema.parse({
         kind: "rejection",
         rationale: " Failed the work-authorization requirement. "
-      }).rationale
-    ).toBe("Failed the work-authorization requirement.");
+      })
+    ).toEqual({
+      kind: "rejection",
+      rationale: "Failed the work-authorization requirement."
+    });
     expect(
       ProposalPayloadSchema.safeParse({
         kind: "follow_up_draft",
@@ -128,8 +135,11 @@ describe("proposal and review-decision payloads", () => {
       ReviewDecisionPayloadSchema.parse({
         kind: "reject",
         rationale: " Duplicate of another shortlist candidate. "
-      }).rationale
-    ).toBe("Duplicate of another shortlist candidate.");
+      })
+    ).toEqual({
+      kind: "reject",
+      rationale: "Duplicate of another shortlist candidate."
+    });
     expect(
       ReviewDecisionPayloadSchema.parse({
         kind: "request_evidence",
@@ -143,10 +153,13 @@ describe("proposal and review-decision payloads", () => {
           kind: "follow_up_draft",
           body: "Please send a work-authorization document by Friday."
         }
-      }).editedPayload
+      })
     ).toEqual({
-      kind: "follow_up_draft",
-      body: "Please send a work-authorization document by Friday."
+      kind: "edit",
+      editedPayload: {
+        kind: "follow_up_draft",
+        body: "Please send a work-authorization document by Friday."
+      }
     });
     expect(
       ReviewDecisionPayloadSchema.safeParse({
