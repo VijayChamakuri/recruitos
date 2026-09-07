@@ -8,6 +8,11 @@ reconstruction from a job description, published ATS and recruiting-operations m
 regulatory text, and candidate-side experience. Nothing here is attributed to a real
 practitioner, because no practitioner has been asked yet.
 
+One assumption has been corrected without a practitioner. A desk check on 2026-09-07 found
+that work authorization is not a resume field (WA-17), which is blocking for tier-1 corpus
+authoring. Desk checks are a weaker instrument than the conversation and are labeled as
+such; they do not discharge the practitioner gate.
+
 This file exists because the product design makes it a shipping requirement, not a
 footnote (`docs/designs/recruitos-candidate-triage-control-plane.md`, Demand Evidence).
 RecruitOS claims to be the recruiting tool that opens with what it got wrong. A tool that
@@ -35,16 +40,18 @@ Every assumption carries a **provenance** class and a **validation status**.
 
 | Status | Meaning |
 |---|---|
-| `inferred` | Not yet put to a practitioner. The state of every workflow assumption today. |
+| `inferred` | Not yet put to a practitioner. The state of most workflow assumptions today. |
+| `desk-checked` | Checked against published sources by the author, without a practitioner. Weaker than `validated` and **does not count** toward the three entries the build sequence requires to move out of `inferred`, because desk research is not the conversation the gate is asking for. |
 | `validated` | A named practitioner confirmed it. Attribution recorded. |
-| `corrected` | A named practitioner contradicted it, and the assumption text was rewritten to what they said. The original is preserved in the entry. |
+| `corrected` | A practitioner or a documented check contradicted it, and the assumption text was rewritten to what the evidence says. The original is preserved in the entry. |
 | `unresolved` | Asked, and the practitioner did not know or the answers conflicted. |
 
-Today every entry below is either `synthetic`, `observed`, `cited`, or `inferred`. There
-are zero `validated` and zero `corrected` entries, and that count is itself reported in
-the Trust Center. The build sequence requires at least three entries to move out of
-`inferred` before the rubric locks and before a single extraction fixture is recorded
-(design, The Assignment; implementation plan, Gate 1 and Gate 2).
+Today the counts are: **zero `validated`, one `corrected` (WA-17, by desk check rather
+than by a practitioner), one `desk-checked`, everything else `inferred`.** Those counts
+are what the Trust Center reports. The build sequence requires at least three entries to
+move out of `inferred` **through a practitioner conversation** before the rubric locks and
+before a single extraction fixture is recorded (design, The Assignment; implementation
+plan, Gate 1 and Gate 2). WA-17 does not discharge any part of that requirement.
 
 ---
 
@@ -254,13 +261,52 @@ Falsified by: a real requisition for this role, which may add clearance, on-site
 compensation band, or degree.
 Status: `inferred`
 
-**WA-17 Work authorization is answerable from candidate documents at all.**
-Basis: inference. The parser looks for `work_authorization_statement` in resume text.
-Falsified by: a process where work authorization arrives as an application form question
-and never appears in a resume, which would mean the requirement resolves `unknown` for
-nearly every candidate and floods the escalation queue with a question the documents can
-never answer. This is a specific, checkable, high-impact failure mode.
-Status: `inferred`
+**WA-17 (CORRECTED) Work authorization is normally absent from resume text, so it cannot
+be resolved from a resume alone.**
+
+*Previously (inferred, 2026-09-07): "Work authorization is answerable from candidate
+documents at all. Basis: inference. The parser looks for `work_authorization_statement`
+in resume text."*
+
+**The check.** Pre-call desk check run 2026-09-07, per the readiness item in
+`docs/designs/rubric-lock-prep.md`. Four published Applied AI Engineer and machine
+learning engineer resume example sets were examined for any statement of work
+authorization, citizenship, visa status, or sponsorship need, plus two US resume-guidance
+sources and one ATS-side source.
+
+| Source | What was examined | Work authorization in the resume text |
+|---|---|---|
+| [resume.io AI Engineer](https://resume.io/resume-examples/ai-engineer) | One full example resume, all sections | Not present |
+| [Huntr ML Engineer](https://huntr.co/resume-examples/machine-learning-engineer) | 20 examples described as drawn from real resumes, plus the writing guidance | Not present in any example, and the guidance never raises the topic |
+| [Resume Worded ML](https://resumeworded.com/machine-learning-resume-examples) | Multiple examples, all sections | Not present |
+| [Teal ML Engineer](https://www.tealhq.com/resume-examples/machine-learning-engineer), [IGotAnOffer ML](https://igotanoffer.com/en/advice/machine-learning-engineer-resume-examples) | Attempted, both returned HTTP 403 | Not examined |
+| [CVwizard, citizenship on a resume](https://www.cvwizard.com/en/articles/citizenship-in-resume) | US guidance | "Adding this information may even introduce confusion and bias in the recruitment process, so it's best to omit it." Recommends including it only for government roles, clearance roles, or to clarify eligibility alongside extensive international experience |
+| [Greenhouse immigration workflow](https://www.tryalma.com/learn/greenhouse-immigration-integration-guide) | ATS side | The two DOJ-IER-compliant questions ("Are you legally authorized to work in the United States?" and "Will you now or in the future require sponsorship for employment visa status?") are **application form fields**, and Greenhouse surfaces the answer as a structured `Requires Immigration Sponsorship` candidate field visible to recruiters, hiring managers, and coordinators |
+
+**Method limitation, stated plainly.** These are *published example* resumes, some
+described by their publishers as drawn from real ones. They are not privately obtained
+real candidate resumes, because Gate 1 forbids handling real candidate data and this
+project has no lawful supply of it. Published examples may under-represent international
+candidates, who are the population most likely to state a sponsorship need. That
+limitation does not weaken the finding, it sharpens it: see the asymmetry in WA-32.
+
+**Finding.** Work authorization is not a resume field. It is an application field. Standard
+US guidance is to omit it from the resume, and when a candidate does state it, they are
+almost always stating a *sponsorship need* rather than the absence of one.
+
+**Consequence for RecruitOS, and it is blocking.** The parser looks for a
+`work_authorization_statement` grounded fact in document text. If that is the only source,
+the `work_authorization` hard requirement resolves `unknown` for very nearly every
+candidate. `unknown` escalates and never rejects, which is the correct behavior, but
+escalated candidates are excluded from `shortlist_cut`, so a corpus-wide `unknown` empties
+the `scored` population the shortlist draws from and takes the escalation rate far past its
+60 percent ceiling. Hard-requirement resolution needs a resume-independent source. The
+readiness note in `docs/designs/rubric-lock-prep.md` carries the decision and marks it
+blocking for tier-1 authoring.
+
+Falsified by: a practitioner or a real requisition where work authorization does reliably
+appear in submitted documents for this role. Still worth asking on the call (R5).
+Status: `corrected` (by desk check, not by a practitioner)
 
 **WA-18 Resolving a hard requirement to `unknown` and escalating, rather than rejecting,
 is the behavior a practitioner wants.**
@@ -268,6 +314,24 @@ Basis: premise, and the design's direct answer to "AI screening quietly loses ca
 Falsified by: a recruiter who says an unanswerable requirement at this volume is a
 practical reject and the queue this creates is unworkable.
 Status: `inferred`
+
+**WA-32 (NEW, from the WA-17 check) Reading work authorization from resume text would
+correlate its resolution with national origin.**
+*Ids are assigned in creation order and never reused, so a later id can sit in an earlier
+section. Position is topical; the number is the identity.*
+If a resume mentions work authorization at all, it is usually because the candidate needs
+sponsorship and chose to disclose it. A resolver reading only document text would therefore
+return a determinate answer disproportionately for candidates requiring sponsorship and
+`unknown` for everyone else, which is a selection mechanism keyed to a protected
+characteristic wearing the costume of an evidence gap. `unknown` does not reject, so no
+candidate is knocked out by it, but `unknown` does withhold a candidate from
+`shortlist_cut`, so the disparity would land on who reaches the shortlist.
+Basis: the WA-17 check plus the four-fifths framing in WA-O3.
+Falsified by: evidence that disclosure rates are not skewed this way.
+Consequence: resolve work authorization from a structured application-answer source with
+its own provenance rather than from resume spans, and treat this entry as a candidate
+known limitation for the Trust Center whichever way the decision goes.
+Status: `desk-checked`
 
 ---
 
@@ -390,9 +454,16 @@ prompt and is part of the fixture cache key, so changing it after fixture record
 invalidates all 140 recorded fixtures and every tier-1 expected outcome. Weights are
 deliberately kept out of the prompt, so weight changes stay free.
 
-Blocking on practitioner input before lock: **WA-09, WA-11, WA-13, WA-15, WA-16, WA-17.**
+Blocking on practitioner input before lock: **WA-09, WA-11, WA-13, WA-15, WA-16.**
 
 Strongly wanted before lock, not strictly blocking: WA-02, WA-06, WA-10, WA-12, WA-26.
+
+Blocking on a product-owner decision before **tier-1 authoring** rather than before the
+lock: **WA-17 and WA-32.** The desk check answered the question the call was going to ask,
+and answered it against the design. Hard-requirement resolution needs a resume-independent
+source, or every work-authorization assessment in the corpus resolves `unknown` and the
+shortlist has nothing to draw from. R5 still goes to the practitioner as a confirmation,
+not as the primary evidence.
 
 The full question set, the draft rubric v2 those questions react to, and the exact list of
 open questions is in `docs/designs/rubric-lock-prep.md`.
@@ -416,7 +487,7 @@ After a real conversation:
    under `Previously (inferred, 2026-09-07):` so the correction is visible rather than
    silently absorbed. A corrected entry is a better artifact than an entry that was right
    the first time, and this file should make that obvious.
-4. Add new entries for anything they raised that is not here, numbered from WA-32 onward.
+4. Add new entries for anything they raised that is not here, numbered from WA-33 onward.
 5. Record the conversation date, the person's role, and what was not covered.
 6. Update the counts the Trust Center reads.
 
