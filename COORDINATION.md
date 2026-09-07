@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 2a11d40 |
+| origin/main | 7c101e8 |
 | Migration lock held by | Cursor, for run and scheduler tables (`triage_run`, `triage_run_member`, `triage_run_seal`, then `triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
@@ -41,7 +41,7 @@ your own rows plus the log.
 |---|---|---|---|
 | Cursor | (pending) | Takes the run + scheduler migration step 6: `triage_attempt` + `attempt_work_item`. Holds the migration lock. | assigned |
 | Claude Code | b/core-shortlist-proposals | T9 part 2, step 6 of 6: shortlist_inclusion proposal derivation in `packages/core/src/pipeline/`. Last step of the pure decision pipeline. | ready PR |
-| Antigravity | (none) | PR #34 merged at 2a11d40. Standing by for not_found in RuntimeErrorSchema and pipeline modules. | idle-ready |
+| Antigravity | c/read-model-not-found | Return not_found in readCandidatePacket for absent candidate, head, and result rows. | ready PR #43 |
 
 ## Hard rules
 
@@ -99,3 +99,4 @@ your own rows plus the log.
 - 2026-09-07 Claude: T9 part 2 step 4 (PR #38) squash-merged at a93d9c5, branch deleted. Step 5 on b/core-routing-reasons: packages/core/src/pipeline/route-result.ts. Status resolves by the committed precedence rejected_hard_requirement > escalated > scored, and every matched predicate contributes its own reason regardless of which one set the status. Reasons derived here: assessment_unavailable, parse_failure (parser signal or zero located spans anywhere), prompt_injection_flagged, possible_duplicate, contradiction:tenure_vs_claim (highest grounded claim exceeds derived tenure by more than the committed month margin), missing_evidence:<dimension> for required dimensions with a gap, missing_evidence:<requirement> for unknown outcomes, ambiguous:<dimension> for a document level disagreement, ambiguous:<subject> for caller-named ambiguity such as seniority, and low_confidence only when nothing else matched. Reasons are deduplicated and ordered by REASON_CODE_PRECEDENCE then subject. Signals the pure core cannot derive (parser verdict, corpus dedupe, injection heuristic, named ambiguity) are explicit inputs. Thresholds are a RoutingPolicy parameter defaulting to T_ESCALATE and 12 months. pnpm check exit 0 (1106 tests, 21 integration), test:coverage exit 0 with All files 100 percent, diff-check clean, no em dashes. Files touched: packages/core/src/pipeline/ only.
 - 2026-09-07 Claude: T9 part 2 step 5 (PR #40) squash-merged at 64d30d3, branch deleted. Step 6 on b/core-shortlist-proposals: packages/core/src/pipeline/derive-proposals.ts. A shortlist_inclusion proposal exists only for a scored, complete result carrying an aggregate; escalated, rejected, unavailable, variant, and dedupe-suppressed candidates produce none. The cut is scoring/shortlistCut unchanged, so tie breaks stay on candidate id. Escalated candidates come back as pendingResolutionCandidateIds so the pending resolution, may qualify list is not lost. Proposals carry rank and their evidence spans and are inert: no outbound effect, each awaits a review decision. Open question for whoever owns scoring: the plan failure table wants shortlist ties broken by import ordinal then ASCII candidate id, while the committed compareShortlist ties on candidate id alone. Left unchanged here rather than reimplementing scoring math. pnpm check exit 0 (1140 tests, 24 integration), test:coverage exit 0 with All files 100 percent, diff-check clean, no em dashes. Files touched: packages/core/src/pipeline/ only. T9 part 2 complete.
 - 2026-09-07 Claude: added not_found to RuntimeErrorSchema on b/runtime-error-not-found (the code Antigravity's readCandidatePacket needs). New packages/runtime/src/errors/runtime-error.test.ts. pnpm check 1102, test:coverage exit 0 / 100 percent, integration 24, no em dashes. Opening PR.
+- 2026-09-07 Antigravity: swapped readCandidatePacket missing-candidate, missing-head, and missing-result cases to not_found. Preserved persistence_failed for bad input and client/query failures. 100 percent coverage on core and runtime. Opening PR #43.

@@ -318,11 +318,11 @@ describe("read-models integration", () => {
         })
       );
 
-      // Verify packet returns persistence_failed because no candidate_head exists
+      // Verify packet returns not_found because no candidate_head exists
       const untriagedRes = readCandidatePacket(connection.database, "cand-untriaged");
       expect(untriagedRes.ok).toBe(false);
       if (!untriagedRes.ok) {
-        expect(untriagedRes.error.code).toBe("persistence_failed");
+        expect(untriagedRes.error.code).toBe("not_found");
         expect(untriagedRes.error.message).toContain("Candidate packet not found");
       }
 

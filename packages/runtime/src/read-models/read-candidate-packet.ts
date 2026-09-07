@@ -12,8 +12,8 @@ interface CandidateHeadRow {
   corpusTag: "main" | "variant";
   isSynthetic: number;
   createdAt: number;
-  headVersion: number;
-  currentResultId: string;
+  headVersion: number | null;
+  currentResultId: string | null;
 }
 
 interface ResultRow {
@@ -27,7 +27,7 @@ interface ResultRow {
 
 /**
  * Reads a candidate packet anchored to CandidateHead.currentResultId.
- * Returns persistence_failed with a clear message when the candidate or head is missing.
+ * Returns not_found with a clear message when the candidate, head, or result is missing.
  */
 export function readCandidatePacket(
   database: unknown,
@@ -67,14 +67,23 @@ export function readCandidatePacket(
         ch.version AS headVersion,
         ch.current_result_id AS currentResultId
       FROM candidate c
-      JOIN candidate_head ch ON ch.candidate_id = c.candidate_id
+      LEFT JOIN candidate_head ch ON ch.candidate_id = c.candidate_id
       WHERE c.candidate_id = ?`
     );
     const candRow = candStmt.get(candidateId) as CandidateHeadRow | undefined;
     if (!candRow) {
       return err(
         createRuntimeError(
-          "persistence_failed",
+          "not_found",
+          `Candidate packet not found for "${candidateId}"`,
+          false
+        )
+      );
+    }
+    if (candRow.currentResultId === null || candRow.headVersion === null) {
+      return err(
+        createRuntimeError(
+          "not_found",
           `Candidate packet not found for "${candidateId}": no triage result head written`,
           false
         )
@@ -96,7 +105,7 @@ export function readCandidatePacket(
     if (!resultRow) {
       return err(
         createRuntimeError(
-          "persistence_failed",
+          "not_found",
           `Triage result not found for candidate head: ${candRow.currentResultId}`,
           false
         )
