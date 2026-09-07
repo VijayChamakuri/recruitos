@@ -7,6 +7,7 @@ import {
   CandidateResultFactConflictIdSchema,
   CandidateResultHardRequirementAssessmentIdSchema,
   CandidateResultKindSchema,
+  CandidateResultReasonIdSchema,
   CandidateResultStructuredFactIdSchema,
   CandidateTriageResultIdSchema,
   CandidateTriageStatusSchema,
@@ -20,6 +21,7 @@ import {
   NonnegativeIntegerSchema,
   PositiveIntegerSchema,
   PositiveWeightSchema,
+  ReasonCodeKindSchema,
   RubricDimensionIdSchema,
   ScoreResultIdSchema,
   Sha256HexSchema,
@@ -30,7 +32,11 @@ import { z } from "zod";
 export {
   CANDIDATE_RESULT_KINDS,
   CANDIDATE_TRIAGE_STATUSES,
-  DECISION_AVAILABILITIES
+  DECISION_AVAILABILITIES,
+  REASON_CODE_KINDS,
+  REASON_CODE_KINDS_WITHOUT_SUBJECT,
+  REASON_CODE_KINDS_WITH_SUBJECT,
+  REASON_CODE_PRECEDENCE
 } from "@recruitos/core";
 
 const MAXIMUM_RESULT_EVIDENCE_SPANS = 72;
@@ -172,6 +178,30 @@ export const CandidateResultHardRequirementAssessmentSchema = z
 export type CandidateResultHardRequirementAssessment = z.infer<
   typeof CandidateResultHardRequirementAssessmentSchema
 >;
+
+export const CandidateResultReasonDraftSchema = z
+  .object({
+    candidateResultReasonId: CandidateResultReasonIdSchema,
+    candidateResultId: CandidateTriageResultIdSchema,
+    reasonCode: z.string().min(1).max(256),
+    reasonOrdinal: NonnegativeIntegerSchema,
+    createdAt: NonnegativeIntegerSchema
+  })
+  .strict();
+export type CandidateResultReasonDraft = z.infer<typeof CandidateResultReasonDraftSchema>;
+
+export const CandidateResultReasonSchema = z
+  .object({
+    candidateResultReasonId: CandidateResultReasonIdSchema,
+    candidateResultId: CandidateTriageResultIdSchema,
+    reasonKind: ReasonCodeKindSchema,
+    subjectId: z.string().min(1).max(128).nullable(),
+    reasonCode: z.string().min(1).max(256),
+    reasonOrdinal: NonnegativeIntegerSchema,
+    createdAt: NonnegativeIntegerSchema
+  })
+  .strict();
+export type CandidateResultReason = z.infer<typeof CandidateResultReasonSchema>;
 
 export const ScoreContributionSchema = z
   .object({

@@ -10,6 +10,7 @@ import {
   candidateResultEvidenceSpans,
   candidateResultFactConflicts,
   candidateResultHardRequirementAssessments,
+  candidateResultReasons,
   candidateResultStructuredFacts,
   candidateTriageResults,
   candidates,
@@ -496,6 +497,7 @@ describe("runtime Drizzle schema", () => {
     const factConfig = getTableConfig(candidateResultStructuredFacts);
     const conflictConfig = getTableConfig(candidateResultFactConflicts);
     const requirementConfig = getTableConfig(candidateResultHardRequirementAssessments);
+    const reasonConfig = getTableConfig(candidateResultReasons);
     expect(gapConfig.indexes.map((index) => index.config.name).sort()).toEqual([
       "candidate_result_evidence_gap_dimension_unique",
       "candidate_result_evidence_gap_ordinal_unique",
@@ -506,6 +508,30 @@ describe("runtime Drizzle schema", () => {
       "candidate_result_dimension_assessment_ordinal_unique",
       "candidate_result_dimension_assessment_unique"
     ]);
+    expect(reasonConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "candidate_result_reason_created_at",
+      "candidate_result_reason_kind",
+      "candidate_result_reason_ordinal",
+      "candidate_result_reason_reason_code",
+      "candidate_result_reason_subject"
+    ]);
+    expect(reasonConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "candidate_result_reason_kind_subject_unique",
+      "candidate_result_reason_kind_unique",
+      "candidate_result_reason_ordinal_unique",
+      "candidate_result_reason_result_created"
+    ]);
+    const reasonIndexByName = Object.fromEntries(
+      reasonConfig.indexes.map((index) => [index.config.name, index])
+    );
+    expect(reasonIndexByName.candidate_result_reason_kind_unique?.config.where).toBeDefined();
+    expect(
+      reasonIndexByName.candidate_result_reason_kind_subject_unique?.config.where
+    ).toBeDefined();
+    expect(reasonIndexByName.candidate_result_reason_ordinal_unique?.config.where).toBeUndefined();
+    expect(reasonIndexByName.candidate_result_reason_result_created?.config.where).toBeUndefined();
+    expect(reasonConfig.foreignKeys).toHaveLength(1);
+    expect(reasonConfig.foreignKeys[0]!.onDelete).toBe("restrict");
     expect(
       [
         ...spanConfig.foreignKeys,
@@ -513,7 +539,8 @@ describe("runtime Drizzle schema", () => {
         ...assessmentConfig.foreignKeys,
         ...factConfig.foreignKeys,
         ...conflictConfig.foreignKeys,
-        ...requirementConfig.foreignKeys
+        ...requirementConfig.foreignKeys,
+        ...reasonConfig.foreignKeys
       ].every((foreignKey) => foreignKey.onDelete === "restrict")
     ).toBe(true);
   });

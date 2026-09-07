@@ -1412,3 +1412,79 @@ export const candidateResultHardRequirementAssessments = sqliteTable(
   ]
 );
 
+export const candidateResultReasons = sqliteTable(
+  "candidate_result_reason",
+  {
+    candidateResultReasonId: text("candidate_result_reason_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    reasonKind: text("reason_kind").notNull(),
+    subjectId: text("subject_id"),
+    reasonCode: text("reason_code").notNull(),
+    reasonOrdinal: integer("reason_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_result_reason_ordinal_unique").on(
+      table.candidateResultId,
+      table.reasonOrdinal
+    ),
+    uniqueIndex("candidate_result_reason_kind_unique")
+      .on(table.candidateResultId, table.reasonKind)
+      .where(sql`${table.subjectId} is null`),
+    uniqueIndex("candidate_result_reason_kind_subject_unique")
+      .on(table.candidateResultId, table.reasonKind, table.subjectId)
+      .where(sql`${table.subjectId} is not null`),
+    index("candidate_result_reason_result_created").on(
+      table.candidateResultId,
+      table.createdAt,
+      table.candidateResultReasonId
+    ),
+    check(
+      "candidate_result_reason_kind",
+      sql`${table.reasonKind} IN (
+        'missing_evidence',
+        'contradiction',
+        'ambiguous',
+        'assessment_unavailable',
+        'parse_failure',
+        'possible_duplicate',
+        'prompt_injection_flagged',
+        'low_confidence'
+      )`
+    ),
+    // Parameterized kinds require a printable subject; unparameterized kinds
+    // forbid one. reason_code is the canonical formatReasonCode string.
+    check(
+      "candidate_result_reason_subject",
+      sql`(
+        ${table.reasonKind} IN ('missing_evidence', 'contradiction', 'ambiguous')
+        AND ${table.subjectId} IS NOT NULL
+        AND length(${table.subjectId}) BETWEEN 1 AND 128
+        AND ${table.subjectId} NOT GLOB '*[^!-~]*'
+        AND ${table.reasonCode} = ${table.reasonKind} || ':' || ${table.subjectId}
+      ) OR (
+        ${table.reasonKind} IN (
+          'assessment_unavailable',
+          'parse_failure',
+          'possible_duplicate',
+          'prompt_injection_flagged',
+          'low_confidence'
+        )
+        AND ${table.subjectId} IS NULL
+        AND ${table.reasonCode} = ${table.reasonKind}
+      )`
+    ),
+    check(
+      "candidate_result_reason_reason_code",
+      sql`length(${table.reasonCode}) BETWEEN 1 AND 256
+        AND ${table.reasonCode} NOT GLOB '*[^!-~]*'`
+    ),
+    check("candidate_result_reason_ordinal", sql`${table.reasonOrdinal} >= 0`),
+    check("candidate_result_reason_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+

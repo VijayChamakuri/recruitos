@@ -4,15 +4,17 @@ import { createDomainError, type DomainError } from "../errors/domain-error.js";
 import { err, ok, type Result } from "../errors/result.js";
 
 /**
- * The closed reason-code vocabulary from design invariant P5. Every kind that
- * carries a parameter (for example `missing_evidence:<dimension>`) is
- * structural here: `{ kind, subjectId }`. `formatReasonCode` produces the
- * display and storage string; `parseReasonCode` is the inverse, used to
- * validate stored text against this closed set at the app layer, since a
- * parameterized form cannot be a SQL CHECK enum.
+ * The closed reason-code vocabulary. P5 routing predicates are parameterized
+ * (`missing_evidence:<dimension>`) or bare (`parse_failure`). Architecture also
+ * names `assessment_unavailable` for results that cannot produce a complete
+ * packet. Every parameterized kind is structural here: `{ kind, subjectId }`.
+ * `formatReasonCode` produces the display and storage string; `parseReasonCode`
+ * is the inverse, used to validate stored text against this closed set at the
+ * app layer, since a parameterized form cannot be a SQL CHECK enum.
  *
  * The predicate logic that decides which reason code fires for a candidate is
- * a later pipeline slice. This module only names the closed vocabulary.
+ * a later pipeline slice. This module only names the closed vocabulary and
+ * the committed listing precedence.
  */
 export const REASON_CODE_KINDS_WITH_SUBJECT = [
   "missing_evidence",
@@ -21,6 +23,7 @@ export const REASON_CODE_KINDS_WITH_SUBJECT = [
 ] as const;
 
 export const REASON_CODE_KINDS_WITHOUT_SUBJECT = [
+  "assessment_unavailable",
   "parse_failure",
   "possible_duplicate",
   "prompt_injection_flagged",
@@ -45,6 +48,7 @@ export const ReasonCodeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("missing_evidence"), subjectId: reasonCodeSubjectId }).strict(),
   z.object({ kind: z.literal("contradiction"), subjectId: reasonCodeSubjectId }).strict(),
   z.object({ kind: z.literal("ambiguous"), subjectId: reasonCodeSubjectId }).strict(),
+  z.object({ kind: z.literal("assessment_unavailable") }).strict(),
   z.object({ kind: z.literal("parse_failure") }).strict(),
   z.object({ kind: z.literal("possible_duplicate") }).strict(),
   z.object({ kind: z.literal("prompt_injection_flagged") }).strict(),
@@ -53,7 +57,31 @@ export const ReasonCodeSchema = z.discriminatedUnion("kind", [
 
 export type ReasonCode = z.infer<typeof ReasonCodeSchema>;
 
+/**
+ * Listing and queue order for named reasons. Unavailable diagnostics rank
+ * ahead of P5 routing predicates; P5 table order follows, with
+ * `low_confidence` last as the threshold-only remainder.
+ */
+export const REASON_CODE_PRECEDENCE = [
+  "assessment_unavailable",
+  "parse_failure",
+  "prompt_injection_flagged",
+  "possible_duplicate",
+  "contradiction",
+  "missing_evidence",
+  "ambiguous",
+  "low_confidence"
+] as const satisfies readonly ReasonCodeKind[];
+
 export const MAXIMUM_REASON_CODE_TEXT_LENGTH = 256;
+
+export function reasonCodeSubject(reasonCode: ReasonCode): string | null {
+  return "subjectId" in reasonCode ? reasonCode.subjectId : null;
+}
+
+export function reasonCodePrecedence(kind: ReasonCodeKind): number {
+  return REASON_CODE_PRECEDENCE.indexOf(kind);
+}
 
 /**
  * Produces the canonical display and storage string for a structural reason
