@@ -116,6 +116,10 @@ export type HardRequirementAssessmentId = z.infer<typeof HardRequirementAssessme
 export const ProposalIdSchema = printableAsciiId.brand<"ProposalId">();
 export type ProposalId = z.infer<typeof ProposalIdSchema>;
 
+export const ProposalEvidenceSpanIdSchema =
+  printableAsciiId.brand<"ProposalEvidenceSpanId">();
+export type ProposalEvidenceSpanId = z.infer<typeof ProposalEvidenceSpanIdSchema>;
+
 export const RequirementIdSchema = printableAsciiId.brand<"RequirementId">();
 export type RequirementId = z.infer<typeof RequirementIdSchema>;
 
