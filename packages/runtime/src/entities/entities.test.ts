@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,17 +40,6 @@ import {
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 const temporaryDirectories: string[] = [];
-
-/**
- * Reads the migration count from the local journal so adding a migration does
- * not break unrelated idempotency assertions.
- */
-function localMigrationCount(): number {
-  const journal = JSON.parse(
-    readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8")
-  ) as { entries: readonly unknown[] };
-  return journal.entries.length;
-}
 
 async function openMigratedDatabase(): Promise<RuntimeDatabaseConnection> {
   const directory = await mkdtemp(join(tmpdir(), "recruitos-entities-test-"));
@@ -504,44 +492,6 @@ describe("immutable entity persistence", () => {
 });
 
 describe("immutable entity database constraints", () => {
-  it("rejects updates, deletes, and replacements of stored rows", async () => {
-    const connection = await openMigratedDatabase();
-    const database = nativeDatabase(connection);
-
-    unwrap(
-      runImmediateTransaction(connection, (context) => {
-        seedCandidateAndDocument(context);
-        return ok(undefined);
-      })
-    );
-
-    expect(() =>
-      database.prepare("UPDATE candidate SET channel = 'sourced' WHERE candidate_id = ?").run("candidate-1")
-    ).toThrow(/candidate is immutable/u);
-    expect(() =>
-      database.prepare("DELETE FROM candidate WHERE candidate_id = ?").run("candidate-1")
-    ).toThrow(/candidate is immutable/u);
-    expect(() =>
-      database
-        .prepare(
-          `INSERT OR REPLACE INTO candidate (
-            candidate_id, source_system, source_key, channel, corpus_tag, is_synthetic, created_at
-          ) VALUES (?, ?, ?, ?, ?, 1, ?)`
-        )
-        .run("candidate-1", "synthetic_corpus", "tier-one/0001", "sourced", "main", 1)
-    ).toThrow(/candidate is immutable/u);
-    expect(() =>
-      database
-        .prepare("UPDATE source_document SET raw_text = 'tampered' WHERE source_document_id = ?")
-        .run("source-document-1")
-    ).toThrow(/source_document is immutable/u);
-    expect(() =>
-      database.prepare("DELETE FROM actor WHERE actor_id = ?").run(SYSTEM_ACTOR_ID)
-    ).toThrow(/actor is immutable/u);
-
-    expect(connection.close().ok).toBe(true);
-  });
-
   it("rejects a second candidate reusing one source system and key", async () => {
     const connection = await openMigratedDatabase();
 
@@ -701,42 +651,7 @@ describe("immutable entity database constraints", () => {
   });
 });
 
-describe("immutable entity migration", () => {
-  it("creates every immutable table and trigger exactly once", async () => {
-    const connection = await openMigratedDatabase();
-    const database = nativeDatabase(connection);
-
-    expect(connection.migrate()).toEqual({ ok: true, value: undefined });
-
-    expect(
-      database
-        .prepare(
-          `SELECT count(*) AS total
-           FROM sqlite_schema
-           WHERE type = 'table'
-             AND name IN ('actor', 'candidate', 'source_document', 'candidate_document')`
-        )
-        .get()
-    ).toEqual({ total: 4 });
-
-    expect(
-      database
-        .prepare(
-          `SELECT count(*) AS total
-           FROM sqlite_schema
-           WHERE type = 'trigger'
-             AND tbl_name IN ('actor', 'candidate', 'source_document', 'candidate_document')`
-        )
-        .get()
-    ).toEqual({ total: 12 });
-
-    expect(
-      database.prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations").get()
-    ).toEqual({ count: localMigrationCount() });
-
-    expect(connection.close().ok).toBe(true);
-  });
-
+describe("immutable entity table declarations", () => {
   it("declares every immutable table STRICT", async () => {
     const connection = await openMigratedDatabase();
 

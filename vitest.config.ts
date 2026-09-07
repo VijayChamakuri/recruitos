@@ -23,6 +23,13 @@ export default defineConfig({
           name: "architecture",
           include: ["scripts/**/*.test.mjs"]
         }
+      },
+      {
+        extends: true,
+        test: {
+          name: "integration",
+          include: ["tests/integration/**/*.test.ts"]
+        }
       }
     ],
     coverage: {
@@ -30,7 +37,10 @@ export default defineConfig({
       include: ["packages/core/src/**/*.ts", "packages/runtime/src/**/*.ts"],
       exclude: [
         "packages/core/src/**/*.test.ts",
-        "packages/runtime/src/**/*.test.ts"
+        "packages/runtime/src/**/*.test.ts",
+        // Adapter contracts declare types only and erase to empty modules,
+        // so there is no executable line for coverage to report on.
+        "packages/runtime/src/adapters/**/*.ts"
       ],
       thresholds: {
         branches: 100,
