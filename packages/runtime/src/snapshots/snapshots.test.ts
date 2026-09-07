@@ -609,9 +609,10 @@ describe("stored run input snapshot validation", () => {
     );
 
     database.exec(`
-      DROP TRIGGER run_input_snapshot_reject_update;
-      DROP TRIGGER run_input_snapshot_reject_delete;
-      DROP TRIGGER run_input_snapshot_reject_replace;
+      DROP TRIGGER IF EXISTS run_input_snapshot_reject_update;
+      DROP TRIGGER IF EXISTS run_input_snapshot_reject_delete;
+      DROP TRIGGER IF EXISTS run_input_snapshot_reject_replace;
+      DROP TRIGGER IF EXISTS triage_run_seal_reject_incomplete;
       CREATE TABLE run_input_snapshot_rebuilt (
         run_input_snapshot_id text PRIMARY KEY NOT NULL,
         content_json text NOT NULL,

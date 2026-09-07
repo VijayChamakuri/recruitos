@@ -576,13 +576,16 @@ function rebuildTableWithoutChecks(
       ? [
           "candidate_head_insert_result_owner",
           "candidate_head_update_result_owner",
-          "candidate_result_seal_reject_incomplete"
+          "candidate_result_seal_reject_incomplete",
+          "triage_run_member_reject_result_owner",
+          "triage_run_seal_reject_incomplete"
         ]
-      : table === "candidate_result_seal"
-        ? ["candidate_result_seal_reject_incomplete"]
-        : table === "score_result"
-          ? ["candidate_result_seal_reject_incomplete"]
-          : [];
+      : table === "candidate_result_seal" || table === "score_result"
+        ? [
+            "candidate_result_seal_reject_incomplete",
+            "triage_run_seal_reject_incomplete"
+          ]
+        : [];
   database.exec(`
     PRAGMA foreign_keys = OFF;
     DROP TRIGGER IF EXISTS ${table}_reject_update;
