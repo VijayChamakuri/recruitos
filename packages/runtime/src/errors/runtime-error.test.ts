@@ -9,7 +9,8 @@ describe("createRuntimeError", () => {
       "migration_required",
       "command_conflict",
       "version_conflict",
-      "not_found"
+      "not_found",
+      "demo_session_active"
     ] as const) {
       const error = createRuntimeError(code, "message", false);
       expect(error).toEqual({ code, message: "message", retryable: false });

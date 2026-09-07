@@ -9,6 +9,7 @@ import {
   actors,
   attemptWorkItems,
   auditEvents,
+  candidateDemographics,
   candidateDocuments,
   candidateHeads,
   triageAttempts,
@@ -30,6 +31,7 @@ import {
   corpusManifests,
   corpusMemberDocuments,
   corpusMembers,
+  demoSessions,
   dimensionAssessmentEvidenceSpans,
   dimensionAssessments,
   evidenceGaps,
@@ -384,7 +386,9 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["triage_run_member", triageRunMembers],
   ["triage_run_seal", triageRunSeals],
   ["triage_attempt", triageAttempts],
-  ["attempt_work_item", attemptWorkItems]
+  ["attempt_work_item", attemptWorkItems],
+  ["candidate_demographics", candidateDemographics],
+  ["demo_session", demoSessions]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {

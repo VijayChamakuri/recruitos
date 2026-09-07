@@ -21,6 +21,10 @@ export type AuditEventId = z.infer<typeof AuditEventIdSchema>;
 export const CandidateIdSchema = printableAsciiId.brand<"CandidateId">();
 export type CandidateId = z.infer<typeof CandidateIdSchema>;
 
+export const CandidateDemographicsIdSchema =
+  printableAsciiId.brand<"CandidateDemographicsId">();
+export type CandidateDemographicsId = z.infer<typeof CandidateDemographicsIdSchema>;
+
 export const CandidateDocumentIdSchema = printableAsciiId.brand<"CandidateDocumentId">();
 export type CandidateDocumentId = z.infer<typeof CandidateDocumentIdSchema>;
 
@@ -70,6 +74,13 @@ export type CommandId = z.infer<typeof CommandIdSchema>;
 
 export const CorpusManifestIdSchema = printableAsciiId.brand<"CorpusManifestId">();
 export type CorpusManifestId = z.infer<typeof CorpusManifestIdSchema>;
+
+export const SYNTHETIC_DEMO_SESSION_ID = "synthetic_demo";
+
+export const DemoSessionIdSchema = z
+  .literal(SYNTHETIC_DEMO_SESSION_ID)
+  .brand<"DemoSessionId">();
+export type DemoSessionId = z.infer<typeof DemoSessionIdSchema>;
 
 export const CorpusManifestSealIdSchema = printableAsciiId.brand<"CorpusManifestSealId">();
 export type CorpusManifestSealId = z.infer<typeof CorpusManifestSealIdSchema>;

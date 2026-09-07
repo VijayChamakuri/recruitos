@@ -5,7 +5,10 @@ export * from "./commands/index.js";
 export * from "./composition/index.js";
 export * from "./corpus/index.js";
 export * from "./db/index.js";
+export * from "./demo-session/index.js";
+export * from "./demographics/index.js";
 export * from "./entities/index.js";
+
 export * from "./errors/index.js";
 export * from "./evidence/index.js";
 export * from "./extraction/index.js";
