@@ -46,6 +46,8 @@ import {
   StructuredFactIdSchema,
   StructuredFactProvenanceIdSchema,
   TriageRunIdSchema,
+  TriageRunMemberIdSchema,
+  TriageRunSealIdSchema,
   type CandidateId,
   type SourceDocumentId
 } from "./ids.js";
@@ -95,7 +97,9 @@ const schemas = [
   StructuredFactEvidenceSpanIdSchema,
   StructuredFactIdSchema,
   StructuredFactProvenanceIdSchema,
-  TriageRunIdSchema
+  TriageRunIdSchema,
+  TriageRunMemberIdSchema,
+  TriageRunSealIdSchema
 ] as const;
 
 describe("branded ID schemas", () => {

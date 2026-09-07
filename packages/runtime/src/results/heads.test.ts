@@ -199,6 +199,7 @@ function rebuildTableWithoutChecks(
     "candidate_head_reject_update",
     "candidate_head_reject_delete",
     "candidate_head_reject_replace",
+    "triage_run_seal_reject_incomplete",
     ...extraTriggers
   ];
   database.exec(`

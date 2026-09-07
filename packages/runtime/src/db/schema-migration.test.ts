@@ -10,6 +10,9 @@ import {
   auditEvents,
   candidateDocuments,
   candidateHeads,
+  triageRunMembers,
+  triageRunSeals,
+  triageRuns,
   candidateResultDimensionAssessments,
   candidateResultEvidenceGaps,
   candidateResultEvidenceSpans,
@@ -374,7 +377,10 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["proposal_evidence_span", proposalEvidenceSpans],
   ["review_decision", reviewDecisions],
   ["proposal_head", proposalHeads],
-  ["candidate_head", candidateHeads]
+  ["candidate_head", candidateHeads],
+  ["triage_run", triageRuns],
+  ["triage_run_member", triageRunMembers],
+  ["triage_run_seal", triageRunSeals]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {
@@ -420,6 +426,16 @@ describe("Drizzle schema matches the committed migrations", () => {
     );
     expect(sql).toMatch(
       /FOREIGN KEY \(`seal_id`\) REFERENCES `candidate_result_seal`\(`candidate_result_seal_id`\)[^\n]*DEFERRABLE INITIALLY DEFERRED/u
+    );
+  });
+
+  it("keeps the triage run seal cycle deferred to commit", () => {
+    const sql = readFileSync(
+      join(migrationsFolder, "0016_triage_run_foundation.sql"),
+      "utf8"
+    );
+    expect(sql).toMatch(
+      /FOREIGN KEY \(`seal_id`\) REFERENCES `triage_run_seal`\(`triage_run_seal_id`\)[^\n]*DEFERRABLE INITIALLY DEFERRED/u
     );
   });
 
