@@ -1621,4 +1621,3 @@ export const resolutionTaskHeads = sqliteTable(
   ]
 );
 
-
