@@ -71,6 +71,13 @@
       "when": 1788769711984,
       "tag": "0009_structured_fact_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788770906573,
+      "tag": "0010_candidate_result_foundation",
+      "breakpoints": true
     }
   ]
 }

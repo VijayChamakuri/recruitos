@@ -9,6 +9,13 @@ import {
   actors,
   auditEvents,
   candidateDocuments,
+  candidateResultDimensionAssessments,
+  candidateResultEvidenceGaps,
+  candidateResultEvidenceSpans,
+  candidateResultFactConflicts,
+  candidateResultHardRequirementAssessments,
+  candidateResultStructuredFacts,
+  candidateTriageResults,
   candidates,
   commandReceipts,
   corpusManifestSeals,
@@ -33,6 +40,7 @@ import {
   rubrics,
   runInputSnapshots,
   runtimeMigrationSmoke,
+  scoreResults,
   sourceDocuments,
   structuredFactEvidenceSpans,
   structuredFactProvenances,
@@ -263,7 +271,15 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["fact_conflict", factConflicts],
   ["fact_conflict_member", factConflictMembers],
   ["hard_requirement_assessment", hardRequirementAssessments],
-  ["hard_requirement_assessment_fact", hardRequirementAssessmentFacts]
+  ["hard_requirement_assessment_fact", hardRequirementAssessmentFacts],
+  ["candidate_triage_result", candidateTriageResults],
+  ["score_result", scoreResults],
+  ["candidate_result_evidence_span", candidateResultEvidenceSpans],
+  ["candidate_result_evidence_gap", candidateResultEvidenceGaps],
+  ["candidate_result_dimension_assessment", candidateResultDimensionAssessments],
+  ["candidate_result_structured_fact", candidateResultStructuredFacts],
+  ["candidate_result_fact_conflict", candidateResultFactConflicts],
+  ["candidate_result_hard_requirement_assessment", candidateResultHardRequirementAssessments]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {

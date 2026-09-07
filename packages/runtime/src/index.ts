@@ -7,5 +7,6 @@ export * from "./errors/index.js";
 export * from "./evidence/index.js";
 export * from "./extraction/index.js";
 export * from "./facts/index.js";
+export * from "./results/index.js";
 export * from "./roles/index.js";
 export * from "./snapshots/index.js";

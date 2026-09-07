@@ -5,6 +5,13 @@ import {
   actors,
   auditEvents,
   candidateDocuments,
+  candidateResultDimensionAssessments,
+  candidateResultEvidenceGaps,
+  candidateResultEvidenceSpans,
+  candidateResultFactConflicts,
+  candidateResultHardRequirementAssessments,
+  candidateResultStructuredFacts,
+  candidateTriageResults,
   candidates,
   commandReceipts,
   corpusManifestSeals,
@@ -28,6 +35,7 @@ import {
   rubricDimensions,
   rubrics,
   runInputSnapshots,
+  scoreResults,
   structuredFactEvidenceSpans,
   structuredFactProvenances,
   structuredFacts,
@@ -440,6 +448,72 @@ describe("runtime Drizzle schema", () => {
         ...memberConfig.foreignKeys,
         ...assessmentConfig.foreignKeys,
         ...assessmentFactConfig.foreignKeys
+      ].every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
+  });
+
+  it("exposes the candidate result, score, and association constraints", () => {
+    const resultConfig = getTableConfig(candidateTriageResults);
+    expect(resultConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "candidate_triage_result_availability",
+      "candidate_triage_result_availability_status",
+      "candidate_triage_result_content_hash",
+      "candidate_triage_result_content_json",
+      "candidate_triage_result_created_at",
+      "candidate_triage_result_kind",
+      "candidate_triage_result_lineage",
+      "candidate_triage_result_status"
+    ]);
+    expect(resultConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "candidate_triage_result_candidate_created",
+      "candidate_triage_result_content_hash_unique"
+    ]);
+    expect(resultConfig.foreignKeys).toHaveLength(2);
+    expect(resultConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
+      true
+    );
+
+    const scoreConfig = getTableConfig(scoreResults);
+    expect(scoreConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "score_result_aggregate_basis_points",
+      "score_result_aggregate_text",
+      "score_result_confidence_basis_points",
+      "score_result_confidence_text",
+      "score_result_content_hash",
+      "score_result_content_json",
+      "score_result_created_at"
+    ]);
+    expect(scoreConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "score_result_candidate_result_unique",
+      "score_result_content_hash_unique"
+    ]);
+    expect(scoreConfig.foreignKeys).toHaveLength(1);
+    expect(scoreConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+
+    const spanConfig = getTableConfig(candidateResultEvidenceSpans);
+    const gapConfig = getTableConfig(candidateResultEvidenceGaps);
+    const assessmentConfig = getTableConfig(candidateResultDimensionAssessments);
+    const factConfig = getTableConfig(candidateResultStructuredFacts);
+    const conflictConfig = getTableConfig(candidateResultFactConflicts);
+    const requirementConfig = getTableConfig(candidateResultHardRequirementAssessments);
+    expect(gapConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "candidate_result_evidence_gap_dimension_unique",
+      "candidate_result_evidence_gap_ordinal_unique",
+      "candidate_result_evidence_gap_unique"
+    ]);
+    expect(assessmentConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "candidate_result_dimension_assessment_dimension_unique",
+      "candidate_result_dimension_assessment_ordinal_unique",
+      "candidate_result_dimension_assessment_unique"
+    ]);
+    expect(
+      [
+        ...spanConfig.foreignKeys,
+        ...gapConfig.foreignKeys,
+        ...assessmentConfig.foreignKeys,
+        ...factConfig.foreignKeys,
+        ...conflictConfig.foreignKeys,
+        ...requirementConfig.foreignKeys
       ].every((foreignKey) => foreignKey.onDelete === "restrict")
     ).toBe(true);
   });
