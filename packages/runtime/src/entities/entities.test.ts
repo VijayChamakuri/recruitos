@@ -6,15 +6,23 @@ import { fileURLToPath } from "node:url";
 
 import { err, ok, sha256Hex, type Result } from "@recruitos/core";
 import type BetterSqlite3 from "better-sqlite3";
+import fc from "fast-check";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runImmediateTransaction, type ImmediateTransactionContext } from "../commands/index.js";
 import { openRuntimeDatabase, type RuntimeDatabaseConnection } from "../db/index.js";
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
 import {
+  ActorDraftSchema,
+  ActorSchema,
+  CandidateDraftSchema,
+  CandidateSchema,
+  MAXIMUM_NORMALIZED_DOCUMENT_BYTES,
   MAXIMUM_NORMALIZED_DOCUMENT_LENGTH,
   MAXIMUM_RAW_DOCUMENT_BYTES,
-  SYSTEM_ACTOR_ID
+  SYSTEM_ACTOR_ID,
+  SourceDocumentDraftSchema,
+  SourceDocumentSchema
 } from "./schemas.js";
 import {
   insertActor,
@@ -73,6 +81,21 @@ function unwrap<T>(result: Result<T, RuntimeError>): T {
     throw new Error(result.error.message);
   }
   return result.value;
+}
+
+/** Returns a copy of `base` whose `key` getter throws, as a hostile caller would. */
+function withThrowingGetter(
+  base: Record<string, unknown>,
+  key: string
+): Record<string, unknown> {
+  const poisoned: Record<string, unknown> = { ...base };
+  Object.defineProperty(poisoned, key, {
+    get() {
+      throw new TypeError("hostile getter");
+    },
+    enumerable: true
+  });
+  return poisoned;
 }
 
 function actorDraft(overrides: Record<string, unknown> = {}) {
@@ -726,5 +749,428 @@ describe("immutable entity migration", () => {
     }
 
     expect(connection.close().ok).toBe(true);
+  });
+});
+
+describe("immutable entity boundary failures", () => {
+  it("converts hostile draft getters into typed preparation errors", () => {
+    expect(prepareActor(withThrowingGetter(actorDraft(), "actorId"))).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Actor preparation failed" })
+    });
+    expect(
+      prepareCandidate(withThrowingGetter(candidateDraft(), "candidateId"))
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Candidate preparation failed" })
+    });
+    expect(
+      prepareSourceDocument(
+        withThrowingGetter(sourceDocumentDraft(), "sourceDocumentId")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Source document preparation failed" })
+    });
+    expect(
+      prepareCandidateDocument(
+        withThrowingGetter(candidateDocumentDraft(), "candidateDocumentId")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Candidate document preparation failed"
+      })
+    });
+  });
+
+  it("rejects a source document draft that is not the declared shape", () => {
+    const missingIdentity = { rawText: "a", normalizedText: "a", createdAt: 1 };
+    expect(prepareSourceDocument(missingIdentity)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid source document input" })
+    });
+    expect(prepareSourceDocument(sourceDocumentDraft({ unexpected: true }))).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid source document input" })
+    });
+  });
+
+  it("converts a failing database read into a typed error", () => {
+    // A live transaction whose statements fail, the way a disk error would
+    // surface mid-read.
+    const failingContext = {
+      nativeDatabase: {
+        inTransaction: true,
+        prepare() {
+          throw new Error("disk I/O error");
+        }
+      }
+    };
+
+    expect(readActor(failingContext, "actor-recruiter-1")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Actor read failed" })
+    });
+    expect(readCandidate(failingContext, "candidate-1")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Candidate read failed" })
+    });
+    expect(readSourceDocument(failingContext, "source-document-1")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Source document read failed" })
+    });
+    expect(readCandidateDocument(failingContext, "candidate-document-1")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Candidate document read failed" })
+    });
+  });
+
+  it("rejects raw text that is not well-formed UTF-16", () => {
+    expect(
+      prepareSourceDocument(sourceDocumentDraft({ rawText: "lone \ud800 surrogate" }))
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Source document text is not well-formed UTF-16"
+      })
+    });
+  });
+
+  it("rejects normalized text over the byte limit while under the length limit", () => {
+    // 45000 three-byte characters: 45000 UTF-16 units is inside the length
+    // limit, but 135000 UTF-8 bytes is over the byte limit.
+    const dense = "一".repeat(45_000);
+    expect(dense.length).toBeLessThanOrEqual(MAXIMUM_NORMALIZED_DOCUMENT_LENGTH);
+    expect(new TextEncoder().encode(dense).length).toBeGreaterThan(
+      MAXIMUM_NORMALIZED_DOCUMENT_BYTES
+    );
+
+    expect(prepareSourceDocument(sourceDocumentDraft({ normalizedText: dense }))).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Source document normalized text exceeds the byte limit"
+      })
+    });
+  });
+
+  it("refuses every read and write outside an active transaction", async () => {
+    const connection = await openMigratedDatabase();
+    const message = "Immutable entities require an active command transaction";
+    const contexts = [undefined, null, {}, { nativeDatabase: null }];
+    const writes = [
+      [insertActor, unwrap(prepareActor(actorDraft()))],
+      [insertCandidate, unwrap(prepareCandidate(candidateDraft()))],
+      [insertSourceDocument, unwrap(prepareSourceDocument(sourceDocumentDraft()))],
+      [
+        insertCandidateDocument,
+        unwrap(prepareCandidateDocument(candidateDocumentDraft()))
+      ]
+    ] as const;
+    const reads = [readActor, readCandidate, readSourceDocument, readCandidateDocument];
+
+    for (const context of contexts) {
+      for (const [insert, prepared] of writes) {
+        expect(insert(context, prepared)).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message })
+        });
+      }
+      for (const read of reads) {
+        expect(read(context, "any-id")).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message })
+        });
+      }
+    }
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("refuses unprepared records on every insert", async () => {
+    const connection = await openMigratedDatabase();
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        const actor = unwrap(prepareActor(actorDraft()));
+        const candidate = unwrap(prepareCandidate(candidateDraft()));
+        const document = unwrap(prepareSourceDocument(sourceDocumentDraft()));
+        const candidateDocument = unwrap(
+          prepareCandidateDocument(candidateDocumentDraft())
+        );
+
+        // A structural copy is not the registered record, and neither is a
+        // record prepared for a different entity.
+        expect(insertSourceDocument(context, { ...document })).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Invalid prepared source document" })
+        });
+        expect(insertSourceDocument(context, candidateDocument)).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Invalid prepared source document" })
+        });
+        expect(insertCandidateDocument(context, { ...candidateDocument })).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Invalid prepared candidate document"
+          })
+        });
+        expect(insertCandidateDocument(context, actor)).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Invalid prepared candidate document"
+          })
+        });
+        expect(insertCandidate(context, candidate)).toEqual({ ok: true, value: candidate });
+        return ok(undefined);
+      })
+    );
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("reports a duplicate actor insert as a typed failure", async () => {
+    const connection = await openMigratedDatabase();
+
+    unwrap(
+      runImmediateTransaction(connection, (context) =>
+        insertActor(context, unwrap(prepareActor(actorDraft())))
+      )
+    );
+
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        insertActor(context, unwrap(prepareActor(actorDraft({ displayName: "Copy" }))))
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Actor insert failed" })
+    });
+
+    expect(connection.close().ok).toBe(true);
+  });
+});
+
+describe("stored row validation", () => {
+  /**
+   * SQLite length() counts code points while the domain schemas count UTF-16
+   * code units, so a value can satisfy every CHECK and still be out of domain
+   * range. Dropping the update trigger reproduces that the way on-disk
+   * corruption would.
+   */
+  const astralOverLimit = "\u{1F600}".repeat(150);
+
+  it("rejects a stored actor whose display name is out of domain range", async () => {
+    const connection = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+
+    unwrap(
+      runImmediateTransaction(connection, (context) =>
+        insertActor(context, unwrap(prepareActor(actorDraft())))
+      )
+    );
+
+    expect(astralOverLimit.length).toBe(300);
+    expect(database.prepare("SELECT length(?) AS n").get(astralOverLimit)).toEqual({
+      n: 150
+    });
+
+    database.exec("DROP TRIGGER actor_reject_update");
+    database
+      .prepare("UPDATE actor SET display_name = ? WHERE actor_id = ?")
+      .run(astralOverLimit, "actor-recruiter-1");
+
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readActor(context, "actor-recruiter-1")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Stored actor is invalid" })
+    });
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a stored candidate whose source key is not printable ASCII", async () => {
+    const connection = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedCandidateAndDocument(context);
+        return ok(undefined);
+      })
+    );
+
+    database.exec("DROP TRIGGER candidate_reject_update");
+    database
+      .prepare("UPDATE candidate SET source_key = ? WHERE candidate_id = ?")
+      .run("\u{1F600}key", "candidate-1");
+
+    expect(
+      runImmediateTransaction(connection, (context) => readCandidate(context, "candidate-1"))
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Stored candidate is invalid" })
+    });
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a stored document whose normalized length is inside the SQL bound but wrong", async () => {
+    const connection = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+    const normalizedText = sourceDocumentDraft().normalizedText;
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedCandidateAndDocument(context);
+        return ok(undefined);
+      })
+    );
+
+    // The CHECK permits length() through 2 * length(); the schema requires the
+    // exact UTF-16 count, so a value inside the CHECK still fails the domain.
+    const inflated = normalizedText.length + 3;
+    database.exec("DROP TRIGGER source_document_reject_update");
+    database
+      .prepare("UPDATE source_document SET normalized_length = ? WHERE source_document_id = ?")
+      .run(inflated, "source-document-1");
+
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readSourceDocument(context, "source-document-1")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Stored source document is invalid" })
+    });
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a stored candidate document whose label is out of domain range", async () => {
+    const connection = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedCandidateAndDocument(context);
+        unwrap(
+          insertCandidateDocument(
+            context,
+            unwrap(prepareCandidateDocument(candidateDocumentDraft()))
+          )
+        );
+        return ok(undefined);
+      })
+    );
+
+    database.exec("DROP TRIGGER candidate_document_reject_update");
+    database
+      .prepare("UPDATE candidate_document SET label = ? WHERE candidate_document_id = ?")
+      .run(astralOverLimit, "candidate-document-1");
+
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readCandidateDocument(context, "candidate-document-1")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Stored candidate document is invalid"
+      })
+    });
+
+    expect(connection.close().ok).toBe(true);
+  });
+});
+
+describe("draft schemas imply their entity schemas", () => {
+  // prepareActor, prepareCandidate, and prepareSourceDocument parse the entity
+  // schema without a failure branch because the draft schema already proves it.
+  // These properties are what make that safe; if one fails, restore the branch.
+  const printableAscii = fc.stringMatching(/^[\x21-\x7e]{1,64}$/u);
+
+  it("holds for every actor draft", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          actorId: printableAscii.filter((value) => value !== SYSTEM_ACTOR_ID),
+          displayName: fc.string({ minLength: 1, maxLength: 200 }),
+          createdAt: fc.nat()
+        }),
+        (raw) => {
+          const draft = ActorDraftSchema.safeParse(raw);
+          fc.pre(draft.success);
+          return ActorSchema.safeParse({
+            actorId: draft.data.actorId,
+            actorKind: "human",
+            displayName: draft.data.displayName,
+            createdAt: draft.data.createdAt
+          }).success;
+        }
+      ),
+      { numRuns: 500 }
+    );
+  });
+
+  it("holds for every candidate draft", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          candidateId: printableAscii,
+          sourceSystem: fc.stringMatching(/^[a-z][a-z0-9]{0,20}$/u),
+          sourceKey: printableAscii,
+          channel: fc.constantFrom("inbound", "sourced"),
+          corpusTag: fc.constantFrom("main", "variant"),
+          createdAt: fc.nat()
+        }),
+        (raw) => {
+          const draft = CandidateDraftSchema.safeParse(raw);
+          fc.pre(draft.success);
+          return CandidateSchema.safeParse({ ...draft.data, isSynthetic: true }).success;
+        }
+      ),
+      { numRuns: 500 }
+    );
+  });
+
+  it("holds for every source document draft inside the capacity bounds", () => {
+    const encoder = new TextEncoder();
+    fc.assert(
+      fc.property(
+        fc.record({
+          sourceDocumentId: printableAscii,
+          rawText: fc.string({ minLength: 1, maxLength: 200, unit: "grapheme" }),
+          normalizedText: fc.string({ minLength: 1, maxLength: 200, unit: "grapheme" }),
+          createdAt: fc.nat()
+        }),
+        (raw) => {
+          const draft = SourceDocumentDraftSchema.safeParse(raw);
+          fc.pre(draft.success);
+          const rawByteLength = encoder.encode(draft.data.rawText).length;
+          const normalizedByteLength = encoder.encode(draft.data.normalizedText).length;
+          fc.pre(
+            rawByteLength <= MAXIMUM_RAW_DOCUMENT_BYTES &&
+              normalizedByteLength <= MAXIMUM_NORMALIZED_DOCUMENT_BYTES &&
+              draft.data.normalizedText.length <= MAXIMUM_NORMALIZED_DOCUMENT_LENGTH
+          );
+          return SourceDocumentSchema.safeParse({
+            sourceDocumentId: draft.data.sourceDocumentId,
+            rawText: draft.data.rawText,
+            rawHash: sha256Hex(draft.data.rawText),
+            rawByteLength,
+            normalizedText: draft.data.normalizedText,
+            normalizedHash: sha256Hex(draft.data.normalizedText),
+            normalizedLength: draft.data.normalizedText.length,
+            normalizedByteLength,
+            createdAt: draft.data.createdAt
+          }).success;
+        }
+      ),
+      { numRuns: 500 }
+    );
   });
 });

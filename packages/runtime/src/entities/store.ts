@@ -92,16 +92,16 @@ export function prepareActor(draftInput: unknown): Result<Actor, RuntimeError> {
     if (!draft.success) {
       return err(persistenceFailure("Invalid actor input"));
     }
-    const actor = ActorSchema.safeParse({
+    // The draft schema already validated every field this parse re-checks, so
+    // it cannot fail; a hypothetical throw lands in the catch below. The
+    // draft-implies-entity property test guards that invariant.
+    const actor = ActorSchema.parse({
       actorId: draft.data.actorId,
       actorKind: "human",
       displayName: draft.data.displayName,
       createdAt: draft.data.createdAt
     });
-    if (!actor.success) {
-      return err(persistenceFailure("Invalid actor input"));
-    }
-    return ok(register(preparedActors, actor.data));
+    return ok(register(preparedActors, actor));
   } catch {
     return err(persistenceFailure("Actor preparation failed"));
   }
@@ -113,11 +113,9 @@ export function prepareCandidate(draftInput: unknown): Result<Candidate, Runtime
     if (!draft.success) {
       return err(persistenceFailure("Invalid candidate input"));
     }
-    const candidate = CandidateSchema.safeParse({ ...draft.data, isSynthetic: true });
-    if (!candidate.success) {
-      return err(persistenceFailure("Invalid candidate input"));
-    }
-    return ok(register(preparedCandidates, candidate.data));
+    // Unreachable failure, same reasoning as prepareActor.
+    const candidate = CandidateSchema.parse({ ...draft.data, isSynthetic: true });
+    return ok(register(preparedCandidates, candidate));
   } catch {
     return err(persistenceFailure("Candidate preparation failed"));
   }
@@ -158,7 +156,9 @@ export function prepareSourceDocument(
       );
     }
 
-    const document = SourceDocumentSchema.safeParse({
+    // Unreachable failure: the draft schema plus the three bound checks above
+    // already establish every constraint this parse re-checks.
+    const document = SourceDocumentSchema.parse({
       sourceDocumentId: draft.data.sourceDocumentId,
       rawText: draft.data.rawText,
       rawHash: sha256Hex(draft.data.rawText),
@@ -169,10 +169,7 @@ export function prepareSourceDocument(
       normalizedByteLength,
       createdAt: draft.data.createdAt
     });
-    if (!document.success) {
-      return err(persistenceFailure("Invalid source document input"));
-    }
-    return ok(register(preparedSourceDocuments, document.data));
+    return ok(register(preparedSourceDocuments, document));
   } catch {
     return err(persistenceFailure("Source document preparation failed"));
   }
