@@ -39,7 +39,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | ready PR #32, rematched onto ade15ef |
+| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | ready PR #32 |
 | Claude Code | (none) | T9 quote relocation merged #35. Next pipeline steps stay in `packages/core/src/{matching,pipeline}`. | next |
 | Antigravity | (none) | createRuntime wiring + e2e/eval/bench harnesses. Merged #31. | idle-complete |
 
@@ -89,3 +89,4 @@ your own rows plus the log.
 - 2026-09-07 Cursor: #32 ready on f9304d2. pnpm check 978 plus 21 integration exit 0, test:coverage 831 exit 0 (runs/store and normalize 100 percent), standalone integration 21, diff-check clean, em-dash scan clean. Attempt-readiness waits for the next drizzle PR.
 - 2026-09-07 Claude: T9 part 1 (PR #33) merged at f9304d2. Starting T9 part 2, the pure decision pipeline, six PRs on b/ branches. Step 1 on b/core-quote-relocation: committed one-to-one fold table (ASCII case, quote family, dash family) plus relocateQuote and relocateQuoteClaim. Exact tier then folded tier, tier order beats position, repeated quotes take the lowest start, model-supplied offsets are discarded and the quote is relocated from stored text. Unlocated returns a typed invalid_evidence failure with details.reason. pnpm check exit 0 (991 core and runtime tests, 21 integration), test:coverage exit 0 with All files 100 percent, git diff --check clean, no em dashes. Files touched: packages/core/src/matching/ only.
 - 2026-09-07 Cursor: merged origin/main ade15ef into #32 after #35 (quote relocation). COORDINATION conflict only. Matching files auto-merged. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: #32 ready on ade15ef. pnpm check 1011 plus 21 integration exit 0, test:coverage 864 exit 0 (runs/store, fold, relocate 100 percent), standalone integration 21, diff-check clean, em-dash scan clean.
