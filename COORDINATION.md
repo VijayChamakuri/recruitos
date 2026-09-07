@@ -38,7 +38,7 @@ your own rows plus the log.
 | Agent | Branch | Item | State |
 |---|---|---|---|
 | Cursor | (pending) | Takes the run + scheduler migration: `triage_run` + `triage_run_member` + `triage_run_seal`, then `triage_attempt` + `attempt_work_item`. Holds the migration lock. | assigned |
-| Claude Code | b/core-text-normalization | T9 part 1: `packages/core/src/matching/normalizeSourceText` (BOM strip, CR/CRLF fold, NFC), policy version 1. Then the decision pipeline (`packages/core/src/pipeline/`, Opus). | building |
+| Claude Code | b/core-quote-relocation | T9 part 2, step 1 of 6: quote relocation in `packages/core/src/matching/`. Then multi-document consolidation, dimension assessments, hard requirements, routing, and proposals in `packages/core/src/pipeline/`, one PR each. | ready PR |
 | Antigravity | c/runtime-composition-wire-and-harnesses | Wire apps/ to createRuntime from #28 + scaffold tests/e2e/ (6 stubs), tests/eval/, bench/ | ready PR |
 
 ## Hard rules
@@ -80,3 +80,4 @@ your own rows plus the log.
 - 2026-09-07 Antigravity: started c/runtime-composition-wire-and-harnesses to wire createRuntime in apps/ and scaffold e2e, eval, and bench harnesses.
 - 2026-09-07 Antigravity: wired apps/ to createRuntime from #28 via RuntimeRecruitosComposition, added tests/e2e Playwright harness with 6 required workflow stubs (skipped), added tests/eval harness (Class 1 gate, Class 2 live IoU/bipartite matching, Class 3 synthetic bias audit demo), and bench/ suite (CLI, Web SSR, Matching). All 935 tests passing, 100 percent coverage on core/runtime, zero em dashes. Ready for review.
 - 2026-09-07 Claude: PR #30 (use-case command contract) merged. Taking T9. Part 1 on b/core-text-normalization: packages/core/src/matching/normalizeSourceText, policy version 1 (strip one leading BOM, fold CR and CRLF to LF, Unicode NFC, nothing else, content preserved verbatim). pnpm check 958, test:coverage exit 0 / 100 percent, integration 21, no em dashes. Opening PR. Part 2 is the decision pipeline (packages/core/src/pipeline/), wants Opus.
+- 2026-09-07 Claude: T9 part 1 (PR #33) merged at f9304d2. Starting T9 part 2, the pure decision pipeline, six PRs on b/ branches. Step 1 on b/core-quote-relocation: committed one-to-one fold table (ASCII case, quote family, dash family) plus relocateQuote and relocateQuoteClaim. Exact tier then folded tier, tier order beats position, repeated quotes take the lowest start, model-supplied offsets are discarded and the quote is relocated from stored text. Unlocated returns a typed invalid_evidence failure with details.reason. pnpm check exit 0 (991 core and runtime tests, 21 integration), test:coverage exit 0 with All files 100 percent, git diff --check clean, no em dashes. Files touched: packages/core/src/matching/ only.
