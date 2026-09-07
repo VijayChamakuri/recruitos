@@ -23,6 +23,7 @@ import {
   roles,
   rubricDimensions,
   rubrics,
+  runInputSnapshots,
   sourceDocuments
 } from "./schema.js";
 
@@ -331,5 +332,25 @@ describe("runtime Drizzle schema", () => {
     expect(
       failureConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")
     ).toBe(true);
+  });
+
+  it("exposes the content-addressed run input snapshot constraints and access paths", () => {
+    const snapshotConfig = getTableConfig(runInputSnapshots);
+    expect(snapshotConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "run_input_snapshot_content_hash",
+      "run_input_snapshot_content_json",
+      "run_input_snapshot_created_at",
+      "run_input_snapshot_extractor_version",
+      "run_input_snapshot_frozen_date",
+      "run_input_snapshot_prompt_template_version",
+      "run_input_snapshot_rubric_version"
+    ]);
+    expect(snapshotConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "run_input_snapshot_content_hash_unique",
+      "run_input_snapshot_frozen_date",
+      "run_input_snapshot_role"
+    ]);
+    expect(snapshotConfig.foreignKeys).toHaveLength(1);
+    expect(snapshotConfig.foreignKeys[0]!.onDelete).toBe("restrict");
   });
 });
