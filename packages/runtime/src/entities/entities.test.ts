@@ -283,6 +283,106 @@ describe("immutable entity persistence", () => {
     expect(connection.close().ok).toBe(true);
   });
 
+  it("returns undefined rather than an error for a row that does not exist", async () => {
+    const connection = await openMigratedDatabase();
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        expect(unwrap(readActor(context, "missing-actor"))).toBeUndefined();
+        expect(unwrap(readCandidate(context, "missing-candidate"))).toBeUndefined();
+        expect(unwrap(readSourceDocument(context, "missing-document"))).toBeUndefined();
+        expect(
+          unwrap(readCandidateDocument(context, "missing-candidate-document"))
+        ).toBeUndefined();
+        return ok(undefined);
+      })
+    );
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects malformed identifiers on every read", async () => {
+    const connection = await openMigratedDatabase();
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        expect(readActor(context, "")).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Invalid actor ID" })
+        });
+        expect(readCandidate(context, 42)).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Invalid candidate ID" })
+        });
+        expect(readSourceDocument(context, "has space")).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Invalid source document ID" })
+        });
+        expect(readCandidateDocument(context, null)).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Invalid candidate document ID" })
+        });
+        return ok(undefined);
+      })
+    );
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("stores the full four documents one candidate is allowed", async () => {
+    const connection = await openMigratedDatabase();
+    const kinds = ["resume", "cover_letter", "profile", "recruiter_note"] as const;
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
+        for (const [ordinal, documentKind] of kinds.entries()) {
+          unwrap(
+            insertSourceDocument(
+              context,
+              unwrap(
+                prepareSourceDocument(
+                  sourceDocumentDraft({
+                    sourceDocumentId: `source-document-${ordinal}`,
+                    rawText: `Raw document ${ordinal}.`,
+                    normalizedText: `Raw document ${ordinal}.`
+                  })
+                )
+              )
+            )
+          );
+          unwrap(
+            insertCandidateDocument(
+              context,
+              unwrap(
+                prepareCandidateDocument(
+                  candidateDocumentDraft({
+                    candidateDocumentId: `candidate-document-${ordinal}`,
+                    sourceDocumentId: `source-document-${ordinal}`,
+                    documentKind,
+                    label: `Document ${ordinal}`,
+                    documentOrdinal: ordinal
+                  })
+                )
+              )
+            )
+          );
+        }
+        return ok(undefined);
+      })
+    );
+
+    expect(
+      nativeDatabase(connection)
+        .prepare(
+          "SELECT count(*) AS total FROM candidate_document WHERE candidate_id = 'candidate-1'"
+        )
+        .get()
+    ).toEqual({ total: 4 });
+
+    expect(connection.close().ok).toBe(true);
+  });
+
   it("seeds exactly one system actor that callers cannot insert", async () => {
     const connection = await openMigratedDatabase();
 
