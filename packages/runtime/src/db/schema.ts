@@ -842,3 +842,243 @@ export const runInputSnapshots = sqliteTable(
   ]
 );
 
+export const structuredFacts = sqliteTable(
+  "structured_fact",
+  {
+    structuredFactId: text("structured_fact_id").primaryKey(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    kind: text("kind", {
+      enum: [
+        "employment_interval",
+        "work_authorization_statement",
+        "current_title",
+        "employer_history_entry",
+        "claimed_experience"
+      ]
+    }).notNull(),
+    semanticKey: text("semantic_key").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    contentJson: text("content_json").notNull(),
+    contentHash: text("content_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("structured_fact_content_hash_unique").on(table.contentHash),
+    uniqueIndex("structured_fact_semantic_key_unique").on(
+      table.candidateId,
+      table.kind,
+      table.semanticKey
+    ),
+    index("structured_fact_candidate").on(table.candidateId),
+    index("structured_fact_kind").on(table.kind),
+    check(
+      "structured_fact_kind",
+      sql`${table.kind} IN ('employment_interval', 'work_authorization_statement', 'current_title', 'employer_history_entry', 'claimed_experience')`
+    ),
+    check(
+      "structured_fact_semantic_key",
+      sql`length(${table.semanticKey}) BETWEEN 1 AND 256`
+    ),
+    check(
+      "structured_fact_payload_json",
+      sql`json_valid(${table.payloadJson}) AND json_type(${table.payloadJson}) = 'object'`
+    ),
+    check(
+      "structured_fact_content_json",
+      sql`json_valid(${table.contentJson}) AND json_type(${table.contentJson}) = 'object'`
+    ),
+    check(
+      "structured_fact_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("structured_fact_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const structuredFactEvidenceSpans = sqliteTable(
+  "structured_fact_evidence_span",
+  {
+    structuredFactEvidenceSpanId: text("structured_fact_evidence_span_id").primaryKey(),
+    structuredFactId: text("structured_fact_id")
+      .notNull()
+      .references(() => structuredFacts.structuredFactId, { onDelete: "restrict" }),
+    evidenceSpanId: text("evidence_span_id")
+      .notNull()
+      .references(() => evidenceSpans.evidenceSpanId, { onDelete: "restrict" }),
+    spanOrdinal: integer("span_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("structured_fact_evidence_span_ordinal_unique").on(
+      table.structuredFactId,
+      table.spanOrdinal
+    ),
+    uniqueIndex("structured_fact_evidence_span_unique").on(
+      table.structuredFactId,
+      table.evidenceSpanId
+    ),
+    check("structured_fact_evidence_span_ordinal", sql`${table.spanOrdinal} >= 0`),
+    check("structured_fact_evidence_span_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const structuredFactProvenances = sqliteTable(
+  "structured_fact_provenance",
+  {
+    structuredFactProvenanceId: text("structured_fact_provenance_id").primaryKey(),
+    structuredFactId: text("structured_fact_id")
+      .notNull()
+      .references(() => structuredFacts.structuredFactId, { onDelete: "restrict" }),
+    source: text("source", { enum: ["parsed", "extracted", "human"] }).notNull(),
+    actorId: text("actor_id").references(() => actors.actorId, { onDelete: "restrict" }),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    index("structured_fact_provenance_fact").on(table.structuredFactId),
+    check(
+      "structured_fact_provenance_source",
+      sql`${table.source} IN ('parsed', 'extracted', 'human')`
+    ),
+    check(
+      "structured_fact_provenance_actor_presence",
+      sql`(${table.source} = 'human') = (${table.actorId} IS NOT NULL)`
+    ),
+    check("structured_fact_provenance_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const factConflicts = sqliteTable(
+  "fact_conflict",
+  {
+    factConflictId: text("fact_conflict_id").primaryKey(),
+    contentJson: text("content_json").notNull(),
+    contentHash: text("content_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("fact_conflict_content_hash_unique").on(table.contentHash),
+    check(
+      "fact_conflict_content_json",
+      sql`json_valid(${table.contentJson})
+        AND json_type(${table.contentJson}) = 'object'
+        AND json_type(json_extract(${table.contentJson}, '$.memberIds')) = 'array'
+        AND json_array_length(json_extract(${table.contentJson}, '$.memberIds')) >= 2`
+    ),
+    check(
+      "fact_conflict_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("fact_conflict_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const factConflictMembers = sqliteTable(
+  "fact_conflict_member",
+  {
+    factConflictMemberId: text("fact_conflict_member_id").primaryKey(),
+    factConflictId: text("fact_conflict_id")
+      .notNull()
+      .references(() => factConflicts.factConflictId, { onDelete: "restrict" }),
+    structuredFactId: text("structured_fact_id")
+      .notNull()
+      .references(() => structuredFacts.structuredFactId, { onDelete: "restrict" }),
+    memberOrdinal: integer("member_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("fact_conflict_member_ordinal_unique").on(
+      table.factConflictId,
+      table.memberOrdinal
+    ),
+    uniqueIndex("fact_conflict_member_fact_unique").on(
+      table.factConflictId,
+      table.structuredFactId
+    ),
+    check("fact_conflict_member_ordinal", sql`${table.memberOrdinal} >= 0`),
+    check("fact_conflict_member_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const hardRequirementAssessments = sqliteTable(
+  "hard_requirement_assessment",
+  {
+    hardRequirementAssessmentId: text("hard_requirement_assessment_id").primaryKey(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    requirementFieldId: text("requirement_field_id", {
+      enum: ["years_experience", "work_authorization", "current_title", "employer_history"]
+    }).notNull(),
+    outcome: text("outcome", { enum: ["pass", "fail", "unknown"] }).notNull(),
+    contentJson: text("content_json").notNull(),
+    contentHash: text("content_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("hard_requirement_assessment_content_hash_unique").on(table.contentHash),
+    index("hard_requirement_assessment_candidate").on(table.candidateId),
+    index("hard_requirement_assessment_field").on(table.requirementFieldId),
+    check(
+      "hard_requirement_assessment_requirement_field_id",
+      sql`${table.requirementFieldId} IN ('years_experience', 'work_authorization', 'current_title', 'employer_history')`
+    ),
+    check(
+      "hard_requirement_assessment_outcome",
+      sql`${table.outcome} IN ('pass', 'fail', 'unknown')`
+    ),
+    check(
+      "hard_requirement_assessment_content_json",
+      sql`json_valid(${table.contentJson})
+        AND json_type(${table.contentJson}) = 'object'
+        AND json_type(json_extract(${table.contentJson}, '$.facts')) = 'array'
+        AND (
+          ${table.outcome} = 'unknown'
+          OR json_array_length(json_extract(${table.contentJson}, '$.facts')) >= 1
+        )`
+    ),
+    check(
+      "hard_requirement_assessment_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("hard_requirement_assessment_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const hardRequirementAssessmentFacts = sqliteTable(
+  "hard_requirement_assessment_fact",
+  {
+    hardRequirementAssessmentFactId: text(
+      "hard_requirement_assessment_fact_id"
+    ).primaryKey(),
+    hardRequirementAssessmentId: text("hard_requirement_assessment_id")
+      .notNull()
+      .references(() => hardRequirementAssessments.hardRequirementAssessmentId, {
+        onDelete: "restrict"
+      }),
+    structuredFactId: text("structured_fact_id")
+      .notNull()
+      .references(() => structuredFacts.structuredFactId, { onDelete: "restrict" }),
+    polarity: text("polarity", { enum: ["supporting", "contradicting"] }).notNull(),
+    factOrdinal: integer("fact_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("hard_requirement_assessment_fact_ordinal_unique").on(
+      table.hardRequirementAssessmentId,
+      table.factOrdinal
+    ),
+    uniqueIndex("hard_requirement_assessment_fact_unique").on(
+      table.hardRequirementAssessmentId,
+      table.structuredFactId
+    ),
+    check(
+      "hard_requirement_assessment_fact_polarity",
+      sql`${table.polarity} IN ('supporting', 'contradicting')`
+    ),
+    check("hard_requirement_assessment_fact_ordinal", sql`${table.factOrdinal} >= 0`),
+    check("hard_requirement_assessment_fact_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
