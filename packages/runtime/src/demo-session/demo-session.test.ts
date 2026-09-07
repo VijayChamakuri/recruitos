@@ -153,6 +153,7 @@ describe("demo session schemas", () => {
     expect(DEMO_SESSION_EXPIRY_MS).toBe(15_000);
     expect(demoSessionExpiryAt(HEARTBEAT_AT)).toBe(HEARTBEAT_AT + 15_000);
     expect(demoSessionExpiryAt(Number.MAX_SAFE_INTEGER)).toBeNull();
+    expect(demoSessionExpiryAt(-DEMO_SESSION_EXPIRY_MS - 1)).toBeNull();
     expect(
       isDemoSessionOwnershipShape({
         webOwner: "web-process-1",
@@ -443,6 +444,31 @@ describe("demo session persistence", () => {
     ).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Demo session is missing after heartbeat" })
+    });
+
+    let invalidAfterUpdateReads = 0;
+    expect(
+      refreshDemoSessionHeartbeat(
+        failingContext((sql) => {
+          if (sql.includes("UPDATE")) {
+            return { run() {} };
+          }
+          return {
+            get() {
+              invalidAfterUpdateReads += 1;
+              return invalidAfterUpdateReads === 1 ? storedIdleRow() : { invalid: true };
+            }
+          };
+        }),
+        {
+          expectedVersion: 1,
+          webOwner: "web-process-1",
+          heartbeatAt: HEARTBEAT_AT
+        }
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Stored demo session is invalid" })
     });
 
     expect(
