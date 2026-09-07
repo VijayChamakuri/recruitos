@@ -34,6 +34,11 @@
       "import": "./dist/commands/index.js",
       "default": "./dist/commands/index.js"
     },
+    "./corpus": {
+      "types": "./dist/corpus/index.d.ts",
+      "import": "./dist/corpus/index.js",
+      "default": "./dist/corpus/index.js"
+    },
     "./errors": {
       "types": "./dist/errors/index.d.ts",
       "import": "./dist/errors/index.js",

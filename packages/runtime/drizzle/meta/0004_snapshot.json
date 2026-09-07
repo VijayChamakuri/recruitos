@@ -1,0 +1,1023 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "b10684a9-86be-4fd3-9e26-1b19913b9a90",
+  "prevId": "68c95e66-f0a7-4c12-b1ab-d5355eeb9d1c",
+  "tables": {
+    "actor": {
+      "name": "actor",
+      "columns": {
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_kind": {
+          "name": "actor_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "actor_kind": {
+          "name": "actor_kind",
+          "value": "\"actor\".\"actor_kind\" IN ('human', 'system')"
+        },
+        "actor_system_identity": {
+          "name": "actor_system_identity",
+          "value": "(\"actor\".\"actor_kind\" = 'system') = (\"actor\".\"actor_id\" = 'system:runtime')"
+        },
+        "actor_display_name": {
+          "name": "actor_display_name",
+          "value": "length(\"actor\".\"display_name\") BETWEEN 1 AND 200"
+        },
+        "actor_created_at": {
+          "name": "actor_created_at",
+          "value": "\"actor\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "audit_event": {
+      "name": "audit_event",
+      "columns": {
+        "audit_event_id": {
+          "name": "audit_event_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "event_ordinal": {
+          "name": "event_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_display_name": {
+          "name": "actor_display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_version": {
+          "name": "event_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "audit_event_command_ordinal_unique": {
+          "name": "audit_event_command_ordinal_unique",
+          "columns": [
+            "command_id",
+            "event_ordinal"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "audit_event_command_id_command_receipt_command_id_fk": {
+          "name": "audit_event_command_id_command_receipt_command_id_fk",
+          "tableFrom": "audit_event",
+          "tableTo": "command_receipt",
+          "columnsFrom": [
+            "command_id"
+          ],
+          "columnsTo": [
+            "command_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "audit_event_command_ordinal_pair": {
+          "name": "audit_event_command_ordinal_pair",
+          "value": "(\"audit_event\".\"command_id\" IS NULL AND \"audit_event\".\"event_ordinal\" IS NULL) OR (\"audit_event\".\"command_id\" IS NOT NULL AND \"audit_event\".\"event_ordinal\" IS NOT NULL)"
+        },
+        "audit_event_event_ordinal": {
+          "name": "audit_event_event_ordinal",
+          "value": "\"audit_event\".\"event_ordinal\" IS NULL OR \"audit_event\".\"event_ordinal\" >= 0"
+        },
+        "audit_event_actor_display_name": {
+          "name": "audit_event_actor_display_name",
+          "value": "length(\"audit_event\".\"actor_display_name\") BETWEEN 1 AND 200"
+        },
+        "audit_event_name": {
+          "name": "audit_event_name",
+          "value": "length(\"audit_event\".\"event_name\") BETWEEN 1 AND 128"
+        },
+        "audit_event_version": {
+          "name": "audit_event_version",
+          "value": "\"audit_event\".\"event_version\" > 0"
+        },
+        "audit_event_payload_hash": {
+          "name": "audit_event_payload_hash",
+          "value": "length(\"audit_event\".\"payload_hash\") = 64 AND \"audit_event\".\"payload_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "audit_event_occurred_at": {
+          "name": "audit_event_occurred_at",
+          "value": "\"audit_event\".\"occurred_at\" >= 0"
+        },
+        "audit_event_recorded_at": {
+          "name": "audit_event_recorded_at",
+          "value": "\"audit_event\".\"recorded_at\" >= \"audit_event\".\"occurred_at\""
+        }
+      }
+    },
+    "candidate_document": {
+      "name": "candidate_document",
+      "columns": {
+        "candidate_document_id": {
+          "name": "candidate_document_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_document_id": {
+          "name": "source_document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_kind": {
+          "name": "document_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_ordinal": {
+          "name": "document_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_document_ordinal_unique": {
+          "name": "candidate_document_ordinal_unique",
+          "columns": [
+            "candidate_id",
+            "document_ordinal"
+          ],
+          "isUnique": true
+        },
+        "candidate_document_source_unique": {
+          "name": "candidate_document_source_unique",
+          "columns": [
+            "candidate_id",
+            "source_document_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "candidate_document_candidate_id_candidate_candidate_id_fk": {
+          "name": "candidate_document_candidate_id_candidate_candidate_id_fk",
+          "tableFrom": "candidate_document",
+          "tableTo": "candidate",
+          "columnsFrom": [
+            "candidate_id"
+          ],
+          "columnsTo": [
+            "candidate_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_document_source_document_id_source_document_source_document_id_fk": {
+          "name": "candidate_document_source_document_id_source_document_source_document_id_fk",
+          "tableFrom": "candidate_document",
+          "tableTo": "source_document",
+          "columnsFrom": [
+            "source_document_id"
+          ],
+          "columnsTo": [
+            "source_document_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_document_kind": {
+          "name": "candidate_document_kind",
+          "value": "\"candidate_document\".\"document_kind\" IN ('resume', 'cover_letter', 'profile', 'recruiter_note')"
+        },
+        "candidate_document_label": {
+          "name": "candidate_document_label",
+          "value": "length(\"candidate_document\".\"label\") BETWEEN 1 AND 200"
+        },
+        "candidate_document_ordinal": {
+          "name": "candidate_document_ordinal",
+          "value": "\"candidate_document\".\"document_ordinal\" BETWEEN 0 AND 3"
+        },
+        "candidate_document_created_at": {
+          "name": "candidate_document_created_at",
+          "value": "\"candidate_document\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate": {
+      "name": "candidate",
+      "columns": {
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_system": {
+          "name": "source_system",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_key": {
+          "name": "source_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corpus_tag": {
+          "name": "corpus_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_synthetic": {
+          "name": "is_synthetic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_source_unique": {
+          "name": "candidate_source_unique",
+          "columns": [
+            "source_system",
+            "source_key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_source_system": {
+          "name": "candidate_source_system",
+          "value": "length(\"candidate\".\"source_system\") BETWEEN 1 AND 64"
+        },
+        "candidate_source_key": {
+          "name": "candidate_source_key",
+          "value": "length(\"candidate\".\"source_key\") BETWEEN 1 AND 128"
+        },
+        "candidate_channel": {
+          "name": "candidate_channel",
+          "value": "\"candidate\".\"channel\" IN ('inbound', 'sourced')"
+        },
+        "candidate_corpus_tag": {
+          "name": "candidate_corpus_tag",
+          "value": "\"candidate\".\"corpus_tag\" IN ('main', 'variant')"
+        },
+        "candidate_is_synthetic": {
+          "name": "candidate_is_synthetic",
+          "value": "\"candidate\".\"is_synthetic\" = 1"
+        },
+        "candidate_created_at": {
+          "name": "candidate_created_at",
+          "value": "\"candidate\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "command_receipt": {
+      "name": "command_receipt",
+      "columns": {
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "command_name": {
+          "name": "command_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expected_version": {
+          "name": "expected_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "result_json": {
+          "name": "result_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "result_hash": {
+          "name": "result_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "command_receipt_expected_version": {
+          "name": "command_receipt_expected_version",
+          "value": "\"command_receipt\".\"expected_version\" >= 0"
+        },
+        "command_receipt_created_at": {
+          "name": "command_receipt_created_at",
+          "value": "\"command_receipt\".\"created_at\" >= 0"
+        },
+        "command_receipt_completed_at": {
+          "name": "command_receipt_completed_at",
+          "value": "\"command_receipt\".\"completed_at\" IS NULL OR \"command_receipt\".\"completed_at\" >= \"command_receipt\".\"created_at\""
+        },
+        "command_receipt_status": {
+          "name": "command_receipt_status",
+          "value": "\"command_receipt\".\"status\" IN ('in_progress', 'succeeded', 'failed')"
+        },
+        "command_receipt_terminal_shape": {
+          "name": "command_receipt_terminal_shape",
+          "value": "(\n        \"command_receipt\".\"status\" = 'in_progress'\n        AND \"command_receipt\".\"result_json\" IS NULL\n        AND \"command_receipt\".\"result_hash\" IS NULL\n        AND \"command_receipt\".\"error_code\" IS NULL\n        AND \"command_receipt\".\"error_message\" IS NULL\n        AND \"command_receipt\".\"completed_at\" IS NULL\n      ) OR (\n        \"command_receipt\".\"status\" = 'succeeded'\n        AND \"command_receipt\".\"result_json\" IS NOT NULL\n        AND \"command_receipt\".\"result_hash\" IS NOT NULL\n        AND \"command_receipt\".\"error_code\" IS NULL\n        AND \"command_receipt\".\"error_message\" IS NULL\n        AND \"command_receipt\".\"completed_at\" IS NOT NULL\n      ) OR (\n        \"command_receipt\".\"status\" = 'failed'\n        AND \"command_receipt\".\"result_json\" IS NULL\n        AND \"command_receipt\".\"result_hash\" IS NULL\n        AND \"command_receipt\".\"error_code\" IS NOT NULL\n        AND \"command_receipt\".\"error_message\" IS NOT NULL\n        AND \"command_receipt\".\"completed_at\" IS NOT NULL\n      )"
+        }
+      }
+    },
+    "corpus_manifest_seal": {
+      "name": "corpus_manifest_seal",
+      "columns": {
+        "corpus_manifest_seal_id": {
+          "name": "corpus_manifest_seal_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "manifest_id": {
+          "name": "manifest_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "corpus_manifest_seal_manifest_unique": {
+          "name": "corpus_manifest_seal_manifest_unique",
+          "columns": [
+            "manifest_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "corpus_manifest_seal_manifest_id_corpus_manifest_corpus_manifest_id_fk": {
+          "name": "corpus_manifest_seal_manifest_id_corpus_manifest_corpus_manifest_id_fk",
+          "tableFrom": "corpus_manifest_seal",
+          "tableTo": "corpus_manifest",
+          "columnsFrom": [
+            "manifest_id"
+          ],
+          "columnsTo": [
+            "corpus_manifest_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "corpus_manifest_seal_created_at": {
+          "name": "corpus_manifest_seal_created_at",
+          "value": "\"corpus_manifest_seal\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "corpus_manifest": {
+      "name": "corpus_manifest",
+      "columns": {
+        "corpus_manifest_id": {
+          "name": "corpus_manifest_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seal_id": {
+          "name": "seal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "corpus_manifest_content_hash_unique": {
+          "name": "corpus_manifest_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "corpus_manifest_seal_id_unique": {
+          "name": "corpus_manifest_seal_id_unique",
+          "columns": [
+            "seal_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "corpus_manifest_seal_id_corpus_manifest_seal_corpus_manifest_seal_id_fk": {
+          "name": "corpus_manifest_seal_id_corpus_manifest_seal_corpus_manifest_seal_id_fk",
+          "tableFrom": "corpus_manifest",
+          "tableTo": "corpus_manifest_seal",
+          "columnsFrom": [
+            "seal_id"
+          ],
+          "columnsTo": [
+            "corpus_manifest_seal_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "corpus_manifest_kind": {
+          "name": "corpus_manifest_kind",
+          "value": "\"corpus_manifest\".\"kind\" IN ('main', 'variant')"
+        },
+        "corpus_manifest_content_hash": {
+          "name": "corpus_manifest_content_hash",
+          "value": "length(\"corpus_manifest\".\"content_hash\") = 64 AND \"corpus_manifest\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "corpus_manifest_created_at": {
+          "name": "corpus_manifest_created_at",
+          "value": "\"corpus_manifest\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "corpus_member_document": {
+      "name": "corpus_member_document",
+      "columns": {
+        "corpus_member_document_id": {
+          "name": "corpus_member_document_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corpus_member_id": {
+          "name": "corpus_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_document_id": {
+          "name": "candidate_document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_ordinal": {
+          "name": "document_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "corpus_member_document_ordinal_unique": {
+          "name": "corpus_member_document_ordinal_unique",
+          "columns": [
+            "corpus_member_id",
+            "document_ordinal"
+          ],
+          "isUnique": true
+        },
+        "corpus_member_document_candidate_document_unique": {
+          "name": "corpus_member_document_candidate_document_unique",
+          "columns": [
+            "corpus_member_id",
+            "candidate_document_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "corpus_member_document_corpus_member_id_corpus_member_corpus_member_id_fk": {
+          "name": "corpus_member_document_corpus_member_id_corpus_member_corpus_member_id_fk",
+          "tableFrom": "corpus_member_document",
+          "tableTo": "corpus_member",
+          "columnsFrom": [
+            "corpus_member_id"
+          ],
+          "columnsTo": [
+            "corpus_member_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "corpus_member_document_candidate_document_id_candidate_document_candidate_document_id_fk": {
+          "name": "corpus_member_document_candidate_document_id_candidate_document_candidate_document_id_fk",
+          "tableFrom": "corpus_member_document",
+          "tableTo": "candidate_document",
+          "columnsFrom": [
+            "candidate_document_id"
+          ],
+          "columnsTo": [
+            "candidate_document_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "corpus_member_document_ordinal": {
+          "name": "corpus_member_document_ordinal",
+          "value": "\"corpus_member_document\".\"document_ordinal\" BETWEEN 0 AND 3"
+        },
+        "corpus_member_document_created_at": {
+          "name": "corpus_member_document_created_at",
+          "value": "\"corpus_member_document\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "corpus_member": {
+      "name": "corpus_member",
+      "columns": {
+        "corpus_member_id": {
+          "name": "corpus_member_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "manifest_id": {
+          "name": "manifest_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "import_ordinal": {
+          "name": "import_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "corpus_member_manifest_candidate_unique": {
+          "name": "corpus_member_manifest_candidate_unique",
+          "columns": [
+            "manifest_id",
+            "candidate_id"
+          ],
+          "isUnique": true
+        },
+        "corpus_member_manifest_ordinal_unique": {
+          "name": "corpus_member_manifest_ordinal_unique",
+          "columns": [
+            "manifest_id",
+            "import_ordinal"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "corpus_member_manifest_id_corpus_manifest_corpus_manifest_id_fk": {
+          "name": "corpus_member_manifest_id_corpus_manifest_corpus_manifest_id_fk",
+          "tableFrom": "corpus_member",
+          "tableTo": "corpus_manifest",
+          "columnsFrom": [
+            "manifest_id"
+          ],
+          "columnsTo": [
+            "corpus_manifest_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "corpus_member_candidate_id_candidate_candidate_id_fk": {
+          "name": "corpus_member_candidate_id_candidate_candidate_id_fk",
+          "tableFrom": "corpus_member",
+          "tableTo": "candidate",
+          "columnsFrom": [
+            "candidate_id"
+          ],
+          "columnsTo": [
+            "candidate_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "corpus_member_import_ordinal": {
+          "name": "corpus_member_import_ordinal",
+          "value": "\"corpus_member\".\"import_ordinal\" >= 0"
+        },
+        "corpus_member_created_at": {
+          "name": "corpus_member_created_at",
+          "value": "\"corpus_member\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "runtime_migration_smoke": {
+      "name": "runtime_migration_smoke",
+      "columns": {
+        "singleton": {
+          "name": "singleton",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "applied": {
+          "name": "applied",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "source_document": {
+      "name": "source_document",
+      "columns": {
+        "source_document_id": {
+          "name": "source_document_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "raw_text": {
+          "name": "raw_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "raw_hash": {
+          "name": "raw_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "raw_byte_length": {
+          "name": "raw_byte_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_text": {
+          "name": "normalized_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_hash": {
+          "name": "normalized_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_length": {
+          "name": "normalized_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_byte_length": {
+          "name": "normalized_byte_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "source_document_raw_hash_unique": {
+          "name": "source_document_raw_hash_unique",
+          "columns": [
+            "raw_hash"
+          ],
+          "isUnique": true
+        },
+        "source_document_normalized_hash": {
+          "name": "source_document_normalized_hash",
+          "columns": [
+            "normalized_hash"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "source_document_raw_hash": {
+          "name": "source_document_raw_hash",
+          "value": "length(\"source_document\".\"raw_hash\") = 64 AND \"source_document\".\"raw_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "source_document_normalized_hash": {
+          "name": "source_document_normalized_hash",
+          "value": "length(\"source_document\".\"normalized_hash\") = 64 AND \"source_document\".\"normalized_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "source_document_raw_byte_length": {
+          "name": "source_document_raw_byte_length",
+          "value": "\"source_document\".\"raw_byte_length\" BETWEEN 1 AND 262144\n        AND \"source_document\".\"raw_byte_length\" = length(CAST(\"source_document\".\"raw_text\" AS BLOB))"
+        },
+        "source_document_normalized_byte_length": {
+          "name": "source_document_normalized_byte_length",
+          "value": "\"source_document\".\"normalized_byte_length\" BETWEEN 1 AND 131072\n        AND \"source_document\".\"normalized_byte_length\" = length(CAST(\"source_document\".\"normalized_text\" AS BLOB))"
+        },
+        "source_document_normalized_length": {
+          "name": "source_document_normalized_length",
+          "value": "\"source_document\".\"normalized_length\" BETWEEN 1 AND 50000\n        AND \"source_document\".\"normalized_length\" >= length(\"source_document\".\"normalized_text\")\n        AND \"source_document\".\"normalized_length\" <= 2 * length(\"source_document\".\"normalized_text\")"
+        },
+        "source_document_created_at": {
+          "name": "source_document_created_at",
+          "value": "\"source_document\".\"created_at\" >= 0"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

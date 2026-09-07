@@ -29,6 +29,13 @@
       "when": 1788734822038,
       "tag": "0003_immutable_entity_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788746271029,
+      "tag": "0004_corpus_manifest_foundation",
+      "breakpoints": true
     }
   ]
 }

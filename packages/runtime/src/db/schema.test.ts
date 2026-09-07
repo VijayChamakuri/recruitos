@@ -7,6 +7,10 @@ import {
   candidateDocuments,
   candidates,
   commandReceipts,
+  corpusManifestSeals,
+  corpusManifests,
+  corpusMemberDocuments,
+  corpusMembers,
   sourceDocuments
 } from "./schema.js";
 
@@ -96,5 +100,50 @@ describe("runtime Drizzle schema", () => {
       "candidate_document_source_unique"
     ]);
     expect(ownershipConfig.foreignKeys).toHaveLength(2);
+  });
+
+  it("exposes the corpus manifest seal constraints and deferred cyclic pair", () => {
+    const manifestConfig = getTableConfig(corpusManifests);
+    expect(manifestConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "corpus_manifest_content_hash",
+      "corpus_manifest_created_at",
+      "corpus_manifest_kind"
+    ]);
+    expect(manifestConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "corpus_manifest_content_hash_unique",
+      "corpus_manifest_seal_id_unique"
+    ]);
+    expect(manifestConfig.foreignKeys).toHaveLength(1);
+    expect(manifestConfig.foreignKeys[0]!.onDelete).toBeUndefined();
+
+    const memberConfig = getTableConfig(corpusMembers);
+    expect(memberConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "corpus_member_created_at",
+      "corpus_member_import_ordinal"
+    ]);
+    expect(memberConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "corpus_member_manifest_candidate_unique",
+      "corpus_member_manifest_ordinal_unique"
+    ]);
+    expect(memberConfig.foreignKeys).toHaveLength(2);
+
+    const memberDocumentConfig = getTableConfig(corpusMemberDocuments);
+    expect(memberDocumentConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "corpus_member_document_created_at",
+      "corpus_member_document_ordinal"
+    ]);
+    expect(memberDocumentConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "corpus_member_document_candidate_document_unique",
+      "corpus_member_document_ordinal_unique"
+    ]);
+
+    const sealConfig = getTableConfig(corpusManifestSeals);
+    expect(sealConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "corpus_manifest_seal_created_at"
+    ]);
+    expect(sealConfig.indexes.map((index) => index.config.name)).toEqual([
+      "corpus_manifest_seal_manifest_unique"
+    ]);
+    expect(sealConfig.foreignKeys).toHaveLength(1);
   });
 });

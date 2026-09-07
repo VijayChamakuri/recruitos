@@ -24,6 +24,18 @@ export type CandidateTriageResultId = z.infer<typeof CandidateTriageResultIdSche
 export const CommandIdSchema = printableAsciiId.brand<"CommandId">();
 export type CommandId = z.infer<typeof CommandIdSchema>;
 
+export const CorpusManifestIdSchema = printableAsciiId.brand<"CorpusManifestId">();
+export type CorpusManifestId = z.infer<typeof CorpusManifestIdSchema>;
+
+export const CorpusManifestSealIdSchema = printableAsciiId.brand<"CorpusManifestSealId">();
+export type CorpusManifestSealId = z.infer<typeof CorpusManifestSealIdSchema>;
+
+export const CorpusMemberIdSchema = printableAsciiId.brand<"CorpusMemberId">();
+export type CorpusMemberId = z.infer<typeof CorpusMemberIdSchema>;
+
+export const CorpusMemberDocumentIdSchema = printableAsciiId.brand<"CorpusMemberDocumentId">();
+export type CorpusMemberDocumentId = z.infer<typeof CorpusMemberDocumentIdSchema>;
+
 export const DimensionAssessmentIdSchema = printableAsciiId.brand<"DimensionAssessmentId">();
 export type DimensionAssessmentId = z.infer<typeof DimensionAssessmentIdSchema>;
 

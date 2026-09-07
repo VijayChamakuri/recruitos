@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnySQLiteColumn,
   check,
   index,
   integer,
@@ -244,5 +245,104 @@ export const candidateDocuments = sqliteTable(
       sql`${table.documentOrdinal} BETWEEN 0 AND 3`
     ),
     check("candidate_document_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const corpusManifests = sqliteTable(
+  "corpus_manifest",
+  {
+    corpusManifestId: text("corpus_manifest_id").primaryKey(),
+    kind: text("kind", { enum: ["main", "variant"] }).notNull(),
+    contentHash: text("content_hash").notNull(),
+    // Cyclic pair with corpus_manifest_seal: the seal row is inserted after
+    // this manifest's members and documents, so this reference must be
+    // deferred to commit time. Omitting onDelete keeps drizzle-kit's SQLite
+    // generator on its deferred-by-default codegen path for this column.
+    sealId: text("seal_id")
+      .notNull()
+      .references((): AnySQLiteColumn => corpusManifestSeals.corpusManifestSealId),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("corpus_manifest_content_hash_unique").on(table.contentHash),
+    uniqueIndex("corpus_manifest_seal_id_unique").on(table.sealId),
+    check("corpus_manifest_kind", sql`${table.kind} IN ('main', 'variant')`),
+    check(
+      "corpus_manifest_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("corpus_manifest_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const corpusMembers = sqliteTable(
+  "corpus_member",
+  {
+    corpusMemberId: text("corpus_member_id").primaryKey(),
+    manifestId: text("manifest_id")
+      .notNull()
+      .references(() => corpusManifests.corpusManifestId, { onDelete: "restrict" }),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    importOrdinal: integer("import_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("corpus_member_manifest_candidate_unique").on(
+      table.manifestId,
+      table.candidateId
+    ),
+    uniqueIndex("corpus_member_manifest_ordinal_unique").on(
+      table.manifestId,
+      table.importOrdinal
+    ),
+    check("corpus_member_import_ordinal", sql`${table.importOrdinal} >= 0`),
+    check("corpus_member_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const corpusMemberDocuments = sqliteTable(
+  "corpus_member_document",
+  {
+    corpusMemberDocumentId: text("corpus_member_document_id").primaryKey(),
+    corpusMemberId: text("corpus_member_id")
+      .notNull()
+      .references(() => corpusMembers.corpusMemberId, { onDelete: "restrict" }),
+    candidateDocumentId: text("candidate_document_id")
+      .notNull()
+      .references(() => candidateDocuments.candidateDocumentId, { onDelete: "restrict" }),
+    documentOrdinal: integer("document_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("corpus_member_document_ordinal_unique").on(
+      table.corpusMemberId,
+      table.documentOrdinal
+    ),
+    uniqueIndex("corpus_member_document_candidate_document_unique").on(
+      table.corpusMemberId,
+      table.candidateDocumentId
+    ),
+    check(
+      "corpus_member_document_ordinal",
+      sql`${table.documentOrdinal} BETWEEN 0 AND 3`
+    ),
+    check("corpus_member_document_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const corpusManifestSeals = sqliteTable(
+  "corpus_manifest_seal",
+  {
+    corpusManifestSealId: text("corpus_manifest_seal_id").primaryKey(),
+    manifestId: text("manifest_id")
+      .notNull()
+      .references(() => corpusManifests.corpusManifestId, { onDelete: "restrict" }),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("corpus_manifest_seal_manifest_unique").on(table.manifestId),
+    check("corpus_manifest_seal_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
