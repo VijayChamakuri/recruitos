@@ -1,0 +1,27 @@
+{
+  "name": "@recruitos/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.config.ts --project web",
+    "test:types": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "corepack pnpm test:types",
+    "start": "node dist/server/server.js"
+  },
+  "dependencies": {
+    "@recruitos/cli": "workspace:*",
+    "@recruitos/core": "workspace:*"
+  }
+}
