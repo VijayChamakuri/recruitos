@@ -679,6 +679,12 @@ describe("triage attempt persistence", () => {
       ok: false,
       error: expect.objectContaining({ message: "Invalid triage attempt input" })
     });
+    expect(
+      prepareTriageAttempt(officialAttemptDraft({ updatedAt: CREATED_AT - 1 }))
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid triage attempt input" })
+    });
     expect(prepareTriageAttempt(withThrowingGetter(officialAttemptDraft(), "kind"))).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Triage attempt preparation failed" })
@@ -1085,6 +1091,15 @@ describe("triage attempt persistence", () => {
 
         expect(
           claimAttemptWorkItem(context, { ...claimInput(0), extra: true })
+        ).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Invalid attempt work item claim input" })
+        });
+        expect(
+          claimAttemptWorkItem(
+            context,
+            claimInput(0, { claimedAt: CLAIMED_AT, claimExpiresAt: CLAIMED_AT - 1 })
+          )
         ).toEqual({
           ok: false,
           error: expect.objectContaining({ message: "Invalid attempt work item claim input" })

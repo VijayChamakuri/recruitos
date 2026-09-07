@@ -203,22 +203,23 @@ export function prepareAttemptWorkItem(
     if (!draft.success) {
       return err(persistenceFailure("Invalid attempt work item input"));
     }
-    const item = AttemptWorkItemSchema.safeParse({
-      ...draft.data,
-      state: "pending",
-      claimId: null,
-      claimedAt: null,
-      claimExpiresAt: null,
-      attemptCount: 0,
-      extractionArtifactId: null,
-      extractionFailureId: null,
-      version: 1,
-      updatedAt: draft.data.createdAt
-    });
-    if (!item.success) {
-      return err(persistenceFailure("Invalid attempt work item input"));
-    }
-    return ok(register(preparedAttemptWorkItems, item.data));
+    return ok(
+      register(
+        preparedAttemptWorkItems,
+        AttemptWorkItemSchema.parse({
+          ...draft.data,
+          state: "pending",
+          claimId: null,
+          claimedAt: null,
+          claimExpiresAt: null,
+          attemptCount: 0,
+          extractionArtifactId: null,
+          extractionFailureId: null,
+          version: 1,
+          updatedAt: draft.data.createdAt
+        })
+      )
+    );
   } catch {
     return err(persistenceFailure("Attempt work item preparation failed"));
   }
