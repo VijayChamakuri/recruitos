@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 5ff9dc2 |
+| origin/main | 5b79f25 |
 | Migration lock held by | Cursor, for scheduler tables (`triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
@@ -108,3 +108,5 @@ your own rows plus the log.
 - 2026-09-07 Cursor: #39 ready on ce070a5. pnpm check 1165 plus 24 integration exit 0, test:coverage 1021 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: rebasing #39 onto origin/main 5ff9dc2 after #44. COORDINATION.md is a union of every agent row and log line. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: #39 ready on 5ff9dc2. pnpm check 1175 plus 24 integration exit 0, test:coverage 1021 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: rebasing #39 onto origin/main 5b79f25 after #45. COORDINATION.md is a union of every agent row and log line. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: #39 ready on 5b79f25. pnpm check 1175 plus 24 integration exit 0, test:coverage 1021 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor. Review of 0017 is green. Clear to merge.
