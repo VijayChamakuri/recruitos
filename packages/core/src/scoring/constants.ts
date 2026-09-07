@@ -37,3 +37,26 @@ export const REQUIRED_FIELD_IDS = Object.freeze([
   "current_title",
   "employer_history"
 ] as const);
+
+/**
+ * Integer basis-point form of the same committed policy. Run input snapshots
+ * hash this object so a later scoring change cannot silently reuse an old
+ * snapshot identity.
+ */
+export const SCORING_POLICY_V1 = Object.freeze({
+  levelValues: Object.freeze({
+    none: 0,
+    weak: 3300,
+    partial: 6700,
+    strong: 10000
+  }),
+  confidenceWeights: Object.freeze({
+    coverage: 4500,
+    resolution: 2500,
+    contradiction: 2000,
+    missingFields: 1000
+  }),
+  escalateThreshold: 5500,
+  shortlistN: SHORTLIST_N,
+  requiredFieldIds: REQUIRED_FIELD_IDS
+});
