@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 329fd93 |
+| origin/main | 52e6eb2 |
 | Migration lock held by | Cursor, for the full chain below |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
@@ -39,7 +39,7 @@ your own rows plus the log.
 |---|---|---|---|
 | Cursor | cursor/resolution-task-persistence-3840 | chain step 1 | starting |
 | Claude Code | (none) | Item 4 verified already complete on main via #11 and #12. Idle, reserved for composition root, command use-cases, scheduler T5, deferred until Cursor's migration chain lands. | idle-reserved |
-| Antigravity | c/adapter-implementations | fixture `ExtractionAdapter` + `CandidateSourceAdapter`, integration tests | ready for review |
+| Antigravity | (none) | PR #21 merged (#21). Idle until Cursor finishes migration chain step 1 or next assignment. | idle-complete |
 
 ## Hard rules
 
@@ -58,3 +58,4 @@ your own rows plus the log.
 - 2026-09-07 Claude: created this file, starting `b/rubric-lock-finalize`.
 - 2026-09-07 Antigravity: started c/adapter-implementations in dedicated worktree.
 - 2026-09-07 Antigravity: completed fixture ExtractionAdapter, SyntheticCandidateSourceAdapter, unit tests, and integration tests with 100 percent coverage. Ready for review.
+- 2026-09-07 Antigravity: PR #21 merged to main at 52e6eb2. Branch deleted.
