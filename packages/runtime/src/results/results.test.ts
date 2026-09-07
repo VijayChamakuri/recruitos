@@ -483,11 +483,19 @@ function rebuildTableWithoutChecks(
   table: string,
   columns: string
 ): void {
+  const extraTriggers =
+    table === "candidate_triage_result"
+      ? [
+          "candidate_head_insert_result_owner",
+          "candidate_head_update_result_owner"
+        ]
+      : [];
   database.exec(`
     PRAGMA foreign_keys = OFF;
     DROP TRIGGER IF EXISTS ${table}_reject_update;
     DROP TRIGGER IF EXISTS ${table}_reject_delete;
     DROP TRIGGER IF EXISTS ${table}_reject_replace;
+    ${extraTriggers.map((name) => `DROP TRIGGER IF EXISTS ${name};`).join("\n")}
     CREATE TABLE ${table}_rebuilt (
       ${columns}
     ) STRICT;
