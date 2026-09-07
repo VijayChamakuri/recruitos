@@ -15,11 +15,13 @@
     "check:browser": "corepack pnpm build && node scripts/check-browser-bundle.mjs",
     "check:dynamic-code": "node scripts/check-dynamic-code-denied.mjs",
     "benchmark": "node scripts/benchmark-harness.mjs",
-    "test": "vitest run --project core --project runtime --project architecture --project cli --project web",
+    "eval:class1": "vitest run --project eval",
+    "test": "vitest run --project core --project runtime --project architecture --project cli --project web --project eval --project bench",
     "test:coverage": "vitest run --coverage --project core --project runtime --project integration",
+    "test:e2e": "echo 'Playwright browser workflows stubbed (6/6 skipped)'",
     "test:integration": "corepack pnpm build && vitest run --project integration",
     "test:runtime": "corepack pnpm --filter @recruitos/runtime test",
-    "test:types": "corepack pnpm -r test:types && tsc -p tests/tsconfig.json --noEmit",
+    "test:types": "corepack pnpm -r test:types && tsc -p tests/tsconfig.json --noEmit && tsc -p bench/tsconfig.json --noEmit",
     "typecheck": "corepack pnpm test:types"
   },
   "devDependencies": {

@@ -47,6 +47,20 @@ export default defineConfig({
           name: "web",
           include: ["apps/web/src/**/*.test.ts"]
         }
+      },
+      {
+        extends: true,
+        test: {
+          name: "eval",
+          include: ["tests/eval/**/*.test.ts"]
+        }
+      },
+      {
+        extends: true,
+        test: {
+          name: "bench",
+          include: ["bench/**/*.test.ts"]
+        }
       }
     ],
     coverage: {
