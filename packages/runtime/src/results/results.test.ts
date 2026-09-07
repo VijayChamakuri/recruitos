@@ -2232,7 +2232,7 @@ describe("candidate result seal", () => {
     );
     unwrap(
       runImmediateTransaction(connection, (context) => {
-        expect(context.nativeDatabase.pragma("defer_foreign_keys", { simple: true })).toBe(1);
+        expect(context.nativeDatabase.pragma("defer_foreign_keys", { simple: true })).toBe(0);
         seedRichParents(context);
         unwrap(insertCandidateTriageResult(context, result));
         unwrap(insertCandidateResultSeal(context, seal));

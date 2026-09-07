@@ -443,6 +443,10 @@ function migrateDatabase(
       const insertMigration = nativeDatabase.prepare(
         "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)"
       );
+      // Cyclic seals (candidate_result_seal, corpus_manifest_seal) declare
+      // DEFERRABLE INITIALLY DEFERRED on the parent seal_id. This pragma
+      // makes the same commit-time check apply to every FK while 0015
+      // rebuilds candidate_triage_result. SQLite resets it on COMMIT.
       nativeDatabase.pragma("defer_foreign_keys = ON");
       for (const migration of localMigrations.slice(appliedBefore.length)) {
         for (const statement of migration.sql) {
