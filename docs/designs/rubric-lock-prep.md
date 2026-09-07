@@ -22,8 +22,14 @@ This document does three things:
    `job_related_justification` prose, and per-level anchors for all six committed
    dimensions, written to replace the draft v1 placeholders currently in
    `packages/core/src/rubric/draft-v1.ts`.
-3. **Part 3** is a readiness note: what is frozen, what is pending, and the exact open
-   questions that need a human answer before the lock.
+3. **Part 3** is a readiness note: what is frozen, what is pending, the four product-owner
+   questions now resolved, one blocking readiness item on work authorization, and the ten
+   open questions that still need a practitioner.
+
+**Revision, 2026-09-07.** Product-owner answers landed for OQ-11 through OQ-14 and are
+reflected in Part 2. A pre-call desk check on work authorization corrected WA-17 and
+produced one item that blocks tier-1 corpus authoring. The ten practitioner questions stay
+open for the live call.
 
 ## What this is not
 
@@ -240,10 +246,13 @@ them from v2 rather than keep them at weight 1 for completeness.
 > the important one: does work authorization ever actually appear on a resume, or is that
 > only ever an application form question?
 
-Tests: WA-16, WA-17. If work authorization is never in the document, the requirement
-resolves `unknown` for nearly every candidate and floods the escalation queue with a
-question the corpus cannot answer. That is a concrete, checkable, corpus-invalidating
-finding, and it is worth the two minutes even if R5 is otherwise the first thing cut.
+Tests: WA-16, and confirms WA-17. **The work-authorization half is no longer a discovery
+question.** A pre-call desk check already found that work authorization is normally absent
+from resume text (see the readiness item in Part 3, and WA-17 in
+`WORKFLOW_ASSUMPTIONS.md`). Ask it anyway, phrased as a confirmation, because the useful
+answer now is what their pipeline actually hands them and whether they would trust a
+requirement resolved from an application field whose provenance they cannot see. The open
+half is whether these are the right three hard requirements at all.
 
 ## C1. The calibration exercise
 
@@ -308,6 +317,58 @@ strings in `packages/core/src/rubric/draft-v1.ts` and adds level anchors, after 
 and after the human decides. Dimension ids, weights, and required flags below are copied
 verbatim from the committed structure and are not up for change in this document.
 
+## Shape this proposal targets (from OQ-12, OQ-13, OQ-14)
+
+Named, not applied. `packages/**` belongs to a parallel workstream and this document does
+not edit it. Sketched in the schema's own idiom so the eventual lock is a mechanical edit.
+
+**Per dimension: one added field.** `RubricDimensionSchema` gains `levelAnchors` as a sixth
+field and stays `.strict()`. Keys are exactly the four values of the closed level enum,
+which OQ-14 closed at four; each value is the existing non-empty prose bound.
+
+```
+RubricDimensionSchema = z.object({
+  dimensionId, weight, required, definition, jobRelatedJustification,   // unchanged
+  levelAnchors: z.object({                                              // added
+    none: NonEmptyProseSchema,
+    weak: NonEmptyProseSchema,
+    partial: NonEmptyProseSchema,
+    strong: NonEmptyProseSchema
+  }).strict().readonly()
+}).strict().readonly()
+```
+
+Building the anchor keys from `DIMENSION_LEVELS` keeps the level enum the single source of
+truth, so adding a fifth level would be a type error at every dimension rather than a
+silently missing anchor. That property is the reason to put anchors in the schema at all.
+
+**Per rubric: identity and provenance on the snapshot.** `version` becomes an integer.
+`provenance` is a sibling field on the same snapshot, so a superseded result keeps showing
+the label its own rubric carried.
+
+```
+RubricSchema = z.object({
+  rubricId,                                        // unchanged
+  version: z.number().int().positive(),            // integer, per OQ-13
+  provenance: z.object({                           // added, per OQ-13
+    label: z.enum(["product-authored", "recruiter-validated"]),
+    restsOn: z.array(WorkflowAssumptionIdSchema).min(1)   // e.g. ["WA-09", "WA-11", ...]
+  }).strict().readonly(),
+  dimensions                                       // unchanged
+}).strict()
+```
+
+The Trust Center reads `provenance` from the snapshot rather than from a repository-level
+flag. Rubric v1 ships labeled `product-authored`; only a completed practitioner call
+promotes a rubric to `recruiter-validated`, and it does so on a new snapshot rather than by
+mutating the old one, since Gate 2 prohibits mutation after approval.
+
+**Anchors are prompt material (OQ-11).** The four anchors per dimension go into the
+extraction prompt alongside the definition, which puts them inside
+`rubric_dimension_definitions_version` and therefore inside the fixture cache key. Editing
+an anchor after Gate 4 invalidates fixtures exactly as editing a definition does. Weights,
+`required` flags, and `provenance` stay out of the prompt and remain free to change.
+
 ## Cross-cutting reading rules
 
 These apply to every dimension and are part of what the extractor is told.
@@ -334,6 +395,11 @@ These apply to every dimension and are part of what the extractor is told.
    nets out.
 6. **Quotes are verbatim, contiguous, and at most 240 characters.** Offsets come from code,
    never from the model.
+7. **Four levels, closed.** `none`, `weak`, `partial`, `strong`. There is no midpoint and
+   no fifth option, and the extractor is given the four anchors below verbatim rather than
+   the level names alone (OQ-11, OQ-14). An extractor choosing between four named
+   descriptions of evidence is doing a different and more auditable job than one choosing
+   between four adjectives.
 
 ---
 
@@ -625,6 +691,12 @@ candidate, or only about who helped them write it?
 
 Total weight 12. Three `required`. Unchanged from the approved design.
 
+Every row above carries four anchors and, per OQ-11, all four are prompt material. The
+prose in this Part is therefore the full set of strings that enter
+`rubric_dimension_definitions_version`: six definitions and twenty-four anchors. The
+`jobRelatedJustification` text, the weights, the `required` flags, and `provenance` do not
+enter the prompt.
+
 ---
 
 # Part 3: Readiness note
@@ -642,6 +714,16 @@ Total weight 12. Three `required`. Unchanged from the approved design.
 | `derive_level` | As committed, monotonic in both arguments, no scoring authority |
 | Confidence formula and constants | As committed, including `T_ESCALATE = 0.55` |
 | Existing rubric schema shape | `dimensionId`, `weight`, `required`, `definition`, `jobRelatedJustification` |
+| Level enum cardinality | Four, closed by OQ-14 |
+
+## Decided since the first draft (product owner, 2026-09-07)
+
+| Decision | Where it lands |
+|---|---|
+| Anchors are prompt material and join the fixture cache key (OQ-11) | Part 2, cross-cutting rule 7 |
+| `levelAnchors` is a sixth `RubricDimensionSchema` field, `.strict()` kept (OQ-12) | Part 2, shape sketch |
+| `rubricId` plus integer `version` plus a sibling `provenance` on the snapshot (OQ-13) | Part 2, shape sketch |
+| Four levels, closed (OQ-14) | Part 2, cross-cutting rule 7 |
 
 ## Pending. Drafted here, not decided.
 
@@ -649,11 +731,10 @@ Total weight 12. Three `required`. Unchanged from the approved design.
 |---|---|
 | `definition` prose, six dimensions | v2 proposed in Part 2, awaiting the call |
 | `jobRelatedJustification` prose, six dimensions | v2 proposed in Part 2, awaiting the call |
-| Level anchors, four per dimension | v2 proposed in Part 2, no schema field exists for them yet |
-| Contradicting-evidence examples | v2 proposed in Part 2, no schema field exists |
-| Whether anchors enter the extraction prompt | Undecided, see OQ-11 |
-| `rubricId` and `version` strings for v2 | Undecided, see OQ-13 |
+| Level anchors, four per dimension | v2 proposed in Part 2, schema field named by OQ-12, not applied |
+| Contradicting-evidence examples | v2 proposed in Part 2, no schema field, documentation and corpus-authoring aid only |
 | Whether dimensions 5 and 6 survive | Undecided, see OQ-4 and R4 |
+| The source of truth for work authorization | Undecided, see the readiness item below. Blocking for tier-1 authoring |
 
 ## Known tensions to resolve on the call
 
@@ -675,12 +756,67 @@ resume, cutting them is the honest move, and it changes the frozen structure. Th
 a design-level change requiring a decision record, not a prose edit. It is listed here so
 the possibility is priced before the call rather than discovered during it.
 
-**T3. Adding level anchors expands what the rubric commits to.** Anchors are prose about
-what evidence looks like. If they enter the extraction prompt, they are part of the fixture
-cache key and become as expensive to change as definitions. If they stay in documentation,
-the extractor is calibrated by definition text alone and the anchors serve only the human
-reviewer and the packet UI. Both are defensible; the choice must be explicit before Gate 4
-because it changes what a fixture re-record costs.
+**T3 (RESOLVED, OQ-11). Level anchors are prompt material.** The tension was that anchors
+in the prompt buy calibration at the cost of joining definitions in the expensive-to-change
+class. Resolved in favor of calibration: the anchors go in the prompt, they are inside
+`rubric_dimension_definitions_version` and therefore inside the fixture cache key, and they
+lock in the same pass as the definitions so the added cost is paid once. The practical
+consequence is that the twenty-four anchor strings in Part 2 are now Gate 2 artifacts, not
+documentation, and editing one after Gate 4 re-pays fixture recording exactly as editing a
+definition does.
+
+**T4 (NEW). Work authorization is not a resume field, and the pipeline currently assumes it
+is.** See the readiness item below. This one was found by desk check rather than raised by
+a reviewer, it lands on the corpus rather than on the rubric prose, and it is blocking for
+tier-1 authoring.
+
+## Readiness item: hard-requirement resolution needs a resume-independent source
+
+**BLOCKING FOR TIER-1 AUTHORING (Gate 3). Not blocking for the rubric lock (Gate 2).**
+
+**The check that produced this.** A pre-call desk check, run 2026-09-07, examined published
+Applied AI Engineer and machine learning engineer resume examples for any statement of work
+authorization, citizenship, visa status, or sponsorship need, alongside US resume guidance
+and the ATS side. Sources, per-source findings, and the method's limitations are recorded
+against WA-17 in `WORKFLOW_ASSUMPTIONS.md`. The short version: work authorization was
+absent from every example examined, standard US guidance is to omit it from the resume, and
+the ATS collects it as an application form question, which Greenhouse surfaces as a
+structured candidate field visible to recruiters.
+
+**Why it is blocking.** The pipeline resolves the `work_authorization` hard requirement from
+a `work_authorization_statement` grounded fact parsed out of document text. If document text
+is the only source, that requirement resolves `unknown` corpus-wide. `unknown` escalates and
+never rejects, which is the design behaving correctly, but escalated candidates are excluded
+from `shortlist_cut`. A corpus-wide `unknown` therefore empties the `scored` population the
+shortlist draws from and pushes the escalation rate past its 60 percent ceiling, which is
+the same collapse the `required` split was engineered to prevent, arriving through a hard
+requirement instead of through a rubric dimension.
+
+**The trap to avoid.** The cheap fix is to write work-authorization statements into the 25
+tier-1 resumes so the resolver has something to find. That would make the corpus disagree
+with every real resume examined, and it is precisely the governing risk the design names:
+corpus, fixtures, rubric, and evaluator all authored by one person and co-designed to agree.
+A corpus that only works because the documents were written to satisfy the resolver proves
+nothing about the resolver.
+
+**Recommended resolution, for the product owner.** Model work authorization as a structured
+application-answer input carried by the candidate source adapter, with its own provenance,
+rather than as a resume span. This mirrors what real ATSs do, keeps the grounded-evidence
+rule intact (the answer is still a citable source with a document of record, just not a
+resume), and lets the corpus stay honest: tier-1 resumes carry no work-authorization text,
+because real ones do not, and the requirement resolves from the field. Candidates
+deliberately seeded without an application answer then produce a *genuine* `unknown` that
+exercises the escalation path for the right reason.
+
+**The fairness consequence, either way.** WA-32 records it: if work authorization were read
+from resume text, it would resolve determinately mostly for candidates who need sponsorship,
+because they are the ones who disclose it. That makes `unknown` correlate with national
+origin, and `unknown` withholds a candidate from the shortlist. Whichever source is chosen,
+this belongs in the Trust Center as a known limitation rather than in a commit message.
+
+**Ask the practitioner anyway (R5).** The desk check answered what a resume contains. It did
+not answer what *this recruiter's* pipeline hands them, or whether they would trust a
+requirement resolved from an application field they cannot see the provenance of.
 
 ## Open questions requiring a human answer before lock
 
@@ -704,9 +840,11 @@ because it changes what a fixture re-record costs.
   Blocks WA-12 and, more importantly, blocks the claim that the levels mean anything
   outside the author's head.
 - **OQ-7. Are work authorization, years of experience, and location the right hard
-  requirements, and does work authorization ever appear in a resume?** R5 tests it. Blocks
-  WA-16 and WA-17. A "no" on work authorization is corpus-invalidating and needs to be
-  known before tier-1 authoring, not after.
+  requirements for this role?** R5 tests it. Blocks WA-16. Still open.
+  *The second half of this question, whether work authorization ever appears in a resume,
+  was answered by the pre-call desk check below: normally it does not.* R5 now asks the
+  practitioner to confirm that finding rather than to supply it, and the design consequence
+  is already recorded as a readiness item rather than waiting on the call.
 - **OQ-8. What escalation volume is tolerable?** Q5's follow-up tests it. Blocks WA-26. The
   current band implies roughly 49 to 84 resolution tasks per 140-candidate week.
 - **OQ-9. What would make you distrust the recommendation?** Q0. Does not block the rubric
@@ -715,60 +853,85 @@ because it changes what a fixture re-record costs.
 - **OQ-10. Is "escalated" the right word?** Blocks nothing structural, cheap now, expensive
   after UI copy lands.
 
-### Requiring a product-owner decision (no practitioner needed, still human)
+### Resolved by the product owner, 2026-09-07
 
-- **OQ-11. Do level anchors enter the extraction prompt?** See tension T3. Recommendation:
-  yes, with anchors carried in a versioned field, because the anchors are the calibration
-  and an extractor asked for an ordinal level without them is guessing. The cost is that
-  anchors join definitions as expensive-to-change, which is acceptable if they are locked
-  in the same pass.
-- **OQ-12. How are anchors represented in the schema?** The current `RubricDimensionSchema`
-  has `dimensionId`, `weight`, `required`, `definition`, `jobRelatedJustification`, and
-  nothing else, and is `.strict()`. Carrying anchors needs one added field. Recommendation:
-  a `levelAnchors` object keyed by the four level values, each non-empty prose under the
-  existing 2000-character bound, so the four-level enum stays the single source of truth
-  for which keys exist. The alternative (a documentation-only sibling constant) keeps the
-  schema untouched but lets the anchors drift away from the rubric they describe.
-  **`packages/**` is owned by a parallel workstream right now; this is a named change, not
-  an applied one.**
-- **OQ-13. What are `rubricId` and `version` for v2, and how does the Trust Center label
-  provenance?** The plan requires the Trust Center to label the rubric as product-authored
-  rather than practitioner-validated when the `RubricAssumptionRecord` fallback is used.
-  That means provenance is a rendered property of the locked rubric and needs somewhere to
-  live.
-- **OQ-14. Four levels or five?** The design lists it as open question 2 and notes a
-  five-level scale with a neutral midpoint may calibrate better or may invite
-  default-to-middle bias. Recommendation: close it at four, and let C1 supply the evidence.
-  Testing five means re-recording every fixture and re-authoring every tier-1 expected
-  level, which the design already prices as scoped to a 25-candidate subset if attempted at
-  all.
+These four are closed. They needed a human decision, not a practitioner, and the human has
+decided. Recorded here with the decision and its rationale; reflected in Part 2.
+
+- **OQ-11. Do level anchors enter the extraction prompt? RESOLVED: yes.** Anchors go in
+  the prompt and become part of the fixture cache key alongside the dimension definitions.
+  *Rationale:* the anchors are the calibration, and an extractor asked for an ordinal level
+  without them is guessing at what `partial` means. Cost accepted: anchors are now as
+  expensive to change as definitions, which is fine because they lock in the same pass.
+  Closes tension T3.
+- **OQ-12. How are anchors represented in the schema? RESOLVED: a sixth field,
+  `levelAnchors`, on `RubricDimensionSchema`, keeping `.strict()`.** Keyed by the four
+  level values, each non-empty prose under the existing 2000-character bound. *Rationale:*
+  the level enum stays the single source of truth for which keys exist, and a schema field
+  cannot drift away from the rubric it describes the way a sibling documentation constant
+  would. Proposed shape is in Part 2. **Not applied here:** `packages/**` is owned by a
+  parallel workstream and this document does not edit it.
+- **OQ-13. Rubric identity and provenance. RESOLVED: `rubricId` plus an integer `version`
+  live on the rubric snapshot, with a sibling `provenance` field on the same snapshot.**
+  `provenance` carries `product-authored` or `recruiter-validated` plus the list of WA ids
+  the rubric rests on. v1 and v2 each carry their own label, so the label is a property of
+  the snapshot rather than of the repository. The Trust Center reads provenance from the
+  snapshot. *Rationale:* the plan requires the Trust Center to label an unvalidated rubric
+  as product-authored, so provenance has to be a queryable property of the exact rubric a
+  result was scored against, and a superseded result must keep showing the label its own
+  rubric carried. Proposed shape is in Part 2.
+- **OQ-14. Four levels or five? RESOLVED: four. `none` / `weak` / `partial` / `strong`,
+  closed.** *Rationale:* a five-level scale with a neutral midpoint invites
+  default-to-middle bias, and testing it costs a re-record of every fixture plus a
+  re-authoring of every tier-1 expected level. If a fifth level is ever argued for, C1 (the
+  calibration exercise in Part 1) is the evidence path: a practitioner hesitating between
+  two adjacent levels and reaching for something in between is the finding that would
+  reopen this, and nothing short of it should.
 
 ## The lock, when it happens
 
 Kept deliberately small, which is the point of staging it this way.
 
-1. Run the call. Fill the note-taking template verbatim.
-2. Update `WORKFLOW_ASSUMPTIONS.md`: move at least three entries out of `inferred`, keep
-   original text on every `corrected` entry, add anything new from WA-32 onward.
-3. Answer OQ-11 through OQ-14 (product owner).
-4. If OQ-12 lands on a schema field, add `levelAnchors` to `RubricDimensionSchema` in
-   `packages/core/src/rubric/rubric.ts`. One field, four non-empty prose values.
-5. Replace the six `definition` and `jobRelatedJustification` placeholder strings in
+Steps 1 and 2 of the original list are done. What remains:
+
+1. ~~Answer OQ-11 through OQ-14 (product owner).~~ **Done 2026-09-07.** Decisions recorded
+   above and reflected in Part 2.
+2. Run the call. Fill the note-taking template verbatim. Ten practitioner questions remain
+   open.
+3. Update `WORKFLOW_ASSUMPTIONS.md`: move at least three entries out of `inferred`
+   **through the conversation** (WA-17's desk-check correction does not count toward that
+   three), keep original text on every `corrected` entry, add anything new from WA-33
+   onward.
+4. Decide the work-authorization source per the readiness item above. This gates Gate 3,
+   not Gate 2, so it does not have to precede the lock, but it does have to precede a
+   single authored tier-1 candidate.
+5. Add `levelAnchors` to `RubricDimensionSchema` in `packages/core/src/rubric/rubric.ts`
+   per OQ-12: one field, four non-empty prose values, `.strict()` kept, keys derived from
+   `DIMENSION_LEVELS`. Add `provenance` and the integer `version` to `RubricSchema` per
+   OQ-13.
+6. Replace the six `definition` and `jobRelatedJustification` placeholder strings in
    `packages/core/src/rubric/draft-v1.ts` with the Part 2 prose as amended by the call, and
-   attach the anchors. Rename the constant and the file to v1 proper, set `rubricId` and
-   `version` per OQ-13.
-6. Update `packages/core/src/rubric/rubric.test.ts`: the structural assertions (six
+   attach the twenty-four anchors. Rename the constant and the file to v1 proper. Set
+   `rubricId`, `version: 1`, and `provenance` (`product-authored` unless the call
+   completed, plus the WA ids the rubric rests on).
+7. Update `packages/core/src/rubric/rubric.test.ts`: the structural assertions (six
    dimensions, weights 3/3/2/2/1/1, three required, unique ids, total weight 12) do not
-   change. Add assertions that no prose contains the string "placeholder" and that every
-   dimension carries four non-empty anchors.
-7. Canonicalize, hash, approve, and prohibit mutation, per Gate 2.
-8. Only then Gate 3 (tier-1 corpus and expectations) and Gate 4 (fixture recording). Not
-   before: dimension text is part of the fixture cache key, and reversing this order
-   re-pays the 20 to 28 hour tier-1 line item in full.
+   change. Add assertions that no prose contains the string "placeholder", that every
+   dimension carries four non-empty anchors keyed exactly by `DIMENSION_LEVELS`, and that
+   `provenance.restsOn` is non-empty.
+8. Canonicalize, hash, approve, and prohibit mutation, per Gate 2. The hash now covers the
+   anchors, since OQ-11 put them in the prompt.
+9. Only then Gate 3 (tier-1 corpus and expectations) and Gate 4 (fixture recording). Not
+   before: dimension text and anchors are part of the fixture cache key, and reversing this
+   order re-pays the 20 to 28 hour tier-1 line item in full.
 
 ## Status
 
-**DONE_WITH_CONCERNS.** The draft is ready for a practitioner to react to. The concerns are
-the fourteen open questions above, six of which cannot be answered by anyone inside this
-repository, and tensions T1 and T2, either of which could change the frozen structure the
-rest of the build is already assuming.
+**DONE_WITH_CONCERNS.** The draft is ready for a practitioner to react to. Four of the
+original fourteen open questions are closed by product-owner decision. Ten remain, all of
+them practitioner questions that nobody inside this repository can answer.
+
+The concerns: tensions T1 and T2, either of which could change the frozen structure the
+rest of the build is already assuming, and T4, which is already known to be true rather
+than merely possible and blocks tier-1 authoring until the work-authorization source is
+decided.
