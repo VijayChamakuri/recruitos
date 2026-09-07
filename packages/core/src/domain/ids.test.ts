@@ -18,6 +18,10 @@ import {
   ExtractionFailureIdSchema,
   ExtractionRunIdSchema,
   ExtractionSpecIdSchema,
+  FactConflictIdSchema,
+  FactConflictMemberIdSchema,
+  HardRequirementAssessmentFactIdSchema,
+  HardRequirementAssessmentIdSchema,
   ProposalIdSchema,
   RequirementIdSchema,
   ResolutionTaskIdSchema,
@@ -28,6 +32,9 @@ import {
   RubricIdSchema,
   ScoreResultIdSchema,
   SourceDocumentIdSchema,
+  StructuredFactEvidenceSpanIdSchema,
+  StructuredFactIdSchema,
+  StructuredFactProvenanceIdSchema,
   TriageRunIdSchema,
   type CandidateId,
   type SourceDocumentId
@@ -51,6 +58,10 @@ const schemas = [
   ExtractionFailureIdSchema,
   ExtractionRunIdSchema,
   ExtractionSpecIdSchema,
+  FactConflictIdSchema,
+  FactConflictMemberIdSchema,
+  HardRequirementAssessmentFactIdSchema,
+  HardRequirementAssessmentIdSchema,
   ProposalIdSchema,
   RequirementIdSchema,
   ResolutionTaskIdSchema,
@@ -61,6 +72,9 @@ const schemas = [
   RubricIdSchema,
   ScoreResultIdSchema,
   SourceDocumentIdSchema,
+  StructuredFactEvidenceSpanIdSchema,
+  StructuredFactIdSchema,
+  StructuredFactProvenanceIdSchema,
   TriageRunIdSchema
 ] as const;
 

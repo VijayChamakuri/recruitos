@@ -19,11 +19,18 @@ import {
   extractionFailures,
   extractionRuns,
   extractionSpecs,
+  factConflictMembers,
+  factConflicts,
+  hardRequirementAssessmentFacts,
+  hardRequirementAssessments,
   requirements,
   roles,
   rubricDimensions,
   rubrics,
   runInputSnapshots,
+  structuredFactEvidenceSpans,
+  structuredFactProvenances,
+  structuredFacts,
   sourceDocuments
 } from "./schema.js";
 
@@ -352,5 +359,88 @@ describe("runtime Drizzle schema", () => {
     ]);
     expect(snapshotConfig.foreignKeys).toHaveLength(1);
     expect(snapshotConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+  });
+
+  it("exposes the structured fact, conflict, and hard-requirement constraints", () => {
+    const factConfig = getTableConfig(structuredFacts);
+    expect(factConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "structured_fact_content_hash",
+      "structured_fact_content_json",
+      "structured_fact_created_at",
+      "structured_fact_kind",
+      "structured_fact_payload_json",
+      "structured_fact_semantic_key"
+    ]);
+    expect(factConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "structured_fact_candidate",
+      "structured_fact_content_hash_unique",
+      "structured_fact_kind",
+      "structured_fact_semantic_key_unique"
+    ]);
+    expect(factConfig.foreignKeys).toHaveLength(1);
+    expect(factConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+
+    const spanConfig = getTableConfig(structuredFactEvidenceSpans);
+    expect(spanConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "structured_fact_evidence_span_created_at",
+      "structured_fact_evidence_span_ordinal"
+    ]);
+    expect(spanConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "structured_fact_evidence_span_ordinal_unique",
+      "structured_fact_evidence_span_unique"
+    ]);
+    expect(spanConfig.foreignKeys).toHaveLength(2);
+
+    const provenanceConfig = getTableConfig(structuredFactProvenances);
+    expect(provenanceConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "structured_fact_provenance_actor_presence",
+      "structured_fact_provenance_created_at",
+      "structured_fact_provenance_source"
+    ]);
+    expect(provenanceConfig.foreignKeys).toHaveLength(2);
+
+    const conflictConfig = getTableConfig(factConflicts);
+    expect(conflictConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "fact_conflict_content_hash",
+      "fact_conflict_content_json",
+      "fact_conflict_created_at"
+    ]);
+    expect(conflictConfig.indexes.map((index) => index.config.name)).toEqual([
+      "fact_conflict_content_hash_unique"
+    ]);
+
+    const memberConfig = getTableConfig(factConflictMembers);
+    expect(memberConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "fact_conflict_member_created_at",
+      "fact_conflict_member_ordinal"
+    ]);
+    expect(memberConfig.foreignKeys).toHaveLength(2);
+
+    const assessmentConfig = getTableConfig(hardRequirementAssessments);
+    expect(assessmentConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "hard_requirement_assessment_content_hash",
+      "hard_requirement_assessment_content_json",
+      "hard_requirement_assessment_created_at",
+      "hard_requirement_assessment_outcome",
+      "hard_requirement_assessment_requirement_field_id"
+    ]);
+    expect(assessmentConfig.foreignKeys).toHaveLength(1);
+
+    const assessmentFactConfig = getTableConfig(hardRequirementAssessmentFacts);
+    expect(assessmentFactConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "hard_requirement_assessment_fact_created_at",
+      "hard_requirement_assessment_fact_ordinal",
+      "hard_requirement_assessment_fact_polarity"
+    ]);
+    expect(assessmentFactConfig.foreignKeys).toHaveLength(2);
+    expect(
+      [
+        ...spanConfig.foreignKeys,
+        ...provenanceConfig.foreignKeys,
+        ...memberConfig.foreignKeys,
+        ...assessmentConfig.foreignKeys,
+        ...assessmentFactConfig.foreignKeys
+      ].every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
   });
 });

@@ -23,13 +23,20 @@ import {
   extractionFailures,
   extractionRuns,
   extractionSpecs,
+  factConflictMembers,
+  factConflicts,
+  hardRequirementAssessmentFacts,
+  hardRequirementAssessments,
   requirements,
   roles,
   rubricDimensions,
   rubrics,
   runInputSnapshots,
   runtimeMigrationSmoke,
-  sourceDocuments
+  sourceDocuments,
+  structuredFactEvidenceSpans,
+  structuredFactProvenances,
+  structuredFacts
 } from "./schema.js";
 
 /**
@@ -249,7 +256,14 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["extraction_spec", extractionSpecs],
   ["extraction_artifact", extractionArtifacts],
   ["extraction_failure", extractionFailures],
-  ["run_input_snapshot", runInputSnapshots]
+  ["run_input_snapshot", runInputSnapshots],
+  ["structured_fact", structuredFacts],
+  ["structured_fact_evidence_span", structuredFactEvidenceSpans],
+  ["structured_fact_provenance", structuredFactProvenances],
+  ["fact_conflict", factConflicts],
+  ["fact_conflict_member", factConflictMembers],
+  ["hard_requirement_assessment", hardRequirementAssessments],
+  ["hard_requirement_assessment_fact", hardRequirementAssessmentFacts]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {
