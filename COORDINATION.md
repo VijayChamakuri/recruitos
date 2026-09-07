@@ -14,8 +14,8 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | f2ccea3 |
-| Migration lock held by | Cursor, for the full chain below |
+| origin/main | f19d446 |
+| Migration lock held by | none. T3 chain complete. One drizzle PR at a time still applies; file schema requests to Cursor |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
 ## Lanes and file locks
@@ -28,29 +28,31 @@ your own rows plus the log.
 
 ## Migration chain (Cursor, serial, one PR each)
 
-1. `resolution_task` + `resolution_action` + `resolution_task_head`
-2. `proposal` + `review_decision` + `proposal_head`
-3. `candidate_head` (uses `defineMutableHead` from #20)
-4. `candidate_result_seal` (cyclic `DEFERRABLE INITIALLY DEFERRED` FK + validation triggers; validates reason uniqueness, task creation, proposal eligibility, so it lands last)
+Complete on main as of #26:
+
+1. `resolution_task` + `resolution_action` + `resolution_task_head` (#22, d2aa7e5)
+2. `proposal` + `review_decision` + `proposal_head` (#23, 4a2cd1a)
+3. `candidate_head` (uses `defineMutableHead` from #20) (#25, f2ccea3)
+4. `candidate_result_seal` (cyclic `DEFERRABLE INITIALLY DEFERRED` FK + validation triggers; validates reason uniqueness, task creation, proposal eligibility, so it lands last) (#26, f19d446)
 
 ## Currently building
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/candidate-result-seal-persistence-3840 | chain step 4 | ready PR #26 |
-| Claude Code | (none) | Held until chain step 4 (`candidate_result_seal`) lands. Then composition root, command use-cases, scheduler T5. | idle-held |
+| Cursor | (none) | T3 chain complete (#26). Idle unless a schema request arrives. | idle-complete |
+| Claude Code | (none) | Composition root, command use-cases, scheduler T5. Unblocked; the T3 chain is on main. | idle-ready |
 | Antigravity | (none) | PR #21 merged (#21). Idle until Cursor finishes migration chain step 1 or next assignment. | idle-complete |
 
 ## Hard rules
 
-1. One open PR touching `packages/runtime/drizzle/**` at a time. Cursor holds it for the whole chain. Others file schema requests to Cursor, nobody else adds a migration.
+1. One open PR touching `packages/runtime/drizzle/**` at a time. The T3 chain is complete; file schema requests to Cursor. Nobody else adds a migration.
 2. Shared rebase file: `packages/runtime/src/public-api.test.ts`. Never hand-merge the export array. On conflict: `pnpm build`, then regenerate from `Object.keys(runtime).sort()`.
 3. `packages/runtime/src/index.ts`, `package.json` exports, `vitest.config.ts`: append-only, alphabetical, union on conflict.
 4. Rebase onto latest `origin/main` immediately before requesting merge. If `origin/main` moved during review, rebase again.
 5. Green before merge: `pnpm check`, `pnpm test:coverage` (repo enforces 100 percent), `pnpm test:integration`, `git diff --check`, em-dash scan. No em dashes anywhere.
 6. Squash-merge, delete branch.
 7. Item 4: "docs staged" is Claude's done state. "Rubric ready" needs a human to answer OQ-1 through OQ-10 and pick recruiter call vs `RubricAssumptionRecord`.
-8. Scheduler (T5), composition root, and command use-cases are reserved for Claude, deferred until the migration chain is on `main`.
+8. Scheduler (T5), composition root, and command use-cases are reserved for Claude. The T3 migration chain is on `main` as of #26. Claude may start.
 
 ## Log (append only, newest last)
 
@@ -71,3 +73,4 @@ your own rows plus the log.
 - 2026-09-07 Cursor: draft PR #26 opened for candidate_result_seal. Cyclic deferred FK, handwritten 0015 SQL, PRAGMA defer_foreign_keys, completeness triggers. Claude stays held until #26 lands.
 - 2026-09-07 Cursor: #26 ready. pnpm check, test:coverage (100 percent including seals.ts), integration, diff-check, and em-dash scan are green. Claude stays held until #26 lands.
 - 2026-09-07 Cursor: Claude review of #26 confirmed. (1) corepack pnpm test:coverage exits 0: 772 tests, All files 100 percent, architecture omitted from the coverage command. (2) 0015 drops five triggers and recreates all five; no 0010 association trigger is dropped. (3) FK pragmas are migrate-only; command transactions keep restrict FKs immediate. Unsealed backfill comment is in 0015. #26 stays ready. Claude stays held until it lands.
+- 2026-09-07 Cursor: PR #26 squash-merged to main at f19d446. T3 chain complete. Migration lock released. Claude is unblocked for composition root, command use-cases, and scheduler T5.
