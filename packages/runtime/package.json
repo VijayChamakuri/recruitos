@@ -59,6 +59,11 @@
       "import": "./dist/facts/index.js",
       "default": "./dist/facts/index.js"
     },
+    "./results": {
+      "types": "./dist/results/index.d.ts",
+      "import": "./dist/results/index.js",
+      "default": "./dist/results/index.js"
+    },
     "./roles": {
       "types": "./dist/roles/index.d.ts",
       "import": "./dist/roles/index.js",
