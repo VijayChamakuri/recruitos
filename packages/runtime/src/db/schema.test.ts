@@ -31,10 +31,14 @@ import {
   factConflicts,
   hardRequirementAssessmentFacts,
   hardRequirementAssessments,
+  proposalEvidenceSpans,
+  proposalHeads,
+  proposals,
   requirements,
   resolutionActions,
   resolutionTaskHeads,
   resolutionTasks,
+  reviewDecisions,
   roles,
   rubricDimensions,
   rubrics,
@@ -585,6 +589,72 @@ describe("runtime Drizzle schema", () => {
     const headConfig = getTableConfig(resolutionTaskHeads);
     expect(headConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
       "resolution_task_head_version"
+    ]);
+    expect(headConfig.indexes).toEqual([]);
+    expect(headConfig.foreignKeys).toHaveLength(2);
+    expect(headConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
+      true
+    );
+  });
+
+  it("exposes proposal, evidence-span, review-decision, and proposal-head constraints", () => {
+    const proposalConfig = getTableConfig(proposals);
+    expect(proposalConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "proposal_created_at",
+      "proposal_kind",
+      "proposal_ordinal",
+      "proposal_payload_hash",
+      "proposal_payload_json"
+    ]);
+    expect(proposalConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "proposal_ordinal_unique",
+      "proposal_result_created",
+      "proposal_shortlist_result_unique"
+    ]);
+    const proposalIndexByName = Object.fromEntries(
+      proposalConfig.indexes.map((index) => [index.config.name, index])
+    );
+    expect(proposalIndexByName.proposal_shortlist_result_unique?.config.where).toBeDefined();
+    expect(proposalIndexByName.proposal_ordinal_unique?.config.where).toBeUndefined();
+    expect(proposalIndexByName.proposal_result_created?.config.where).toBeUndefined();
+    expect(proposalConfig.foreignKeys).toHaveLength(1);
+    expect(proposalConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+
+    const spanConfig = getTableConfig(proposalEvidenceSpans);
+    expect(spanConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "proposal_evidence_span_created_at",
+      "proposal_evidence_span_ordinal"
+    ]);
+    expect(spanConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "proposal_evidence_span_ordinal_unique",
+      "proposal_evidence_span_unique"
+    ]);
+    expect(spanConfig.foreignKeys).toHaveLength(2);
+    expect(spanConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
+      true
+    );
+
+    const decisionConfig = getTableConfig(reviewDecisions);
+    expect(decisionConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "review_decision_actor",
+      "review_decision_created_at",
+      "review_decision_kind",
+      "review_decision_ordinal",
+      "review_decision_payload_hash",
+      "review_decision_payload_json"
+    ]);
+    expect(decisionConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "review_decision_ordinal_unique",
+      "review_decision_proposal_created"
+    ]);
+    expect(decisionConfig.foreignKeys).toHaveLength(2);
+    expect(
+      decisionConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
+
+    const headConfig = getTableConfig(proposalHeads);
+    expect(headConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "proposal_head_version"
     ]);
     expect(headConfig.indexes).toEqual([]);
     expect(headConfig.foreignKeys).toHaveLength(2);
