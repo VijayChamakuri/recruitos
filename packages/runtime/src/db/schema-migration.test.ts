@@ -19,7 +19,10 @@ import {
   dimensionAssessments,
   evidenceGaps,
   evidenceSpans,
+  extractionArtifacts,
+  extractionFailures,
   extractionRuns,
+  extractionSpecs,
   requirements,
   roles,
   rubricDimensions,
@@ -241,7 +244,10 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["evidence_span", evidenceSpans],
   ["evidence_gap", evidenceGaps],
   ["dimension_assessment", dimensionAssessments],
-  ["dimension_assessment_evidence_span", dimensionAssessmentEvidenceSpans]
+  ["dimension_assessment_evidence_span", dimensionAssessmentEvidenceSpans],
+  ["extraction_spec", extractionSpecs],
+  ["extraction_artifact", extractionArtifacts],
+  ["extraction_failure", extractionFailures]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {
