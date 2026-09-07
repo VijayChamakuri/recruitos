@@ -39,7 +39,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | draft PR #32, rematched onto f9304d2 |
+| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | ready PR #32 |
 | Claude Code | (none) | T9 part 1 `normalizeSourceText` merged #33. Decision pipeline (T9 part 2) next. | next |
 | Antigravity | (none) | createRuntime wiring + e2e/eval/bench harnesses. Merged #31. | idle-complete |
 
@@ -86,3 +86,4 @@ your own rows plus the log.
 - 2026-09-07 Cursor: merged origin/main f9dd10b into #32 after #30 (use-case contract) and #31 (createRuntime wiring + harnesses). Regenerating `public-api.test.ts` from `Object.keys(runtime).sort()`. Migration lock stays with Cursor.
 - 2026-09-07 Claude: PR #30 (use-case command contract) merged. Taking T9. Part 1 on b/core-text-normalization: packages/core/src/matching/normalizeSourceText, policy version 1 (strip one leading BOM, fold CR and CRLF to LF, Unicode NFC, nothing else, content preserved verbatim). pnpm check 958, test:coverage exit 0 / 100 percent, integration 21, no em dashes. Opening PR. Part 2 is the decision pipeline (packages/core/src/pipeline/), wants Opus.
 - 2026-09-07 Cursor: merged origin/main f9304d2 into #32 after #33 (source text normalization). Migration lock stays with Cursor.
+- 2026-09-07 Cursor: #32 ready on f9304d2. pnpm check 978 plus 21 integration exit 0, test:coverage 831 exit 0 (runs/store and normalize 100 percent), standalone integration 21, diff-check clean, em-dash scan clean. Attempt-readiness waits for the next drizzle PR.
