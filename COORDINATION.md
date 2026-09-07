@@ -14,8 +14,8 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | a73c578 |
-| Migration lock held by | Cursor, for run and scheduler tables (`triage_run`, `triage_run_member`, `triage_run_seal`, then `triage_attempt`, `attempt_work_item`) |
+| origin/main | 5ff9dc2 |
+| Migration lock held by | Cursor, for scheduler tables (`triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
 ## Lanes and file locks
@@ -32,14 +32,14 @@ your own rows plus the log.
 2. `proposal` + `review_decision` + `proposal_head` (MERGED #23)
 3. `candidate_head` (MERGED #25)
 4. `candidate_result_seal` (MERGED #26)
-5. `triage_run` + `triage_run_member` + `triage_run_seal` (cyclic deferred FK; attempt-readiness checks land with step 6)
-6. `triage_attempt` + `attempt_work_item` (mutable operational; FKs to run and base result)
+5. `triage_run` + `triage_run_member` + `triage_run_seal` (MERGED #32)
+6. `triage_attempt` + `attempt_work_item` (mutable operational; FKs to run and base result; expands run-seal attempt-readiness)
 
 ## Currently building
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | (pending) | Takes the run + scheduler migration step 6: `triage_attempt` + `attempt_work_item`. Holds the migration lock. | assigned |
+| Cursor | cursor/triage-attempt-persistence-3840 | chain step 6: `triage_attempt` + `attempt_work_item` + run-seal readiness | building |
 | Claude Code | b/core-shortlist-proposals | T9 part 2, step 6 of 6: shortlist_inclusion proposal derivation in `packages/core/src/pipeline/`. Last step of the pure decision pipeline. | ready PR |
 | Antigravity | (pending) | Wired eval span-matching and bench suites to real core matching and pipeline modules (PR #44 merged). Ready for next task. | idle |
 
@@ -92,6 +92,7 @@ your own rows plus the log.
 - 2026-09-07 Cursor: #32 ready on ade15ef. pnpm check 1011 plus 21 integration exit 0, test:coverage 864 exit 0 (runs/store, fold, relocate 100 percent), standalone integration 21, diff-check clean, em-dash scan clean.
 - 2026-09-07 Cursor: PR #32 merged to main at 0198202. Migration lock released for triage_attempt.
 - 2026-09-07 Claude: T9 part 2 step 1 (PR #35) squash-merged at ade15ef, branch deleted. Step 2 on b/core-fact-consolidation: packages/core/src/pipeline/consolidate-facts.ts. Dedupe is by exact claim, so identical payloads from different documents or from parser, extractor, and human merge into one fact retaining every provenance, document, and grounding span. Facts that disagree about one subject are never merged and never dropped; each such subject emits one conflict with at least two canonically ordered members. Single-subject kinds (current_title, work_authorization_statement, claimed_experience) conflict on any difference; employment kinds use the committed semantic key, so employer plus start month is the subject and a differing title or end month is a disagreement rather than a second job. Every proposal requires at least one grounding span; one to four documents enforced. pnpm check exit 0 (1011 tests, 21 integration), test:coverage exit 0 with All files 100 percent, diff-check clean, no em dashes. Files touched: packages/core/src/pipeline/ plus one append to packages/core/src/index.ts so runtime can import the pipeline.
+- 2026-09-07 Cursor: PR #32 squash-merged to main at 0198202. Starting chain step 6 on cursor/triage-attempt-persistence-3840 for `triage_attempt`, `attempt_work_item`, and the run-seal attempt-readiness trigger. Migration lock stays with Cursor. Claude stays on T9 pipeline. No schema overlap.
 - 2026-09-07 Claude: T9 part 2 step 2 (PR #36) squash-merged at 51c4b23, branch deleted. Step 3 on b/core-dimension-assessments: packages/core/src/pipeline/assess-dimensions.ts. One assessment per rubric dimension, rubric passed in as an argument. Level selection follows the plan: highest grounded non-none level across successful documents, all-none selects a valid none, a non-none proposal with no located supporting span from its own document cannot select the level it claims and is reported in ungroundedDocumentIds, distinct grounded non-none levels set levelDisagreement, a reviewably failed document never becomes none, and a dimension whose documents all failed is unavailable with no level so the whole derivation reports unavailable. Human level writes go through the same typed structure and override the document selection; a non-none human level with no supporting span is rejected. deriveLevel is carried as derivedLevel, a visible calibration diagnostic with no scoring authority. Evidence gaps are explicit records beside a valid none, never folded into the level. pnpm check exit 0 (1059 tests, 21 integration), test:coverage exit 0 with All files 100 percent, diff-check clean, no em dashes. Files touched: packages/core/src/pipeline/ only.
 - 2026-09-07 Claude: T9 part 2 step 3 (PR #37) squash-merged at 8e542e5, branch deleted. Step 4 on b/core-hard-requirements: packages/core/src/pipeline/hard-requirements.ts. Three-valued pass, fail, unknown over the consolidated facts. Predicates are declarative data (minimum_experience_months, work_authorization_in, fact_present) so the whole policy hashes into the run input snapshot; each predicate reads exactly one fact kind, which makes the rule mechanical: absence of that kind is unknown, a conflict on that kind is unknown, an inconclusive predicate is unknown, and only a conclusive grounded violation is fail. Only fail rejects; unknown escalates and its count is the requiredFieldsMissing numerator for confidence. deriveTenureMonths unions half-open month ranges, counts an explicit end month inclusively, resolves present against the frozen asOfMonth rather than a clock, and never double counts concurrent work. The requirement policy is passed in beside the rubric because rubric v1 is draft; at lock it becomes part of the rubric snapshot. pnpm check exit 0 (1082 tests, 21 integration), test:coverage exit 0 with All files 100 percent, diff-check clean, no em dashes. Files touched: packages/core/src/pipeline/ only.
 - 2026-09-07 Antigravity: c/runtime-read-models complete. Built listCandidates (keyset cursor, constant O(1) query count, covering index plan assertion), listResolutionTasks (reviewer queue reason precedence ordering, keyset cursor, constant O(1) query count, covering index plan assertion), readCandidatePacket (anchored to candidate_head, returns persistence_failed with clear message until decision pipeline writes results, minimal packet shape), and wired them into apps/cli runtime adapter with fallback. All unit tests and integration tests pass, 100 percent coverage on core and runtime, zero em dashes. Opened PR #34. Note to Claude: please add not_found to RuntimeErrorSchema in packages/runtime/src/errors/runtime-error.ts when touching error types.
