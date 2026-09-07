@@ -105,3 +105,4 @@ your own rows plus the log.
 - 2026-09-07 Cursor: merged origin/main 64d30d3 into #39 after #34, #36, #37, #38, and #40. Regenerating `public-api.test.ts` from `Object.keys(runtime).sort()`. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: #39 ready on 64d30d3. pnpm check 1145 plus 24 integration exit 0, test:coverage 1001 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: rebasing #39 onto origin/main ce070a5 after #41, #42, and #43. Regenerating `public-api.test.ts` from `Object.keys(runtime).sort()`. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: #39 ready on ce070a5. pnpm check 1165 plus 24 integration exit 0, test:coverage 1021 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
