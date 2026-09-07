@@ -58,6 +58,11 @@
       "types": "./dist/roles/index.d.ts",
       "import": "./dist/roles/index.js",
       "default": "./dist/roles/index.js"
+    },
+    "./snapshots": {
+      "types": "./dist/snapshots/index.d.ts",
+      "import": "./dist/snapshots/index.js",
+      "default": "./dist/snapshots/index.js"
     }
   },
   "scripts": {
