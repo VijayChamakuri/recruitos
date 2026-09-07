@@ -63,6 +63,22 @@ export type ExtractionRunId = z.infer<typeof ExtractionRunIdSchema>;
 export const ExtractionSpecIdSchema = printableAsciiId.brand<"ExtractionSpecId">();
 export type ExtractionSpecId = z.infer<typeof ExtractionSpecIdSchema>;
 
+export const FactConflictIdSchema = printableAsciiId.brand<"FactConflictId">();
+export type FactConflictId = z.infer<typeof FactConflictIdSchema>;
+
+export const FactConflictMemberIdSchema = printableAsciiId.brand<"FactConflictMemberId">();
+export type FactConflictMemberId = z.infer<typeof FactConflictMemberIdSchema>;
+
+export const HardRequirementAssessmentFactIdSchema =
+  printableAsciiId.brand<"HardRequirementAssessmentFactId">();
+export type HardRequirementAssessmentFactId = z.infer<
+  typeof HardRequirementAssessmentFactIdSchema
+>;
+
+export const HardRequirementAssessmentIdSchema =
+  printableAsciiId.brand<"HardRequirementAssessmentId">();
+export type HardRequirementAssessmentId = z.infer<typeof HardRequirementAssessmentIdSchema>;
+
 export const ProposalIdSchema = printableAsciiId.brand<"ProposalId">();
 export type ProposalId = z.infer<typeof ProposalIdSchema>;
 
@@ -92,6 +108,17 @@ export type ScoreResultId = z.infer<typeof ScoreResultIdSchema>;
 
 export const SourceDocumentIdSchema = printableAsciiId.brand<"SourceDocumentId">();
 export type SourceDocumentId = z.infer<typeof SourceDocumentIdSchema>;
+
+export const StructuredFactEvidenceSpanIdSchema =
+  printableAsciiId.brand<"StructuredFactEvidenceSpanId">();
+export type StructuredFactEvidenceSpanId = z.infer<typeof StructuredFactEvidenceSpanIdSchema>;
+
+export const StructuredFactIdSchema = printableAsciiId.brand<"StructuredFactId">();
+export type StructuredFactId = z.infer<typeof StructuredFactIdSchema>;
+
+export const StructuredFactProvenanceIdSchema =
+  printableAsciiId.brand<"StructuredFactProvenanceId">();
+export type StructuredFactProvenanceId = z.infer<typeof StructuredFactProvenanceIdSchema>;
 
 export const TriageRunIdSchema = printableAsciiId.brand<"TriageRunId">();
 export type TriageRunId = z.infer<typeof TriageRunIdSchema>;

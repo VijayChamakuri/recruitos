@@ -1,6 +1,7 @@
 export * from "./dates.js";
 export * from "./evidence.js";
 export * from "./extraction.js";
+export * from "./facts.js";
 export * from "./hashes.js";
 export * from "./ids.js";
 export * from "./integers.js";

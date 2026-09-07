@@ -31,3 +31,24 @@ export const IsoDateSchema = z
   .refine(isIsoCalendarDate, { message: "Expected a calendar date in YYYY-MM-DD form" })
   .brand<"IsoDate">();
 export type IsoDate = z.infer<typeof IsoDateSchema>;
+
+const ISO_YEAR_MONTH_PATTERN = /^(\d{4})-(\d{2})$/u;
+
+/**
+ * Calendar check for the plan's strict `YYYY-MM` year-month values. Same
+ * integer arithmetic as dates: core never constructs a Date.
+ */
+export function isIsoYearMonth(value: string): boolean {
+  const match = ISO_YEAR_MONTH_PATTERN.exec(value);
+  if (match === null) {
+    return false;
+  }
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12;
+}
+
+export const IsoYearMonthSchema = z
+  .string()
+  .refine(isIsoYearMonth, { message: "Expected a year-month in YYYY-MM form" })
+  .brand<"IsoYearMonth">();
+export type IsoYearMonth = z.infer<typeof IsoYearMonthSchema>;
