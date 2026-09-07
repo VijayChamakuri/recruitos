@@ -18,6 +18,36 @@ export type CandidateId = z.infer<typeof CandidateIdSchema>;
 export const CandidateDocumentIdSchema = printableAsciiId.brand<"CandidateDocumentId">();
 export type CandidateDocumentId = z.infer<typeof CandidateDocumentIdSchema>;
 
+export const CandidateResultDimensionAssessmentIdSchema =
+  printableAsciiId.brand<"CandidateResultDimensionAssessmentId">();
+export type CandidateResultDimensionAssessmentId = z.infer<
+  typeof CandidateResultDimensionAssessmentIdSchema
+>;
+
+export const CandidateResultEvidenceGapIdSchema =
+  printableAsciiId.brand<"CandidateResultEvidenceGapId">();
+export type CandidateResultEvidenceGapId = z.infer<typeof CandidateResultEvidenceGapIdSchema>;
+
+export const CandidateResultEvidenceSpanIdSchema =
+  printableAsciiId.brand<"CandidateResultEvidenceSpanId">();
+export type CandidateResultEvidenceSpanId = z.infer<typeof CandidateResultEvidenceSpanIdSchema>;
+
+export const CandidateResultFactConflictIdSchema =
+  printableAsciiId.brand<"CandidateResultFactConflictId">();
+export type CandidateResultFactConflictId = z.infer<typeof CandidateResultFactConflictIdSchema>;
+
+export const CandidateResultHardRequirementAssessmentIdSchema =
+  printableAsciiId.brand<"CandidateResultHardRequirementAssessmentId">();
+export type CandidateResultHardRequirementAssessmentId = z.infer<
+  typeof CandidateResultHardRequirementAssessmentIdSchema
+>;
+
+export const CandidateResultStructuredFactIdSchema =
+  printableAsciiId.brand<"CandidateResultStructuredFactId">();
+export type CandidateResultStructuredFactId = z.infer<
+  typeof CandidateResultStructuredFactIdSchema
+>;
+
 export const CandidateTriageResultIdSchema = printableAsciiId.brand<"CandidateTriageResultId">();
 export type CandidateTriageResultId = z.infer<typeof CandidateTriageResultIdSchema>;
 
