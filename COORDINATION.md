@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | f9dd10b |
+| origin/main | f9304d2 |
 | Migration lock held by | Cursor, for run and scheduler tables (`triage_run`, `triage_run_member`, `triage_run_seal`, then `triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
@@ -39,8 +39,8 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | draft PR #32, rematched onto f9dd10b |
-| Claude Code | (none) | `use-cases/contract.ts` merged #30. Real use-cases wait on core text normalization (T9). | idle-complete |
+| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | draft PR #32, rematched onto f9304d2 |
+| Claude Code | (none) | T9 part 1 `normalizeSourceText` merged #33. Decision pipeline (T9 part 2) next. | next |
 | Antigravity | (none) | createRuntime wiring + e2e/eval/bench harnesses. Merged #31. | idle-complete |
 
 ## Hard rules
@@ -84,3 +84,5 @@ your own rows plus the log.
 - 2026-09-07 Antigravity: started c/runtime-composition-wire-and-harnesses to wire createRuntime in apps/ and scaffold e2e, eval, and bench harnesses.
 - 2026-09-07 Antigravity: wired apps/ to createRuntime from #28 via RuntimeRecruitosComposition, added tests/e2e Playwright harness with 6 required workflow stubs (skipped), added tests/eval harness (Class 1 gate, Class 2 live IoU/bipartite matching, Class 3 synthetic bias audit demo), and bench/ suite (CLI, Web SSR, Matching). All 935 tests passing, 100 percent coverage on core/runtime, zero em dashes. Ready for review.
 - 2026-09-07 Cursor: merged origin/main f9dd10b into #32 after #30 (use-case contract) and #31 (createRuntime wiring + harnesses). Regenerating `public-api.test.ts` from `Object.keys(runtime).sort()`. Migration lock stays with Cursor.
+- 2026-09-07 Claude: PR #30 (use-case command contract) merged. Taking T9. Part 1 on b/core-text-normalization: packages/core/src/matching/normalizeSourceText, policy version 1 (strip one leading BOM, fold CR and CRLF to LF, Unicode NFC, nothing else, content preserved verbatim). pnpm check 958, test:coverage exit 0 / 100 percent, integration 21, no em dashes. Opening PR. Part 2 is the decision pipeline (packages/core/src/pipeline/), wants Opus.
+- 2026-09-07 Cursor: merged origin/main f9304d2 into #32 after #33 (source text normalization). Migration lock stays with Cursor.
