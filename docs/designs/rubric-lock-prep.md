@@ -897,7 +897,10 @@ Steps 1 and 2 of the original list are done. What remains:
 1. ~~Answer OQ-11 through OQ-14 (product owner).~~ **Done 2026-09-07.** Decisions recorded
    above and reflected in Part 2.
 2. Run the call. Fill the note-taking template verbatim. Ten practitioner questions remain
-   open.
+   open. **Path B alternative:** if no practitioner is reachable, the product owner reviews,
+   amends, and signs `docs/designs/rubric-assumption-record.md`, which drafts proposed
+   answers to OQ-1 through OQ-10. Signing it locks rubric v1 as `product-authored` and
+   leaves every `WA` entry unvalidated.
 3. Update `WORKFLOW_ASSUMPTIONS.md`: move at least three entries out of `inferred`
    **through the conversation** (WA-17's desk-check correction does not count toward that
    three), keep original text on every `corrected` entry, add anything new from WA-33
