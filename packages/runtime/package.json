@@ -104,6 +104,11 @@
       "import": "./dist/persistence/index.js",
       "default": "./dist/persistence/index.js"
     },
+    "./read-models": {
+      "types": "./dist/read-models/index.d.ts",
+      "import": "./dist/read-models/index.js",
+      "default": "./dist/read-models/index.js"
+    },
     "./use-cases": {
       "types": "./dist/use-cases/index.d.ts",
       "import": "./dist/use-cases/index.js",
