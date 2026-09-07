@@ -119,6 +119,9 @@ export type ProposalId = z.infer<typeof ProposalIdSchema>;
 export const RequirementIdSchema = printableAsciiId.brand<"RequirementId">();
 export type RequirementId = z.infer<typeof RequirementIdSchema>;
 
+export const ResolutionActionIdSchema = printableAsciiId.brand<"ResolutionActionId">();
+export type ResolutionActionId = z.infer<typeof ResolutionActionIdSchema>;
+
 export const ResolutionTaskIdSchema = printableAsciiId.brand<"ResolutionTaskId">();
 export type ResolutionTaskId = z.infer<typeof ResolutionTaskIdSchema>;
 
