@@ -39,6 +39,12 @@ export type CorpusMemberDocumentId = z.infer<typeof CorpusMemberDocumentIdSchema
 export const DimensionAssessmentIdSchema = printableAsciiId.brand<"DimensionAssessmentId">();
 export type DimensionAssessmentId = z.infer<typeof DimensionAssessmentIdSchema>;
 
+export const DimensionAssessmentEvidenceSpanIdSchema =
+  printableAsciiId.brand<"DimensionAssessmentEvidenceSpanId">();
+export type DimensionAssessmentEvidenceSpanId = z.infer<
+  typeof DimensionAssessmentEvidenceSpanIdSchema
+>;
+
 export const EvidenceGapIdSchema = printableAsciiId.brand<"EvidenceGapId">();
 export type EvidenceGapId = z.infer<typeof EvidenceGapIdSchema>;
 
