@@ -49,6 +49,11 @@
       "import": "./dist/evidence/index.js",
       "default": "./dist/evidence/index.js"
     },
+    "./extraction": {
+      "types": "./dist/extraction/index.d.ts",
+      "import": "./dist/extraction/index.js",
+      "default": "./dist/extraction/index.js"
+    },
     "./roles": {
       "types": "./dist/roles/index.d.ts",
       "import": "./dist/roles/index.js",
