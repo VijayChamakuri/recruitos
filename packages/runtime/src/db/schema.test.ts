@@ -15,7 +15,10 @@ import {
   dimensionAssessments,
   evidenceGaps,
   evidenceSpans,
+  extractionArtifacts,
+  extractionFailures,
   extractionRuns,
+  extractionSpecs,
   requirements,
   roles,
   rubricDimensions,
@@ -267,6 +270,66 @@ describe("runtime Drizzle schema", () => {
     expect(associationConfig.foreignKeys).toHaveLength(2);
     expect(
       associationConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
+  });
+
+  it("exposes the content-addressed extraction spec constraints and access paths", () => {
+    const specConfig = getTableConfig(extractionSpecs);
+    expect(specConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "extraction_spec_content_hash",
+      "extraction_spec_content_json",
+      "extraction_spec_created_at",
+      "extraction_spec_dimension_id",
+      "extraction_spec_extractor_version",
+      "extraction_spec_model_id",
+      "extraction_spec_prompt_hash",
+      "extraction_spec_schema_hash"
+    ]);
+    expect(specConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "extraction_spec_content_hash_unique",
+      "extraction_spec_dimension"
+    ]);
+    expect(specConfig.foreignKeys).toHaveLength(0);
+
+    const artifactConfig = getTableConfig(extractionArtifacts);
+    expect(artifactConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "extraction_artifact_accepted_output_hash",
+      "extraction_artifact_accepted_output_json",
+      "extraction_artifact_content_hash",
+      "extraction_artifact_created_at",
+      "extraction_artifact_rejected_claims_hash",
+      "extraction_artifact_rejected_claims_json"
+    ]);
+    expect(artifactConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "extraction_artifact_content_hash_unique",
+      "extraction_artifact_document",
+      "extraction_artifact_spec"
+    ]);
+    expect(artifactConfig.foreignKeys).toHaveLength(2);
+    expect(
+      artifactConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
+
+    const failureConfig = getTableConfig(extractionFailures);
+    expect(failureConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "extraction_failure_content_hash",
+      "extraction_failure_created_at",
+      "extraction_failure_diagnostic_hash",
+      "extraction_failure_diagnostic_json",
+      "extraction_failure_error_class",
+      "extraction_failure_oversized_response",
+      "extraction_failure_response_byte_length",
+      "extraction_failure_response_hash"
+    ]);
+    expect(failureConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "extraction_failure_content_hash_unique",
+      "extraction_failure_document",
+      "extraction_failure_error_class",
+      "extraction_failure_spec"
+    ]);
+    expect(failureConfig.foreignKeys).toHaveLength(2);
+    expect(
+      failureConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")
     ).toBe(true);
   });
 });

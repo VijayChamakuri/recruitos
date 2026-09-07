@@ -629,3 +629,168 @@ export const dimensionAssessmentEvidenceSpans = sqliteTable(
     )
   ]
 );
+
+export const extractionSpecs = sqliteTable(
+  "extraction_spec",
+  {
+    extractionSpecId: text("extraction_spec_id").primaryKey(),
+    contentJson: text("content_json").notNull(),
+    contentHash: text("content_hash").notNull(),
+    modelId: text("model_id").notNull(),
+    extractorVersion: text("extractor_version").notNull(),
+    promptHash: text("prompt_hash").notNull(),
+    schemaHash: text("schema_hash").notNull(),
+    dimensionId: text("dimension_id").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("extraction_spec_content_hash_unique").on(table.contentHash),
+    index("extraction_spec_dimension").on(table.dimensionId),
+    // Canonical contract bytes are stored so a later reader can prove the
+    // denormalized identity columns still match the hashed content.
+    check(
+      "extraction_spec_content_json",
+      sql`json_valid(${table.contentJson}) AND json_type(${table.contentJson}) = 'object'`
+    ),
+    check(
+      "extraction_spec_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("extraction_spec_model_id", sql`length(${table.modelId}) BETWEEN 1 AND 200`),
+    check(
+      "extraction_spec_extractor_version",
+      sql`length(${table.extractorVersion}) BETWEEN 1 AND 64`
+    ),
+    check(
+      "extraction_spec_prompt_hash",
+      sql`length(${table.promptHash}) = 64 AND ${table.promptHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "extraction_spec_schema_hash",
+      sql`length(${table.schemaHash}) = 64 AND ${table.schemaHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "extraction_spec_dimension_id",
+      sql`length(${table.dimensionId}) BETWEEN 1 AND 128`
+    ),
+    check("extraction_spec_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const extractionArtifacts = sqliteTable(
+  "extraction_artifact",
+  {
+    extractionArtifactId: text("extraction_artifact_id").primaryKey(),
+    specId: text("spec_id")
+      .notNull()
+      .references(() => extractionSpecs.extractionSpecId, { onDelete: "restrict" }),
+    sourceDocumentId: text("source_document_id")
+      .notNull()
+      .references(() => sourceDocuments.sourceDocumentId, { onDelete: "restrict" }),
+    acceptedOutputJson: text("accepted_output_json").notNull(),
+    acceptedOutputHash: text("accepted_output_hash").notNull(),
+    rejectedClaimsJson: text("rejected_claims_json").notNull(),
+    rejectedClaimsHash: text("rejected_claims_hash").notNull(),
+    contentHash: text("content_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("extraction_artifact_content_hash_unique").on(table.contentHash),
+    index("extraction_artifact_spec").on(table.specId),
+    index("extraction_artifact_document").on(table.sourceDocumentId),
+    check(
+      "extraction_artifact_accepted_output_json",
+      sql`json_valid(${table.acceptedOutputJson})
+        AND json_type(${table.acceptedOutputJson}) = 'object'
+        AND json_type(json_extract(${table.acceptedOutputJson}, '$.spans')) = 'array'
+        AND json_array_length(json_extract(${table.acceptedOutputJson}, '$.spans')) BETWEEN 0 AND 12`
+    ),
+    check(
+      "extraction_artifact_accepted_output_hash",
+      sql`length(${table.acceptedOutputHash}) = 64 AND ${table.acceptedOutputHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "extraction_artifact_rejected_claims_json",
+      sql`json_valid(${table.rejectedClaimsJson})
+        AND json_type(${table.rejectedClaimsJson}) = 'array'
+        AND json_array_length(${table.rejectedClaimsJson}) BETWEEN 0 AND 8`
+    ),
+    check(
+      "extraction_artifact_rejected_claims_hash",
+      sql`length(${table.rejectedClaimsHash}) = 64 AND ${table.rejectedClaimsHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "extraction_artifact_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("extraction_artifact_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const extractionFailures = sqliteTable(
+  "extraction_failure",
+  {
+    extractionFailureId: text("extraction_failure_id").primaryKey(),
+    specId: text("spec_id")
+      .notNull()
+      .references(() => extractionSpecs.extractionSpecId, { onDelete: "restrict" }),
+    sourceDocumentId: text("source_document_id")
+      .notNull()
+      .references(() => sourceDocuments.sourceDocumentId, { onDelete: "restrict" }),
+    errorClass: text("error_class", {
+      enum: [
+        "structurally_invalid",
+        "oversized_response",
+        "identity_mismatch",
+        "cardinality_exceeded"
+      ]
+    }).notNull(),
+    responseHash: text("response_hash").notNull(),
+    responseByteLength: integer("response_byte_length").notNull(),
+    diagnosticJson: text("diagnostic_json").notNull(),
+    diagnosticHash: text("diagnostic_hash").notNull(),
+    contentHash: text("content_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("extraction_failure_content_hash_unique").on(table.contentHash),
+    index("extraction_failure_spec").on(table.specId),
+    index("extraction_failure_document").on(table.sourceDocumentId),
+    index("extraction_failure_error_class").on(table.errorClass),
+    check(
+      "extraction_failure_error_class",
+      sql`${table.errorClass} IN ('structurally_invalid', 'oversized_response', 'identity_mismatch', 'cardinality_exceeded')`
+    ),
+    check(
+      "extraction_failure_response_hash",
+      sql`length(${table.responseHash}) = 64 AND ${table.responseHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "extraction_failure_response_byte_length",
+      sql`${table.responseByteLength} >= 0`
+    ),
+    // Oversized responses are the only class allowed to exceed the provider
+    // byte cap; every other failure still hashed a body that fit the bound.
+    check(
+      "extraction_failure_oversized_response",
+      sql`(${table.errorClass} = 'oversized_response') = (${table.responseByteLength} > 65536)`
+    ),
+    check(
+      "extraction_failure_diagnostic_json",
+      sql`json_valid(${table.diagnosticJson})
+        AND json_type(${table.diagnosticJson}) = 'object'
+        AND json_type(json_extract(${table.diagnosticJson}, '$.details')) = 'array'
+        AND json_array_length(json_extract(${table.diagnosticJson}, '$.details')) BETWEEN 0 AND 8`
+    ),
+    check(
+      "extraction_failure_diagnostic_hash",
+      sql`length(${table.diagnosticHash}) = 64 AND ${table.diagnosticHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "extraction_failure_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("extraction_failure_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
