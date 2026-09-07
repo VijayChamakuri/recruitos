@@ -69,6 +69,11 @@
       "import": "./dist/results/index.js",
       "default": "./dist/results/index.js"
     },
+    "./resolution": {
+      "types": "./dist/resolution/index.d.ts",
+      "import": "./dist/resolution/index.js",
+      "default": "./dist/resolution/index.js"
+    },
     "./roles": {
       "types": "./dist/roles/index.d.ts",
       "import": "./dist/roles/index.js",

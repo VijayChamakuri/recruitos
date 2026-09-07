@@ -757,6 +757,26 @@ describe("openRuntimeDatabase", () => {
     }
   });
 
+  it("rejects WAL enablement that finishes after the contention budget", async () => {
+    const filename = await createDatabaseFilename();
+    const performanceNow = vi.spyOn(performance, "now");
+    const times = [0, 1, 6000];
+    performanceNow.mockImplementation(() => times.shift() ?? 6000);
+
+    try {
+      expect(openRuntimeDatabase({ filename })).toEqual({
+        ok: false,
+        error: {
+          code: "persistence_failed",
+          message: "Runtime database open failed",
+          retryable: true
+        }
+      });
+    } finally {
+      performanceNow.mockRestore();
+    }
+  });
+
   it("bounds WAL contention by the initialization budget", async () => {
     const filename = await createDatabaseFilename();
     const lockWorker = await startExclusiveLockWorker(filename, 5050);

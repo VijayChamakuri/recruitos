@@ -1488,3 +1488,136 @@ export const candidateResultReasons = sqliteTable(
   ]
 );
 
+export const resolutionTasks = sqliteTable(
+  "resolution_task",
+  {
+    resolutionTaskId: text("resolution_task_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    candidateResultReasonId: text("candidate_result_reason_id")
+      .notNull()
+      .references(() => candidateResultReasons.candidateResultReasonId, {
+        onDelete: "restrict"
+      }),
+    taskOrdinal: integer("task_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("resolution_task_reason_unique").on(table.candidateResultReasonId),
+    uniqueIndex("resolution_task_ordinal_unique").on(table.candidateResultId, table.taskOrdinal),
+    index("resolution_task_result_created").on(
+      table.candidateResultId,
+      table.createdAt,
+      table.resolutionTaskId
+    ),
+    check("resolution_task_ordinal", sql`${table.taskOrdinal} >= 0`),
+    check("resolution_task_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const resolutionActions = sqliteTable(
+  "resolution_action",
+  {
+    resolutionActionId: text("resolution_action_id").primaryKey(),
+    resolutionTaskId: text("resolution_task_id")
+      .notNull()
+      .references(() => resolutionTasks.resolutionTaskId, { onDelete: "restrict" }),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => actors.actorId, { onDelete: "restrict" }),
+    actionKind: text("action_kind").notNull(),
+    actionOrdinal: integer("action_ordinal").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    evidenceSpanId: text("evidence_span_id").references(() => evidenceSpans.evidenceSpanId, {
+      onDelete: "restrict"
+    }),
+    dimensionAssessmentId: text("dimension_assessment_id").references(
+      () => dimensionAssessments.dimensionAssessmentId,
+      { onDelete: "restrict" }
+    ),
+    resultingResultId: text("resulting_result_id").references(
+      () => candidateTriageResults.candidateTriageResultId,
+      { onDelete: "restrict" }
+    ),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("resolution_action_ordinal_unique").on(table.resolutionTaskId, table.actionOrdinal),
+    index("resolution_action_task_created").on(
+      table.resolutionTaskId,
+      table.createdAt,
+      table.resolutionActionId
+    ),
+    check(
+      "resolution_action_kind",
+      sql`${table.actionKind} IN (
+        'supply_evidence_and_set_level',
+        'correct_parse',
+        'confirm_judgment',
+        'block',
+        'dismiss',
+        'request_re_extraction',
+        'reextraction_completed'
+      )`
+    ),
+    check(
+      "resolution_action_shape",
+      sql`(
+        ${table.actionKind} = 'supply_evidence_and_set_level'
+        AND ${table.evidenceSpanId} IS NOT NULL
+        AND ${table.dimensionAssessmentId} IS NOT NULL
+        AND ${table.resultingResultId} IS NULL
+        AND ${table.actorId} != 'system:runtime'
+      ) OR (
+        ${table.actionKind} = 'confirm_judgment'
+        AND ${table.evidenceSpanId} IS NULL
+        AND ${table.dimensionAssessmentId} IS NOT NULL
+        AND ${table.resultingResultId} IS NULL
+        AND ${table.actorId} != 'system:runtime'
+      ) OR (
+        ${table.actionKind} IN ('correct_parse', 'block', 'dismiss', 'request_re_extraction')
+        AND ${table.evidenceSpanId} IS NULL
+        AND ${table.dimensionAssessmentId} IS NULL
+        AND ${table.resultingResultId} IS NULL
+        AND ${table.actorId} != 'system:runtime'
+      ) OR (
+        ${table.actionKind} = 'reextraction_completed'
+        AND ${table.evidenceSpanId} IS NULL
+        AND ${table.dimensionAssessmentId} IS NULL
+        AND ${table.resultingResultId} IS NOT NULL
+        AND ${table.actorId} = 'system:runtime'
+      )`
+    ),
+    check(
+      "resolution_action_payload_json",
+      sql`json_valid(${table.payloadJson}) AND json_type(${table.payloadJson}) = 'object'`
+    ),
+    check(
+      "resolution_action_payload_hash",
+      sql`length(${table.payloadHash}) = 64 AND ${table.payloadHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("resolution_action_ordinal", sql`${table.actionOrdinal} >= 0`),
+    check("resolution_action_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const resolutionTaskHeads = sqliteTable(
+  "resolution_task_head",
+  {
+    resolutionTaskId: text("resolution_task_id")
+      .primaryKey()
+      .references(() => resolutionTasks.resolutionTaskId, { onDelete: "restrict" }),
+    currentActionId: text("current_action_id")
+      .notNull()
+      .references(() => resolutionActions.resolutionActionId, { onDelete: "restrict" }),
+    version: integer("version").notNull()
+  },
+  (table) => [
+    check("resolution_task_head_version", sql`${table.version} >= 1`)
+  ]
+);
+
