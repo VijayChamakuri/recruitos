@@ -5,4 +5,5 @@ export * from "./db/index.js";
 export * from "./entities/index.js";
 export * from "./errors/index.js";
 export * from "./evidence/index.js";
+export * from "./extraction/index.js";
 export * from "./roles/index.js";
