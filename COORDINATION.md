@@ -14,16 +14,16 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | e8abc07 |
-| Migration lock held by | Claude, for one PR only: scheduler tables (`triage_run`, `triage_attempt`, `attempt_work_item`) |
+| origin/main | 8a64d1a |
+| Migration lock held by | Cursor, for run and scheduler tables (`triage_run`, `triage_run_member`, `triage_run_seal`, then `triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
 ## Lanes and file locks
 
 | Agent | Branch prefix | Owns (may edit) | Must not touch |
 |---|---|---|---|
-| Cursor | `a/` or `cursor/` | (none) | idle-complete |
-| Claude Code | `b/` | scheduler tables migration, `packages/runtime/src/composition/**`, command use-cases, scheduler (T5), `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md` | `apps/**` |
+| Cursor | `a/` or `cursor/` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, stores and core IDs for `triage_run` / `triage_attempt` tables | `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md`, `packages/runtime/src/adapters/` implementations, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**` |
+| Claude Code | `b/` | `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, command use-cases, scheduler runtime (T5), `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, any migration |
 | Antigravity | `c/` | `apps/cli/**`, `apps/web/**`, Playwright / eval / benchmark scaffolds, stubbed composition interface | `packages/runtime/src/**`, any migration |
 
 ## Migration chain (Cursor, serial, one PR each)
@@ -32,13 +32,15 @@ your own rows plus the log.
 2. `proposal` + `review_decision` + `proposal_head` (MERGED #23)
 3. `candidate_head` (MERGED #25)
 4. `candidate_result_seal` (MERGED #26)
+5. `triage_run` + `triage_run_member` + `triage_run_seal` (cyclic deferred FK; attempt-readiness checks land with step 6)
+6. `triage_attempt` + `attempt_work_item` (mutable operational; FKs to run and base result)
 
 ## Currently building
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | (none) | Migration chain complete: #22, #23, #25, #26 all on main. Migration lock released to Claude. Free for next assignment. | chain-complete |
-| Claude Code | b/runtime-composition-root | PR 1 merged (#28, composition root + ports). Next: command use-cases, then scheduler migration. | building |
+| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | building |
+| Claude Code | (none) | `packages/runtime/src/use-cases/contract.ts` in parallel. No schema, no drizzle. | building |
 | Antigravity | (none) | CLI and Web shells complete. Merged #29. Idle-complete. | idle-complete |
 
 ## Hard rules
@@ -50,7 +52,7 @@ your own rows plus the log.
 5. Green before merge: `pnpm check`, `pnpm test:coverage` (repo enforces 100 percent), `pnpm test:integration`, `git diff --check`, em-dash scan. No em dashes anywhere.
 6. Squash-merge, delete branch.
 7. Item 4: "docs staged" is Claude's done state. "Rubric ready" needs a human to answer OQ-1 through OQ-10 and pick recruiter call vs `RubricAssumptionRecord`.
-8. Scheduler (T5), composition root, and command use-cases are reserved for Claude, deferred until the migration chain is on `main`.
+8. Composition root, command use-cases, and scheduler T5 runtime are reserved for Claude. Remaining drizzle tables for runs and attempts are Cursor's, serial, one open `drizzle/**` PR at a time.
 
 ## Log (append only, newest last)
 
@@ -76,3 +78,4 @@ your own rows plus the log.
 - 2026-09-07 Antigravity: started c/cli-web-shells for apps/cli and apps/web shells with stubbed composition interface.
 - 2026-09-07 Antigravity: apps/cli and apps/web complete. CLI parser, envelopes, exit codes, commands (triage, review, packet, status), Web 5 locked routes, safe-text, span-highlight, span-integrity-failure, instrument-band, Playwright and benchmark scaffolds. All 896 tests passing, 100 percent coverage on core/runtime, zero em dashes. Opened PR #29.
 - 2026-09-07 Antigravity: PR #29 merged to main at e8abc07. Branch deleted. Idle-complete.
+- 2026-09-07 Cursor: taking the migration lock back for run and scheduler tables. Split: Cursor serial drizzle PRs (`triage_run` first, then `triage_attempt`). Claude builds `packages/runtime/src/use-cases/contract.ts` with no schema overlap.
