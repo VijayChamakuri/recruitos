@@ -43,6 +43,13 @@
       "when": 1788759824288,
       "tag": "0005_role_rubric_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788762869056,
+      "tag": "0006_evidence_extraction_foundation",
+      "breakpoints": true
     }
   ]
 }
