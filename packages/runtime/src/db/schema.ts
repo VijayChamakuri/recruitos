@@ -2048,3 +2048,96 @@ export const attemptWorkItems = sqliteTable(
     )
   ]
 );
+
+export const candidateDemographics = sqliteTable(
+  "candidate_demographics",
+  {
+    candidateDemographicsId: text("candidate_demographics_id").primaryKey(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    sex: text("sex", {
+      enum: ["female", "male", "not_specified"]
+    }).notNull(),
+    raceEthnicity: text("race_ethnicity", {
+      enum: [
+        "hispanic_or_latino",
+        "white",
+        "black_or_african_american",
+        "asian",
+        "native_hawaiian_or_other_pacific_islander",
+        "american_indian_or_alaska_native",
+        "two_or_more_races",
+        "not_specified"
+      ]
+    }).notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_demographics_candidate_unique").on(table.candidateId),
+    check("candidate_demographics_sex", sql`${table.sex} IN ('female', 'male', 'not_specified')`),
+    check(
+      "candidate_demographics_race_ethnicity",
+      sql`${table.raceEthnicity} IN (
+        'hispanic_or_latino',
+        'white',
+        'black_or_african_american',
+        'asian',
+        'native_hawaiian_or_other_pacific_islander',
+        'american_indian_or_alaska_native',
+        'two_or_more_races',
+        'not_specified'
+      )`
+    ),
+    check("candidate_demographics_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const demoSessions = sqliteTable(
+  "demo_session",
+  {
+    demoSessionId: text("demo_session_id").primaryKey(),
+    purpose: text("purpose", { enum: ["synthetic_demo"] }).notNull(),
+    generation: integer("generation").notNull(),
+    webOwner: text("web_owner"),
+    heartbeatAt: integer("heartbeat_at"),
+    expiresAt: integer("expires_at"),
+    seedHash: text("seed_hash").notNull(),
+    version: integer("version").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull()
+  },
+  (table) => [
+    check("demo_session_identity", sql`${table.demoSessionId} = 'synthetic_demo'`),
+    check("demo_session_purpose", sql`${table.purpose} = 'synthetic_demo'`),
+    check("demo_session_generation", sql`${table.generation} >= 1`),
+    check(
+      "demo_session_seed_hash",
+      sql`length(${table.seedHash}) = 64 AND ${table.seedHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("demo_session_version", sql`${table.version} >= 1`),
+    check("demo_session_created_at", sql`${table.createdAt} >= 0`),
+    check("demo_session_updated_at", sql`${table.updatedAt} >= ${table.createdAt}`),
+    check(
+      "demo_session_web_owner",
+      sql`${table.webOwner} IS NULL OR (
+        length(${table.webOwner}) BETWEEN 1 AND 128
+        AND ${table.webOwner} NOT GLOB '*[^!-~]*'
+      )`
+    ),
+    check(
+      "demo_session_ownership_shape",
+      sql`(
+        ${table.webOwner} IS NULL
+        AND ${table.heartbeatAt} IS NULL
+        AND ${table.expiresAt} IS NULL
+      ) OR (
+        ${table.webOwner} IS NOT NULL
+        AND ${table.heartbeatAt} IS NOT NULL
+        AND ${table.expiresAt} IS NOT NULL
+        AND ${table.heartbeatAt} >= 0
+        AND ${table.expiresAt} = ${table.heartbeatAt} + 15000
+      )`
+    )
+  ]
+);

@@ -5,6 +5,7 @@ import {
   actors,
   attemptWorkItems,
   auditEvents,
+  candidateDemographics,
   candidateDocuments,
   candidateHeads,
   triageAttempts,
@@ -26,6 +27,7 @@ import {
   corpusManifests,
   corpusMemberDocuments,
   corpusMembers,
+  demoSessions,
   dimensionAssessmentEvidenceSpans,
   dimensionAssessments,
   evidenceGaps,
@@ -806,5 +808,70 @@ describe("runtime Drizzle schema", () => {
     expect(headConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
       true
     );
+  });
+
+  it("keeps every plan immutable association table", () => {
+    const associationTables = {
+      corpus_member_document: corpusMemberDocuments,
+      candidate_result_evidence_span: candidateResultEvidenceSpans,
+      candidate_result_evidence_gap: candidateResultEvidenceGaps,
+      candidate_result_dimension_assessment: candidateResultDimensionAssessments,
+      candidate_result_structured_fact: candidateResultStructuredFacts,
+      candidate_result_fact_conflict: candidateResultFactConflicts,
+      candidate_result_hard_requirement_assessment: candidateResultHardRequirementAssessments,
+      dimension_assessment_evidence_span: dimensionAssessmentEvidenceSpans,
+      structured_fact_evidence_span: structuredFactEvidenceSpans,
+      structured_fact_provenance: structuredFactProvenances,
+      fact_conflict_member: factConflictMembers,
+      hard_requirement_assessment_fact: hardRequirementAssessmentFacts,
+      proposal_evidence_span: proposalEvidenceSpans
+    };
+    expect(Object.keys(associationTables).sort()).toEqual([
+      "candidate_result_dimension_assessment",
+      "candidate_result_evidence_gap",
+      "candidate_result_evidence_span",
+      "candidate_result_fact_conflict",
+      "candidate_result_hard_requirement_assessment",
+      "candidate_result_structured_fact",
+      "corpus_member_document",
+      "dimension_assessment_evidence_span",
+      "fact_conflict_member",
+      "hard_requirement_assessment_fact",
+      "proposal_evidence_span",
+      "structured_fact_evidence_span",
+      "structured_fact_provenance"
+    ]);
+    for (const table of Object.values(associationTables)) {
+      expect(getTableConfig(table).name.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("exposes candidate demographics and demo session constraints", () => {
+    const demographicsConfig = getTableConfig(candidateDemographics);
+    expect(demographicsConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "candidate_demographics_created_at",
+      "candidate_demographics_race_ethnicity",
+      "candidate_demographics_sex"
+    ]);
+    expect(demographicsConfig.indexes.map((index) => index.config.name)).toEqual([
+      "candidate_demographics_candidate_unique"
+    ]);
+    expect(demographicsConfig.foreignKeys).toHaveLength(1);
+    expect(demographicsConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+
+    const sessionConfig = getTableConfig(demoSessions);
+    expect(sessionConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "demo_session_created_at",
+      "demo_session_generation",
+      "demo_session_identity",
+      "demo_session_ownership_shape",
+      "demo_session_purpose",
+      "demo_session_seed_hash",
+      "demo_session_updated_at",
+      "demo_session_version",
+      "demo_session_web_owner"
+    ]);
+    expect(sessionConfig.indexes).toEqual([]);
+    expect(sessionConfig.foreignKeys).toEqual([]);
   });
 });
