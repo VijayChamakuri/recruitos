@@ -64,6 +64,11 @@
       "import": "./dist/facts/index.js",
       "default": "./dist/facts/index.js"
     },
+    "./proposals": {
+      "types": "./dist/proposals/index.d.ts",
+      "import": "./dist/proposals/index.js",
+      "default": "./dist/proposals/index.js"
+    },
     "./results": {
       "types": "./dist/results/index.d.ts",
       "import": "./dist/results/index.js",

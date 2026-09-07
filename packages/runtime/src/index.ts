@@ -9,6 +9,7 @@ export * from "./evidence/index.js";
 export * from "./extraction/index.js";
 export * from "./facts/index.js";
 export * from "./persistence/index.js";
+export * from "./proposals/index.js";
 export * from "./results/index.js";
 export * from "./resolution/index.js";
 export * from "./roles/index.js";
