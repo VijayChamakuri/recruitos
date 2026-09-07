@@ -443,6 +443,10 @@ function migrateDatabase(
       const insertMigration = nativeDatabase.prepare(
         "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)"
       );
+      // Scoped to this migrate transaction. SQLite resets the pragma on COMMIT.
+      // Command transactions do not set it. Cyclic seal_id is DEFERRABLE
+      // INITIALLY DEFERRED on the table, so restrict FKs stay immediate at runtime.
+      nativeDatabase.pragma("defer_foreign_keys = ON");
       for (const migration of localMigrations.slice(appliedBefore.length)) {
         for (const statement of migration.sql) {
           nativeDatabase.exec(statement);
@@ -461,7 +465,15 @@ function migrateDatabase(
       }
     });
 
-    runMigration.immediate();
+    // SQLite forbids changing foreign_keys inside a transaction, and 0015
+    // rebuilds candidate_triage_result to add the cyclic seal_id. This OFF/ON
+    // pair wraps only migrate(). Command transactions never change it.
+    nativeDatabase.pragma("foreign_keys = OFF");
+    try {
+      runMigration.immediate();
+    } finally {
+      nativeDatabase.pragma("foreign_keys = ON");
+    }
     return ok(undefined);
   } catch (error) {
     if (error instanceof MigrationHistoryMismatch) {

@@ -12,6 +12,7 @@ import {
   candidateResultFactConflicts,
   candidateResultHardRequirementAssessments,
   candidateResultReasons,
+  candidateResultSeals,
   candidateResultStructuredFacts,
   candidateTriageResults,
   candidates,
@@ -475,12 +476,32 @@ describe("runtime Drizzle schema", () => {
     ]);
     expect(resultConfig.indexes.map((index) => index.config.name).sort()).toEqual([
       "candidate_triage_result_candidate_created",
-      "candidate_triage_result_content_hash_unique"
+      "candidate_triage_result_content_hash_unique",
+      "candidate_triage_result_seal_id_unique"
     ]);
-    expect(resultConfig.foreignKeys).toHaveLength(2);
-    expect(resultConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
-      true
-    );
+    expect(resultConfig.foreignKeys).toHaveLength(3);
+    const resultForeignKeys = resultConfig.foreignKeys.map((foreignKey) => ({
+      columns: foreignKey.reference().columns.map((column) => column.name),
+      onDelete: foreignKey.onDelete
+    }));
+    expect(
+      resultForeignKeys.find((foreignKey) => foreignKey.columns.includes("seal_id"))?.onDelete
+    ).toBeUndefined();
+    expect(
+      resultForeignKeys
+        .filter((foreignKey) => !foreignKey.columns.includes("seal_id"))
+        .every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
+
+    const sealConfig = getTableConfig(candidateResultSeals);
+    expect(sealConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "candidate_result_seal_created_at"
+    ]);
+    expect(sealConfig.indexes.map((index) => index.config.name)).toEqual([
+      "candidate_result_seal_result_unique"
+    ]);
+    expect(sealConfig.foreignKeys).toHaveLength(1);
+    expect(sealConfig.foreignKeys[0]!.onDelete).toBe("restrict");
 
     const scoreConfig = getTableConfig(scoreResults);
     expect(scoreConfig.checks.map((constraint) => constraint.name).sort()).toEqual([

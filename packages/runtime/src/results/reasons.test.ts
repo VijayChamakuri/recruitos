@@ -19,9 +19,11 @@ import { openRuntimeDatabase, type RuntimeDatabaseConnection } from "../db/index
 import {
   insertActor,
   insertCandidate,
+  insertCandidateDocument,
   insertSourceDocument,
   prepareActor,
   prepareCandidate,
+  prepareCandidateDocument,
   prepareSourceDocument
 } from "../entities/index.js";
 import { type RuntimeError } from "../errors/index.js";
@@ -42,9 +44,15 @@ import {
   prepareStructuredFact
 } from "../facts/index.js";
 import {
+  insertResolutionTask,
+  prepareResolutionTask
+} from "../resolution/index.js";
+import {
   insertCandidateResultReason,
+  insertCandidateResultSeal,
   insertCandidateTriageResult,
   prepareCandidateResultReason,
+  prepareCandidateResultSeal,
   prepareCandidateTriageResult,
   readCandidateResultReason,
   readCandidateResultReasons
@@ -260,8 +268,12 @@ function computedScoreDraft(overrides: Record<string, unknown> = {}): Record<str
 }
 
 function unavailableResultDraft(overrides: Record<string, unknown> = {}) {
+  const candidateTriageResultId =
+    typeof overrides.candidateTriageResultId === "string"
+      ? overrides.candidateTriageResultId
+      : "candidate-result-1";
   return {
-    candidateTriageResultId: "candidate-result-1",
+    candidateTriageResultId,
     candidateId: "candidate-1",
     kind: "initial",
     availability: "unavailable",
@@ -274,14 +286,19 @@ function unavailableResultDraft(overrides: Record<string, unknown> = {}) {
     factConflicts: [],
     hardRequirementAssessments: [],
     score: null,
+    sealId: `candidate-result-seal-${candidateTriageResultId}`,
     createdAt: CREATED_AT,
     ...overrides
   };
 }
 
 function completeResultDraft(overrides: Record<string, unknown> = {}) {
+  const candidateTriageResultId =
+    typeof overrides.candidateTriageResultId === "string"
+      ? overrides.candidateTriageResultId
+      : "candidate-result-1";
   return {
-    candidateTriageResultId: "candidate-result-1",
+    candidateTriageResultId,
     candidateId: "candidate-1",
     kind: "initial",
     availability: "complete",
@@ -322,6 +339,7 @@ function completeResultDraft(overrides: Record<string, unknown> = {}) {
       }
     ],
     score: computedScoreDraft(),
+    sealId: `candidate-result-seal-${candidateTriageResultId}`,
     createdAt: CREATED_AT,
     ...overrides
   };
@@ -341,8 +359,64 @@ function reasonDraft(overrides: Record<string, unknown> = {}) {
 function seedParents(context: ImmediateTransactionContext): void {
   unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
   unwrap(insertSourceDocument(context, unwrap(prepareSourceDocument(sourceDocumentDraft()))));
+  unwrap(
+    insertCandidateDocument(
+      context,
+      unwrap(
+        prepareCandidateDocument({
+          candidateDocumentId: "candidate-document-1",
+          candidateId: "candidate-1",
+          sourceDocumentId: "source-document-1",
+          documentKind: "resume",
+          label: "Resume",
+          documentOrdinal: 0,
+          createdAt: CREATED_AT
+        })
+      )
+    )
+  );
   unwrap(insertEvidenceSpan(context, unwrap(prepareEvidenceSpan(evidenceSpanDraft()))));
   unwrap(insertActor(context, unwrap(prepareActor(actorDraft()))));
+}
+
+function sealCandidateResult(
+  context: ImmediateTransactionContext,
+  result: Readonly<{ candidateTriageResultId: string; sealId: string; createdAt: number }>
+): void {
+  unwrap(
+    insertCandidateResultSeal(
+      context,
+      unwrap(
+        prepareCandidateResultSeal({
+          candidateResultSealId: result.sealId,
+          candidateResultId: result.candidateTriageResultId,
+          createdAt: result.createdAt
+        })
+      )
+    )
+  );
+}
+
+function finishUnavailableResult(
+  context: ImmediateTransactionContext,
+  result: Readonly<{ candidateTriageResultId: string; sealId: string; createdAt: number }>,
+  reasonId = "candidate-result-reason-1"
+): void {
+  unwrap(
+    insertResolutionTask(
+      context,
+      unwrap(
+        prepareResolutionTask({
+          resolutionTaskId: `resolution-task-${reasonId}`,
+          candidateResultId: result.candidateTriageResultId,
+          candidateResultReasonId: reasonId,
+          taskOrdinal: 0,
+          createdAt: result.createdAt
+        })
+      )
+    )
+  );
+  sealCandidateResult(context, result);
 }
 
 function seedRichParents(context: ImmediateTransactionContext): void {
@@ -453,6 +527,7 @@ function rebuildTableWithoutChecks(
     DROP TRIGGER IF EXISTS ${table}_reject_update;
     DROP TRIGGER IF EXISTS ${table}_reject_delete;
     DROP TRIGGER IF EXISTS ${table}_reject_replace;
+    DROP TRIGGER IF EXISTS candidate_result_seal_reject_incomplete;
     CREATE TABLE ${table}_rebuilt (
       ${columns}
     ) STRICT;
@@ -525,13 +600,10 @@ describe("candidate result reason persistence", () => {
     const storedUnavailable = unwrap(
       runImmediateTransaction(connection, (context) => {
         unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
-        unwrap(
-          insertCandidateTriageResult(
-            context,
-            unwrap(prepareCandidateTriageResult(unavailableResultDraft()))
-          )
-        );
+        const result = unwrap(prepareCandidateTriageResult(unavailableResultDraft()));
+        unwrap(insertCandidateTriageResult(context, result));
         unwrap(insertCandidateResultReason(context, unavailable));
+        finishUnavailableResult(context, result, unavailable.candidateResultReasonId);
         return readCandidateResultReason(context, unavailable.candidateResultReasonId);
       })
     );
@@ -588,12 +660,9 @@ describe("candidate result reason persistence", () => {
     const listed = unwrap(
       runImmediateTransaction(connectionComplete, (context) => {
         seedRichParents(context);
-        unwrap(
-          insertCandidateTriageResult(
-            context,
-            unwrap(prepareCandidateTriageResult(completeResultDraft()))
-          )
-        );
+        const complete = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+        unwrap(insertCandidateTriageResult(context, complete));
+        sealCandidateResult(context, complete);
         unwrap(insertCandidateResultReason(context, lowConfidence));
         unwrap(insertCandidateResultReason(context, missingLater));
         unwrap(insertCandidateResultReason(context, missingEarlier));
@@ -634,12 +703,8 @@ describe("candidate result reason persistence", () => {
           })
         });
         unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
-        unwrap(
-          insertCandidateTriageResult(
-            context,
-            unwrap(prepareCandidateTriageResult(unavailableResultDraft()))
-          )
-        );
+        const unavailableResult = unwrap(prepareCandidateTriageResult(unavailableResultDraft()));
+        unwrap(insertCandidateTriageResult(context, unavailableResult));
         expect(insertCandidateResultReason(context, parseFailure)).toEqual({
           ok: false,
           error: expect.objectContaining({
@@ -647,6 +712,7 @@ describe("candidate result reason persistence", () => {
           })
         });
         unwrap(insertCandidateResultReason(context, unavailableReason));
+        finishUnavailableResult(context, unavailableResult, unavailableReason.candidateResultReasonId);
         return ok(undefined);
       })
     );
@@ -655,12 +721,9 @@ describe("candidate result reason persistence", () => {
     unwrap(
       runImmediateTransaction(connectionComplete, (context) => {
         seedRichParents(context);
-        unwrap(
-          insertCandidateTriageResult(
-            context,
-            unwrap(prepareCandidateTriageResult(completeResultDraft()))
-          )
-        );
+        const complete = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+        unwrap(insertCandidateTriageResult(context, complete));
+        sealCandidateResult(context, complete);
         expect(insertCandidateResultReason(context, unavailableReason)).toEqual({
           ok: false,
           error: expect.objectContaining({
@@ -812,13 +875,10 @@ describe("candidate result reason persistence", () => {
     const connection = await openMigratedDatabase();
     const missing = unwrap(
       runImmediateTransaction(connection, (context) => {
-        unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
-        unwrap(
-          insertCandidateTriageResult(
-            context,
-            unwrap(prepareCandidateTriageResult(unavailableResultDraft()))
-          )
-        );
+        seedRichParents(context);
+        const complete = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+        unwrap(insertCandidateTriageResult(context, complete));
+        sealCandidateResult(context, complete);
         return readCandidateResultReason(context, "candidate-result-reason-1");
       })
     );
@@ -844,13 +904,10 @@ describe("candidate result reason schema checks and immutability", () => {
     unwrap(
       runImmediateTransaction(connection, (context) => {
         unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
-        unwrap(
-          insertCandidateTriageResult(
-            context,
-            unwrap(prepareCandidateTriageResult(unavailableResultDraft()))
-          )
-        );
+        const result = unwrap(prepareCandidateTriageResult(unavailableResultDraft()));
+        unwrap(insertCandidateTriageResult(context, result));
         unwrap(insertCandidateResultReason(context, reason));
+        finishUnavailableResult(context, result, reason.candidateResultReasonId);
         return ok(undefined);
       })
     );
@@ -925,13 +982,10 @@ describe("candidate result reason schema checks and immutability", () => {
     const database = nativeDatabase(connection);
     unwrap(
       runImmediateTransaction(connection, (context) => {
-        unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
-        unwrap(
-          insertCandidateTriageResult(
-            context,
-            unwrap(prepareCandidateTriageResult(unavailableResultDraft()))
-          )
-        );
+        seedRichParents(context);
+        const complete = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+        unwrap(insertCandidateTriageResult(context, complete));
+        sealCandidateResult(context, complete);
         return ok(undefined);
       })
     );
@@ -1008,13 +1062,10 @@ describe("candidate result reason schema checks and immutability", () => {
     unwrap(
       runImmediateTransaction(connection, (context) => {
         unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
-        unwrap(
-          insertCandidateTriageResult(
-            context,
-            unwrap(prepareCandidateTriageResult(unavailableResultDraft()))
-          )
-        );
+        const result = unwrap(prepareCandidateTriageResult(unavailableResultDraft()));
+        unwrap(insertCandidateTriageResult(context, result));
         unwrap(insertCandidateResultReason(context, reason));
+        finishUnavailableResult(context, result, reason.candidateResultReasonId);
         return ok(undefined);
       })
     );

@@ -295,6 +295,12 @@ describe("openRuntimeDatabase", () => {
     expect(result.value.migrate()).toEqual({ ok: true, value: undefined });
     expect(result.value.migrate()).toEqual({ ok: true, value: undefined });
 
+    const nativeDatabase = (
+      result.value.database as unknown as { $client: BetterSqlite3.Database }
+    ).$client;
+    expect(nativeDatabase.pragma("foreign_keys", { simple: true })).toBe(1);
+    expect(nativeDatabase.pragma("defer_foreign_keys", { simple: true })).toBe(0);
+
     const rows = result.value.database.all<{ singleton: number; applied: number }>(
       sql`SELECT singleton, applied FROM runtime_migration_smoke`
     );

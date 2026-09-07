@@ -12,7 +12,15 @@ import { openRuntimeDatabase, type RuntimeDatabaseConnection } from "../db/index
 import { insertCandidate, prepareCandidate } from "../entities/index.js";
 import { type RuntimeError } from "../errors/index.js";
 import {
+  insertResolutionTask,
+  prepareResolutionTask
+} from "../resolution/index.js";
+import {
+  insertCandidateResultReason,
+  insertCandidateResultSeal,
   insertCandidateTriageResult,
+  prepareCandidateResultReason,
+  prepareCandidateResultSeal,
   prepareCandidateTriageResult,
   readCandidateHead,
   setCandidateHead
@@ -86,8 +94,12 @@ function candidateDraft(overrides: Record<string, unknown> = {}) {
 }
 
 function unavailableResultDraft(overrides: Record<string, unknown> = {}) {
+  const candidateTriageResultId =
+    typeof overrides.candidateTriageResultId === "string"
+      ? overrides.candidateTriageResultId
+      : "candidate-result-1";
   return {
-    candidateTriageResultId: "candidate-result-1",
+    candidateTriageResultId,
     candidateId: "candidate-1",
     kind: "initial",
     availability: "unavailable",
@@ -100,6 +112,7 @@ function unavailableResultDraft(overrides: Record<string, unknown> = {}) {
     factConflicts: [],
     hardRequirementAssessments: [],
     score: null,
+    sealId: `candidate-result-seal-${candidateTriageResultId}`,
     createdAt: CREATED_AT,
     ...overrides
   };
@@ -124,10 +137,42 @@ function seedResult(
   context: ImmediateTransactionContext,
   overrides: Record<string, unknown> = {}
 ): void {
+  const result = unwrap(prepareCandidateTriageResult(unavailableResultDraft(overrides)));
+  unwrap(insertCandidateTriageResult(context, result));
+  const reason = unwrap(
+    prepareCandidateResultReason({
+      candidateResultReasonId: `candidate-result-reason-${result.candidateTriageResultId}`,
+      candidateResultId: result.candidateTriageResultId,
+      reasonCode: "assessment_unavailable",
+      reasonOrdinal: 0,
+      createdAt: result.createdAt
+    })
+  );
+  unwrap(insertCandidateResultReason(context, reason));
   unwrap(
-    insertCandidateTriageResult(
+    insertResolutionTask(
       context,
-      unwrap(prepareCandidateTriageResult(unavailableResultDraft(overrides)))
+      unwrap(
+        prepareResolutionTask({
+          resolutionTaskId: `resolution-task-${result.candidateTriageResultId}`,
+          candidateResultId: result.candidateTriageResultId,
+          candidateResultReasonId: reason.candidateResultReasonId,
+          taskOrdinal: 0,
+          createdAt: result.createdAt
+        })
+      )
+    )
+  );
+  unwrap(
+    insertCandidateResultSeal(
+      context,
+      unwrap(
+        prepareCandidateResultSeal({
+          candidateResultSealId: result.sealId,
+          candidateResultId: result.candidateTriageResultId,
+          createdAt: result.createdAt
+        })
+      )
     )
   );
 }

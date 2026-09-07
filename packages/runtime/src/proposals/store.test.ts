@@ -18,14 +18,19 @@ import * as core from "@recruitos/core";
 import type BetterSqlite3 from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { runImmediateTransaction, type ImmediateTransactionContext } from "../commands/index.js";
+import {
+  runImmediateTransaction as runBareImmediateTransaction,
+  type ImmediateTransactionContext
+} from "../commands/index.js";
 import { openRuntimeDatabase, type RuntimeDatabaseConnection } from "../db/index.js";
 import {
   insertActor,
   insertCandidate,
+  insertCandidateDocument,
   insertSourceDocument,
   prepareActor,
   prepareCandidate,
+  prepareCandidateDocument,
   prepareSourceDocument,
   SYSTEM_ACTOR_ID
 } from "../entities/index.js";
@@ -47,9 +52,17 @@ import {
   prepareStructuredFact
 } from "../facts/index.js";
 import {
+  insertCandidateResultReason,
+  insertCandidateResultSeal,
   insertCandidateTriageResult,
+  prepareCandidateResultReason,
+  prepareCandidateResultSeal,
   prepareCandidateTriageResult
 } from "../results/index.js";
+import {
+  insertResolutionTask,
+  prepareResolutionTask
+} from "../resolution/index.js";
 import {
   insertProposal,
   insertReviewDecision,
@@ -138,6 +151,121 @@ function unwrap<T>(result: Result<T, RuntimeError> | Result<T, { message: string
     throw new Error(result.error.message);
   }
   return result.value;
+}
+
+function sealUnsealedResults(context: ImmediateTransactionContext): void {
+  const rows = context.nativeDatabase
+    .prepare(
+      `SELECT
+         result.candidate_triage_result_id AS candidateResultId,
+         result.seal_id AS sealId,
+         result.availability AS availability,
+         result.created_at AS createdAt
+       FROM candidate_triage_result AS result
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM candidate_result_seal AS seal
+         WHERE seal.candidate_result_seal_id = result.seal_id
+       )`
+    )
+    .all() as Array<{
+    candidateResultId: string;
+    sealId: string;
+    availability: string;
+    createdAt: number;
+  }>;
+  for (const row of rows) {
+    if (row.availability === "unavailable") {
+      const reasons = context.nativeDatabase
+        .prepare(
+          `SELECT candidate_result_reason_id AS id
+           FROM candidate_result_reason
+           WHERE candidate_result_id = ?`
+        )
+        .all(row.candidateResultId) as Array<{ id: string }>;
+      let reasonIds = reasons.map((reason) => reason.id);
+      if (reasonIds.length === 0) {
+        const reason = unwrap(
+          prepareCandidateResultReason({
+            candidateResultReasonId: `candidate-result-reason-${row.candidateResultId}`,
+            candidateResultId: row.candidateResultId,
+            reasonCode: "assessment_unavailable",
+            reasonOrdinal: 0,
+            createdAt: row.createdAt
+          })
+        );
+        unwrap(insertCandidateResultReason(context, reason));
+        reasonIds = [reason.candidateResultReasonId];
+      }
+      const tasked = new Set(
+        (
+          context.nativeDatabase
+            .prepare(
+              `SELECT candidate_result_reason_id AS reasonId, task_ordinal AS ordinal
+               FROM resolution_task
+               WHERE candidate_result_id = ?`
+            )
+            .all(row.candidateResultId) as Array<{ reasonId: string; ordinal: number }>
+        ).map((task) => task.reasonId)
+      );
+      const maxOrdinal = (
+        context.nativeDatabase
+          .prepare(
+            `SELECT COALESCE(MAX(task_ordinal), -1) AS maxOrdinal
+             FROM resolution_task
+             WHERE candidate_result_id = ?`
+          )
+          .get(row.candidateResultId) as { maxOrdinal: number }
+      ).maxOrdinal;
+      let nextOrdinal = maxOrdinal + 1;
+      for (const reasonId of reasonIds) {
+        if (tasked.has(reasonId)) {
+          continue;
+        }
+        unwrap(
+          insertResolutionTask(
+            context,
+            unwrap(
+              prepareResolutionTask({
+                resolutionTaskId: `resolution-task-${reasonId}`,
+                candidateResultId: row.candidateResultId,
+                candidateResultReasonId: reasonId,
+                taskOrdinal: nextOrdinal,
+                createdAt: row.createdAt
+              })
+            )
+          )
+        );
+        nextOrdinal += 1;
+      }
+    }
+    unwrap(
+      insertCandidateResultSeal(
+        context,
+        unwrap(
+          prepareCandidateResultSeal({
+            candidateResultSealId: row.sealId,
+            candidateResultId: row.candidateResultId,
+            createdAt: row.createdAt
+          })
+        )
+      )
+    );
+  }
+}
+
+function runImmediateTransaction<TResult>(
+  connection: RuntimeDatabaseConnection,
+  work: (context: ImmediateTransactionContext) => Result<TResult, RuntimeError>
+): Result<TResult, RuntimeError> {
+  return runBareImmediateTransaction(connection, (context) => {
+    const result = work(context);
+    if (!result.ok) {
+      return result;
+    }
+    sealUnsealedResults(context);
+    return result;
+  });
 }
 
 function withThrowingGetter(
@@ -302,8 +430,12 @@ function computedScoreDraft(overrides: Record<string, unknown> = {}): Record<str
 }
 
 function completeResultDraft(overrides: Record<string, unknown> = {}) {
+  const candidateTriageResultId =
+    typeof overrides.candidateTriageResultId === "string"
+      ? overrides.candidateTriageResultId
+      : "candidate-result-1";
   return {
-    candidateTriageResultId: "candidate-result-1",
+    candidateTriageResultId,
     candidateId: "candidate-1",
     kind: "initial",
     availability: "complete",
@@ -344,14 +476,19 @@ function completeResultDraft(overrides: Record<string, unknown> = {}) {
       }
     ],
     score: computedScoreDraft(),
+    sealId: `candidate-result-seal-${candidateTriageResultId}`,
     createdAt: CREATED_AT,
     ...overrides
   };
 }
 
 function unavailableResultDraft(overrides: Record<string, unknown> = {}) {
+  const candidateTriageResultId =
+    typeof overrides.candidateTriageResultId === "string"
+      ? overrides.candidateTriageResultId
+      : "candidate-result-1";
   return {
-    candidateTriageResultId: "candidate-result-1",
+    candidateTriageResultId,
     candidateId: "candidate-1",
     kind: "initial",
     availability: "unavailable",
@@ -364,6 +501,7 @@ function unavailableResultDraft(overrides: Record<string, unknown> = {}) {
     factConflicts: [],
     hardRequirementAssessments: [],
     score: null,
+    sealId: `candidate-result-seal-${candidateTriageResultId}`,
     createdAt: CREATED_AT,
     ...overrides
   };
@@ -406,6 +544,22 @@ function seedParents(context: ImmediateTransactionContext): void {
 function seedRichParents(context: ImmediateTransactionContext): void {
   unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
   unwrap(insertSourceDocument(context, unwrap(prepareSourceDocument(sourceDocumentDraft()))));
+  unwrap(
+    insertCandidateDocument(
+      context,
+      unwrap(
+        prepareCandidateDocument({
+          candidateDocumentId: "candidate-document-1",
+          candidateId: "candidate-1",
+          sourceDocumentId: "source-document-1",
+          documentKind: "resume",
+          label: "Resume",
+          documentOrdinal: 0,
+          createdAt: CREATED_AT
+        })
+      )
+    )
+  );
   unwrap(insertEvidenceSpan(context, unwrap(prepareEvidenceSpan(evidenceSpanDraft()))));
   unwrap(insertActor(context, unwrap(prepareActor(actorDraft()))));
   unwrap(
@@ -491,10 +645,18 @@ function seedRichParents(context: ImmediateTransactionContext): void {
 }
 
 function seedCompleteResult(context: ImmediateTransactionContext): void {
+  const result = unwrap(prepareCandidateTriageResult(completeResultDraft()));
+  unwrap(insertCandidateTriageResult(context, result));
   unwrap(
-    insertCandidateTriageResult(
+    insertCandidateResultSeal(
       context,
-      unwrap(prepareCandidateTriageResult(completeResultDraft()))
+      unwrap(
+        prepareCandidateResultSeal({
+          candidateResultSealId: result.sealId,
+          candidateResultId: result.candidateTriageResultId,
+          createdAt: result.createdAt
+        })
+      )
     )
   );
 }
@@ -546,6 +708,7 @@ function rebuildTableWithoutChecks(
   database.exec(`
     PRAGMA foreign_keys = OFF;
     ${triggerNames.map((name) => `DROP TRIGGER IF EXISTS ${name};`).join("\n")}
+    DROP TRIGGER IF EXISTS candidate_result_seal_reject_incomplete;
     CREATE TABLE ${table}_rebuilt (
       ${columns}
     ) STRICT;
