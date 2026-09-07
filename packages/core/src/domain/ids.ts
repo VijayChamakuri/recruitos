@@ -167,3 +167,9 @@ export type StructuredFactProvenanceId = z.infer<typeof StructuredFactProvenance
 
 export const TriageRunIdSchema = printableAsciiId.brand<"TriageRunId">();
 export type TriageRunId = z.infer<typeof TriageRunIdSchema>;
+
+export const TriageRunMemberIdSchema = printableAsciiId.brand<"TriageRunMemberId">();
+export type TriageRunMemberId = z.infer<typeof TriageRunMemberIdSchema>;
+
+export const TriageRunSealIdSchema = printableAsciiId.brand<"TriageRunSealId">();
+export type TriageRunSealId = z.infer<typeof TriageRunSealIdSchema>;
