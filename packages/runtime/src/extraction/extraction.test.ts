@@ -1230,6 +1230,9 @@ describe("stored extraction contract validation", () => {
         created_at integer NOT NULL
       ) STRICT;
       INSERT INTO extraction_spec_rebuilt SELECT * FROM extraction_spec;
+      DROP TRIGGER IF EXISTS triage_run_seal_reject_incomplete;
+      DROP TRIGGER IF EXISTS attempt_work_item_reject_owner;
+      DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_owner;
       DROP TABLE IF EXISTS attempt_work_item;
       DROP TABLE extraction_spec;
       ALTER TABLE extraction_spec_rebuilt RENAME TO extraction_spec;
@@ -1360,6 +1363,9 @@ describe("stored extraction JSON rebuilds", () => {
         created_at integer NOT NULL
       ) STRICT;
       INSERT INTO extraction_artifact_rebuilt SELECT * FROM extraction_artifact;
+      DROP TRIGGER IF EXISTS triage_run_seal_reject_incomplete;
+      DROP TRIGGER IF EXISTS attempt_work_item_reject_owner;
+      DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_owner;
       DROP TABLE IF EXISTS attempt_work_item;
       DROP TABLE extraction_artifact;
       ALTER TABLE extraction_artifact_rebuilt RENAME TO extraction_artifact;
@@ -1520,6 +1526,9 @@ describe("stored extraction JSON rebuilds", () => {
         created_at integer NOT NULL
       ) STRICT;
       INSERT INTO extraction_artifact_rebuilt SELECT * FROM extraction_artifact;
+      DROP TRIGGER IF EXISTS triage_run_seal_reject_incomplete;
+      DROP TRIGGER IF EXISTS attempt_work_item_reject_owner;
+      DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_owner;
       DROP TABLE IF EXISTS attempt_work_item;
       DROP TABLE extraction_artifact;
       ALTER TABLE extraction_artifact_rebuilt RENAME TO extraction_artifact;

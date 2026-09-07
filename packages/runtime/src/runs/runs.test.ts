@@ -556,7 +556,13 @@ function seedOfficialAttemptReady(
                 }
               ]
             },
-            rejectedClaims: [],
+            rejectedClaims: [
+              {
+                kind: "unlocated_quote",
+                quotedText: `missing-${index + 1}`,
+                reason: "quote was not found in normalized text"
+              }
+            ],
             createdAt: CREATED_AT
           })
         )

@@ -83,7 +83,6 @@ const CLAIMED_AT = CREATED_AT + 1_000;
 const COMPLETED_AT = CREATED_AT + 2_000;
 const PROMPT_HASH = sha256Hex("prompt-template-v1");
 const SCHEMA_HASH = sha256Hex("extraction-output-schema-v1");
-const RESPONSE_HASH = sha256Hex("provider-body");
 const TRANSACTION_REQUIRED = "Triage attempt rows require an active command transaction";
 
 const TRIAGE_ATTEMPT_COLUMNS = `
@@ -349,7 +348,13 @@ function artifactDraft(index: number, overrides: Record<string, unknown> = {}) {
         }
       ]
     },
-    rejectedClaims: [],
+    rejectedClaims: [
+      {
+        kind: "unlocated_quote",
+        quotedText: `missing-${index + 1}`,
+        reason: "quote was not found in normalized text"
+      }
+    ],
     createdAt: CREATED_AT,
     ...overrides
   };
@@ -361,11 +366,11 @@ function failureDraft(index: number, overrides: Record<string, unknown> = {}) {
     specId: "extraction-spec-1",
     sourceDocumentId: `source-document-${index + 1}`,
     errorClass: "structurally_invalid",
-    responseHash: RESPONSE_HASH,
-    responseByteLength: 128,
+    responseHash: sha256Hex(`provider-body-${index + 1}`),
+    responseByteLength: 128 + index,
     diagnostic: {
       summary: "Provider output failed schema validation",
-      details: ["unknown field score"]
+      details: [`unknown field score ${index + 1}`]
     },
     createdAt: CREATED_AT,
     ...overrides
@@ -610,6 +615,7 @@ function rebuildWithoutChecks(
     DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_reopen;
     DROP TRIGGER IF EXISTS attempt_work_item_reject_delete;
     DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_owner;
+    DROP TRIGGER IF EXISTS triage_run_seal_reject_incomplete;
     CREATE TABLE ${table}_rebuilt (
       ${columns}
     ) STRICT;
