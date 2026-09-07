@@ -1,9 +1,12 @@
+import type { FoldedMatchQuality } from "../../packages/core/src/index.js";
+
 /**
  * Type definitions for RecruitOS Evaluation Harness (Class 1, Class 2, Class 3).
  * Follows evaluation specifications from DESIGN.md and the implementation plan.
  */
 
 export type Polarity = "supporting" | "contradicting";
+export type RelocatedMatchQuality = FoldedMatchQuality;
 
 export interface SpanInterval {
   readonly start: number;
@@ -91,4 +94,46 @@ export interface Class3BiasAuditDemo {
   readonly proposedCuts: readonly BiasGroupCut[];
   readonly approvedCuts: readonly BiasGroupCut[];
   readonly referenceGroupName: string;
+}
+
+export interface ExtractedQuoteClaim {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly documentId: string;
+  readonly dimension: string;
+  readonly polarity: Polarity;
+  readonly quotedText: string;
+  readonly claimedStart?: number;
+  readonly claimedEnd?: number;
+  readonly confidence?: number;
+}
+
+export interface RelocatedPredictedSpan extends PredictedSpan {
+  readonly matchQuality: RelocatedMatchQuality;
+  readonly matchedText: string;
+}
+
+export interface QuoteRelocationFailure {
+  readonly claimId: string;
+  readonly candidateId: string;
+  readonly documentId: string;
+  readonly dimension: string;
+  readonly quotedText: string;
+  readonly error: string;
+  readonly reason?: string;
+}
+
+export interface RelocationBatchResult {
+  readonly totalClaims: number;
+  readonly relocatedSpans: readonly RelocatedPredictedSpan[];
+  readonly unlocatedClaims: readonly QuoteRelocationFailure[];
+  readonly exactMatches: number;
+  readonly normalizedMatches: number;
+  readonly relocationRate: number | null;
+}
+
+export interface GroundedSpanEvaluationResult {
+  readonly spanMatches: SpanMatchResult;
+  readonly relocation: RelocationBatchResult;
+  readonly effectivePrecision: number | null;
 }

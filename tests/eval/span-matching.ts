@@ -1,8 +1,17 @@
+import {
+  normalizeSourceText,
+  relocateQuoteClaim
+} from "../../packages/core/src/index.js";
 import type {
   EvalMetrics,
   ExpectedSpan,
+  ExtractedQuoteClaim,
+  GroundedSpanEvaluationResult,
   MatchedSpanPair,
   PredictedSpan,
+  QuoteRelocationFailure,
+  RelocatedPredictedSpan,
+  RelocationBatchResult,
   SpanInterval,
   SpanMatchResult
 } from "./types.js";
@@ -167,5 +176,149 @@ export function assignSpanMatches(
     meanIou,
     medianIou,
     exactBoundaryMatchRate
+  };
+}
+
+function lookupDocumentText(
+  documentTexts: ReadonlyMap<string, string> | Record<string, string>,
+  documentId: string
+): string | undefined {
+  if (documentTexts instanceof Map) {
+    return documentTexts.get(documentId);
+  }
+  return Object.prototype.hasOwnProperty.call(documentTexts, documentId)
+    ? (documentTexts as Record<string, string>)[documentId]
+    : undefined;
+}
+
+/**
+ * Relocates an array of model-extracted quote claims against stored document texts
+ * using the authoritative core relocation pipeline (@recruitos/core relocateQuoteClaim).
+ *
+ * Implements Class 2 evaluation requirements:
+ * - Model claimed start/end offsets are ignored and recomputed from source text.
+ * - Stored text is normalized via normalizeSourceText before relocation.
+ * - Exact and folded match tiers are distinguished.
+ * - Unlocated or invalid quotes produce explicit failures rather than fabricated offsets.
+ */
+export function relocateExtractedClaims(
+  documentTexts: ReadonlyMap<string, string> | Record<string, string>,
+  claims: readonly ExtractedQuoteClaim[]
+): RelocationBatchResult {
+  const relocatedSpans: RelocatedPredictedSpan[] = [];
+  const unlocatedClaims: QuoteRelocationFailure[] = [];
+  let exactMatches = 0;
+  let normalizedMatches = 0;
+
+  for (const claim of claims) {
+    const rawText = lookupDocumentText(documentTexts, claim.documentId);
+    if (rawText === undefined) {
+      unlocatedClaims.push({
+        claimId: claim.id,
+        candidateId: claim.candidateId,
+        documentId: claim.documentId,
+        dimension: claim.dimension,
+        quotedText: claim.quotedText,
+        error: `Document '${claim.documentId}' not found in documentTexts`
+      });
+      continue;
+    }
+
+    const normalizedDoc = normalizeSourceText(rawText);
+    if (!normalizedDoc.ok) {
+      unlocatedClaims.push({
+        claimId: claim.id,
+        candidateId: claim.candidateId,
+        documentId: claim.documentId,
+        dimension: claim.dimension,
+        quotedText: claim.quotedText,
+        error: normalizedDoc.error.message
+      });
+      continue;
+    }
+
+    const relocated = relocateQuoteClaim(normalizedDoc.value.normalizedText, {
+      quotedText: claim.quotedText,
+      start: claim.claimedStart,
+      end: claim.claimedEnd
+    });
+
+    if (relocated.ok) {
+      const span: RelocatedPredictedSpan = {
+        id: claim.id,
+        candidateId: claim.candidateId,
+        documentId: claim.documentId,
+        dimension: claim.dimension,
+        polarity: claim.polarity,
+        start: relocated.value.start,
+        end: relocated.value.end,
+        text: relocated.value.matchedText,
+        matchedText: relocated.value.matchedText,
+        matchQuality: relocated.value.matchQuality,
+        ...(claim.confidence !== undefined ? { confidence: claim.confidence } : {})
+      };
+      relocatedSpans.push(span);
+
+      if (relocated.value.matchQuality === "exact") {
+        exactMatches++;
+      } else {
+        normalizedMatches++;
+      }
+    } else {
+      const details = relocated.error.details;
+      const reason =
+        typeof details === "object" && details !== null && "reason" in details
+          ? String((details as Record<string, unknown>).reason)
+          : undefined;
+
+      unlocatedClaims.push({
+        claimId: claim.id,
+        candidateId: claim.candidateId,
+        documentId: claim.documentId,
+        dimension: claim.dimension,
+        quotedText: claim.quotedText,
+        error: relocated.error.message,
+        ...(reason !== undefined ? { reason } : {})
+      });
+    }
+  }
+
+  const relocationRate =
+    claims.length > 0
+      ? Number((relocatedSpans.length / claims.length).toFixed(4))
+      : null;
+
+  return {
+    totalClaims: claims.length,
+    relocatedSpans,
+    unlocatedClaims,
+    exactMatches,
+    normalizedMatches,
+    relocationRate
+  };
+}
+
+/**
+ * Evaluates candidate quote claims against expected ground-truth spans.
+ * First grounds all quote claims against stored document text via real quote relocation.
+ * Then performs one-to-one bipartite matching maximizing IoU over successfully relocated spans.
+ */
+export function evaluateGroundedSpans(
+  expectedSpans: readonly ExpectedSpan[],
+  documentTexts: ReadonlyMap<string, string> | Record<string, string>,
+  claims: readonly ExtractedQuoteClaim[],
+  minIou = 0.5
+): GroundedSpanEvaluationResult {
+  const relocation = relocateExtractedClaims(documentTexts, claims);
+  const spanMatches = assignSpanMatches(expectedSpans, relocation.relocatedSpans, minIou);
+  const effectivePrecision =
+    claims.length > 0
+      ? Number((spanMatches.matches.length / claims.length).toFixed(4))
+      : null;
+
+  return {
+    spanMatches,
+    relocation,
+    effectivePrecision
   };
 }
