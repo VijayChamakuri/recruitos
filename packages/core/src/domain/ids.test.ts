@@ -5,6 +5,7 @@ import {
   AttemptClaimIdSchema,
   AttemptWorkItemIdSchema,
   AuditEventIdSchema,
+  CandidateDemographicsIdSchema,
   CandidateIdSchema,
   CandidateResultDimensionAssessmentIdSchema,
   CandidateResultEvidenceGapIdSchema,
@@ -20,6 +21,7 @@ import {
   CorpusManifestSealIdSchema,
   CorpusMemberDocumentIdSchema,
   CorpusMemberIdSchema,
+  DemoSessionIdSchema,
   DimensionAssessmentEvidenceSpanIdSchema,
   DimensionAssessmentIdSchema,
   EvidenceGapIdSchema,
@@ -42,6 +44,7 @@ import {
   RunInputSnapshotIdSchema,
   RubricDimensionIdSchema,
   RubricIdSchema,
+  SYNTHETIC_DEMO_SESSION_ID,
   ScoreResultIdSchema,
   SourceDocumentIdSchema,
   StructuredFactEvidenceSpanIdSchema,
@@ -60,6 +63,7 @@ const schemas = [
   AttemptClaimIdSchema,
   AttemptWorkItemIdSchema,
   AuditEventIdSchema,
+  CandidateDemographicsIdSchema,
   CandidateIdSchema,
   CandidateResultDimensionAssessmentIdSchema,
   CandidateResultEvidenceGapIdSchema,
@@ -113,6 +117,14 @@ describe("branded ID schemas", () => {
     for (const schema of schemas) {
       expect(schema.parse("entity_01:test")).toBe("entity_01:test");
     }
+  });
+
+  it("accepts only the synthetic demo singleton identity", () => {
+    expect(DemoSessionIdSchema.parse(SYNTHETIC_DEMO_SESSION_ID)).toBe(
+      SYNTHETIC_DEMO_SESSION_ID
+    );
+    expect(DemoSessionIdSchema.safeParse("entity_01:test").success).toBe(false);
+    expect(DemoSessionIdSchema.safeParse("").success).toBe(false);
   });
 
   it.each(["", "contains space", "café", "line\nbreak", "a".repeat(129)])(
