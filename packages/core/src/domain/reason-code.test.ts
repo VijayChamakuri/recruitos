@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   formatReasonCode,
   parseReasonCode,
+  reasonCodePrecedence,
+  reasonCodeSubject,
   REASON_CODE_KINDS,
   REASON_CODE_KINDS_WITH_SUBJECT,
   REASON_CODE_KINDS_WITHOUT_SUBJECT,
+  REASON_CODE_PRECEDENCE,
   ReasonCodeKindSchema,
   ReasonCodeSchema,
   type ReasonCode
@@ -50,8 +53,22 @@ describe("reason code vocabulary", () => {
     }
   );
 
+  it("ranks every closed kind exactly once in committed precedence order", () => {
+    expect([...REASON_CODE_PRECEDENCE].sort()).toEqual([...REASON_CODE_KINDS].sort());
+    expect(new Set(REASON_CODE_PRECEDENCE).size).toBe(REASON_CODE_PRECEDENCE.length);
+    expect(REASON_CODE_PRECEDENCE[0]).toBe("assessment_unavailable");
+    expect(REASON_CODE_PRECEDENCE.at(-1)).toBe("low_confidence");
+    expect(reasonCodePrecedence("assessment_unavailable")).toBeLessThan(
+      reasonCodePrecedence("missing_evidence")
+    );
+    expect(reasonCodePrecedence("missing_evidence")).toBeLessThan(
+      reasonCodePrecedence("low_confidence")
+    );
+  });
+
   it("round-trips every design invariant P5 reason code string", () => {
     const strings = [
+      "assessment_unavailable",
       "missing_evidence:evaluation_practice",
       "missing_evidence:work_authorization",
       "contradiction:tenure_vs_claim",
@@ -68,6 +85,9 @@ describe("reason code vocabulary", () => {
         throw new Error(parsed.error.message);
       }
       expect(formatReasonCode(parsed.value)).toBe(text);
+      expect(reasonCodeSubject(parsed.value)).toBe(
+        "subjectId" in parsed.value ? parsed.value.subjectId : null
+      );
     }
   });
 

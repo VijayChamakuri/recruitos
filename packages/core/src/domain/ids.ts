@@ -42,6 +42,10 @@ export type CandidateResultHardRequirementAssessmentId = z.infer<
   typeof CandidateResultHardRequirementAssessmentIdSchema
 >;
 
+export const CandidateResultReasonIdSchema =
+  printableAsciiId.brand<"CandidateResultReasonId">();
+export type CandidateResultReasonId = z.infer<typeof CandidateResultReasonIdSchema>;
+
 export const CandidateResultStructuredFactIdSchema =
   printableAsciiId.brand<"CandidateResultStructuredFactId">();
 export type CandidateResultStructuredFactId = z.infer<
