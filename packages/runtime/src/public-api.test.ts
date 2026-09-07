@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as runtime from "./index.js";
 
 describe("runtime public API", () => {
-  it("exports the audit, connection, command protocol, immutable entity, corpus, role, rubric, evidence, extraction, snapshot, fact, schema, and error foundation", () => {
+  it("exports the audit, connection, command protocol, immutable entity, corpus, role, rubric, evidence, extraction, snapshot, fact, result, schema, persistence pattern, and error foundation", () => {
     expect(Object.keys(runtime).sort()).toEqual([
       "ActorDraftSchema",
       "ActorKindSchema",
@@ -79,6 +79,7 @@ describe("runtime public API", () => {
       "ExtractionSpecLimitsSchema",
       "ExtractionSpecSchema",
       "FACT_PROVENANCE_SOURCES",
+      "FIRST_MUTABLE_HEAD_VERSION",
       "FactConflictContentSchema",
       "FactConflictDraftSchema",
       "FactConflictMemberDraftSchema",
@@ -101,6 +102,7 @@ describe("runtime public API", () => {
       "MAXIMUM_MODEL_ID_LENGTH",
       "MAXIMUM_NORMALIZED_DOCUMENT_BYTES",
       "MAXIMUM_NORMALIZED_DOCUMENT_LENGTH",
+      "MAXIMUM_NULLABLE_SUBJECT_SCOPE_COLUMNS",
       "MAXIMUM_PROMPT_TEMPLATE_VERSION_LENGTH",
       "MAXIMUM_PROVIDER_RESPONSE_BYTES",
       "MAXIMUM_QUOTED_TEXT_LENGTH",
@@ -161,11 +163,14 @@ describe("runtime public API", () => {
       "candidateTriageResults",
       "candidates",
       "commandReceipts",
+      "compareAndSetMutableHead",
       "corpusManifestSeals",
       "corpusManifests",
       "corpusMemberDocuments",
       "corpusMembers",
+      "createNullableSubjectUniqueIndexes",
       "createRuntimeError",
+      "defineMutableHead",
       "dimensionAssessmentEvidenceSpans",
       "dimensionAssessments",
       "evidenceGaps",
@@ -187,6 +192,7 @@ describe("runtime public API", () => {
       "hashRunInputSnapshotContent",
       "hashScoreResultContent",
       "hashStructuredFactContent",
+      "initializeMutableHead",
       "insertActor",
       "insertCandidate",
       "insertCandidateDocument",
@@ -264,6 +270,7 @@ describe("runtime public API", () => {
       "readExtractionSpecByContentHash",
       "readFactConflict",
       "readHardRequirementAssessment",
+      "readMutableHead",
       "readRequirement",
       "readRole",
       "readRubric",

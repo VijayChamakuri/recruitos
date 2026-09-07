@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,16 +28,6 @@ import {
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 
-/**
- * Reads the migration count from the local journal so adding a migration does
- * not break unrelated idempotency assertions.
- */
-function localMigrationCount(): number {
-  const journal = JSON.parse(
-    readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8")
-  ) as { entries: readonly unknown[] };
-  return journal.entries.length;
-}
 const temporaryDirectories: string[] = [];
 const TestCommandPayloadSchema = z.object({ increment: z.literal(1) }).strict();
 const TestCommandResultSchema = z.object({ version: z.number().int().safe() }).strict();
@@ -340,48 +329,6 @@ describe("audit envelope foundation", () => {
     expect(connection.close().ok).toBe(true);
   });
 
-  it("rejects update and delete at the SQLite boundary", async () => {
-    const connection = await openMigratedDatabase();
-    const prepared = prepareDraft();
-    expect(
-      runImmediateTransaction(connection, (context) =>
-        appendAuditEvent(context, prepared)
-      ).ok
-    ).toBe(true);
-    const database = nativeDatabase(connection);
-
-    expect(() =>
-      database
-        .prepare("UPDATE audit_event SET actor_display_name = 'Changed'")
-        .run()
-    ).toThrowError("audit_event is append-only");
-    expect(() => database.prepare("DELETE FROM audit_event").run()).toThrowError(
-      "audit_event is append-only"
-    );
-    expect(() =>
-      database
-        .prepare(
-          `INSERT OR REPLACE INTO audit_event
-           SELECT
-             audit_event_id,
-             command_id,
-             event_ordinal,
-             actor_id,
-             'Replacement',
-             event_name,
-             event_version,
-             payload_json,
-             payload_hash,
-             occurred_at,
-             recorded_at
-           FROM audit_event`
-        )
-        .run()
-    ).toThrowError("audit_event is append-only");
-    expect(auditCount(connection)).toBe(1);
-    expect(connection.close().ok).toBe(true);
-  });
-
   it("commits command mutation, audit event, and receipt atomically", async () => {
     const connection = await openMigratedDatabase();
     createTestAggregate(connection);
@@ -565,24 +512,5 @@ describe("audit envelope foundation", () => {
         recordedAt: 10
       }).success
     ).toBe(false);
-  });
-
-  it("applies the audit migration idempotently", async () => {
-    const connection = await openMigratedDatabase();
-
-    expect(connection.migrate()).toEqual({ ok: true, value: undefined });
-    expect(
-      nativeDatabase(connection)
-        .prepare(
-          "SELECT COUNT(*) AS count FROM sqlite_schema WHERE name IN ('audit_event', 'audit_event_reject_replace', 'audit_event_reject_update', 'audit_event_reject_delete')"
-        )
-        .get()
-    ).toEqual({ count: 4 });
-    expect(
-      nativeDatabase(connection)
-        .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
-        .get()
-    ).toEqual({ count: localMigrationCount() });
-    expect(connection.close().ok).toBe(true);
   });
 });

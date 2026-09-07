@@ -491,88 +491,6 @@ describe("role and rubric persistence", () => {
 });
 
 describe("role and rubric database constraints", () => {
-  it("rejects updates, deletes, and replacements of stored rows", async () => {
-    const connection = await openMigratedDatabase();
-    const database = nativeDatabase(connection);
-
-    unwrap(
-      runImmediateTransaction(connection, (context) => {
-        seedRoleAndRubric(context);
-        unwrap(insertRequirement(context, unwrap(prepareRequirement(requirementDraft()))));
-        unwrap(
-          insertRubricDimension(context, unwrap(prepareRubricDimension(dimensionDraft())))
-        );
-        return ok(undefined);
-      })
-    );
-
-    expect(() =>
-      database.prepare("UPDATE role SET title = 'Tampered' WHERE role_id = ?").run(
-        "role-applied-ai-engineer"
-      )
-    ).toThrow(/role is immutable/u);
-    expect(() =>
-      database.prepare("DELETE FROM role WHERE role_id = ?").run("role-applied-ai-engineer")
-    ).toThrow(/role is immutable/u);
-    expect(() =>
-      database
-        .prepare("INSERT OR REPLACE INTO role (role_id, title, created_at) VALUES (?, ?, ?)")
-        .run("role-applied-ai-engineer", "Replacement", 1)
-    ).toThrow(/role is immutable/u);
-
-    expect(() =>
-      database
-        .prepare("UPDATE requirement SET kind = 'scored' WHERE requirement_id = ?")
-        .run("requirement-work-authorization")
-    ).toThrow(/requirement is immutable/u);
-    expect(() =>
-      database
-        .prepare("DELETE FROM requirement WHERE requirement_id = ?")
-        .run("requirement-work-authorization")
-    ).toThrow(/requirement is immutable/u);
-
-    expect(() =>
-      database.prepare("UPDATE rubric SET version = 'other' WHERE rubric_id = ?").run(
-        "rubric-sample"
-      )
-    ).toThrow(/rubric is immutable/u);
-    expect(() =>
-      database.prepare("DELETE FROM rubric WHERE rubric_id = ?").run("rubric-sample")
-    ).toThrow(/rubric is immutable/u);
-    expect(() =>
-      database
-        .prepare(
-          `INSERT OR REPLACE INTO rubric (
-            rubric_id, role_id, version, created_at
-          ) VALUES (?, ?, ?, ?)`
-        )
-        .run("rubric-sample", "role-applied-ai-engineer", "other", 1)
-    ).toThrow(/rubric is immutable/u);
-
-    expect(() =>
-      database
-        .prepare("UPDATE rubric_dimension SET weight = 9 WHERE rubric_dimension_id = ?")
-        .run("rubric-dimension-sample")
-    ).toThrow(/rubric_dimension is immutable/u);
-    expect(() =>
-      database
-        .prepare("DELETE FROM rubric_dimension WHERE rubric_dimension_id = ?")
-        .run("rubric-dimension-sample")
-    ).toThrow(/rubric_dimension is immutable/u);
-    expect(() =>
-      database
-        .prepare(
-          `INSERT OR REPLACE INTO rubric_dimension (
-            rubric_dimension_id, rubric_id, dimension_id, weight, required,
-            definition, job_related_justification, ordinal, created_at
-          ) VALUES (?, ?, ?, 1, 0, 'd', 'j', 0, 1)`
-        )
-        .run("rubric-dimension-sample", "rubric-sample", "sample_dimension")
-    ).toThrow(/rubric_dimension is immutable/u);
-
-    expect(connection.close().ok).toBe(true);
-  });
-
   it("rejects a second role or rubric that reuses an identity key", async () => {
     const connection = await openMigratedDatabase();
 
@@ -693,38 +611,7 @@ describe("role and rubric database constraints", () => {
   });
 });
 
-describe("role and rubric migration", () => {
-  it("creates every role and rubric table and trigger exactly once", async () => {
-    const connection = await openMigratedDatabase();
-    const database = nativeDatabase(connection);
-
-    expect(connection.migrate()).toEqual({ ok: true, value: undefined });
-
-    expect(
-      database
-        .prepare(
-          `SELECT count(*) AS total
-           FROM sqlite_schema
-           WHERE type = 'table'
-             AND name IN ('role', 'requirement', 'rubric', 'rubric_dimension')`
-        )
-        .get()
-    ).toEqual({ total: 4 });
-
-    expect(
-      database
-        .prepare(
-          `SELECT count(*) AS total
-           FROM sqlite_schema
-           WHERE type = 'trigger'
-             AND tbl_name IN ('role', 'requirement', 'rubric', 'rubric_dimension')`
-        )
-        .get()
-    ).toEqual({ total: 12 });
-
-    expect(connection.close().ok).toBe(true);
-  });
-
+describe("role and rubric table declarations", () => {
   it("declares every role and rubric table STRICT", async () => {
     const connection = await openMigratedDatabase();
 

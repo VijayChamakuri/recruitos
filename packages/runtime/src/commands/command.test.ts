@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,16 +26,6 @@ import { runImmediateTransaction } from "./transaction.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 
-/**
- * Reads the migration count from the local journal so adding a migration does
- * not break unrelated idempotency assertions.
- */
-function localMigrationCount(): number {
-  const journal = JSON.parse(
-    readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8")
-  ) as { entries: readonly unknown[] };
-  return journal.entries.length;
-}
 const temporaryDirectories: string[] = [];
 const TestPayloadSchema = z.object({ increment: z.number().int().safe() }).strict();
 const TestResultSchema = z.object({ version: z.number().int().safe().nonnegative() }).strict();
@@ -456,25 +445,6 @@ describe("command protocol", () => {
         .get()
     ).toEqual({ count: 0 });
     expect(connection.isOpen()).toBe(true);
-    expect(connection.close().ok).toBe(true);
-  });
-
-  it("applies the command receipt migration idempotently", async () => {
-    const { connection } = await openMigratedDatabase();
-
-    expect(connection.migrate()).toEqual({ ok: true, value: undefined });
-    expect(
-      nativeDatabase(connection)
-        .prepare(
-          "SELECT COUNT(*) AS count FROM sqlite_schema WHERE type = 'table' AND name = 'command_receipt'"
-        )
-        .get()
-    ).toEqual({ count: 1 });
-    expect(
-      nativeDatabase(connection)
-        .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
-        .get()
-    ).toEqual({ count: localMigrationCount() });
     expect(connection.close().ok).toBe(true);
   });
 

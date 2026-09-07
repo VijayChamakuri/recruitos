@@ -14,6 +14,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./adapters": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.js",
+      "default": "./dist/adapters/index.js"
+    },
     "./audit": {
       "types": "./dist/audit/index.d.ts",
       "import": "./dist/audit/index.js",
@@ -73,6 +78,11 @@
       "types": "./dist/snapshots/index.d.ts",
       "import": "./dist/snapshots/index.js",
       "default": "./dist/snapshots/index.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence/index.d.ts",
+      "import": "./dist/persistence/index.js",
+      "default": "./dist/persistence/index.js"
     }
   },
   "scripts": {

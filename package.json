@@ -10,14 +10,15 @@
   },
   "scripts": {
     "build": "corepack pnpm -r build",
-    "check": "corepack pnpm test:types && corepack pnpm check:architecture && corepack pnpm check:browser && corepack pnpm check:dynamic-code && corepack pnpm test",
+    "check": "corepack pnpm test:types && corepack pnpm check:architecture && corepack pnpm check:browser && corepack pnpm check:dynamic-code && corepack pnpm test && corepack pnpm test:integration",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:browser": "corepack pnpm build && node scripts/check-browser-bundle.mjs",
     "check:dynamic-code": "node scripts/check-dynamic-code-denied.mjs",
-    "test": "vitest run",
+    "test": "vitest run --project core --project runtime --project architecture",
     "test:coverage": "vitest run --coverage",
+    "test:integration": "corepack pnpm build && vitest run --project integration",
     "test:runtime": "corepack pnpm --filter @recruitos/runtime test",
-    "test:types": "corepack pnpm -r test:types",
+    "test:types": "corepack pnpm -r test:types && tsc -p tests/tsconfig.json --noEmit",
     "typecheck": "corepack pnpm test:types"
   },
   "devDependencies": {

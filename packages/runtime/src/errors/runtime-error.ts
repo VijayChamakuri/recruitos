@@ -14,7 +14,8 @@ const runtimeErrorShape = {
 export const RuntimeErrorSchema = z.discriminatedUnion("code", [
   z.object({ code: z.literal("persistence_failed"), ...runtimeErrorShape }).strict(),
   z.object({ code: z.literal("migration_required"), ...runtimeErrorShape }).strict(),
-  z.object({ code: z.literal("command_conflict"), ...runtimeErrorShape }).strict()
+  z.object({ code: z.literal("command_conflict"), ...runtimeErrorShape }).strict(),
+  z.object({ code: z.literal("version_conflict"), ...runtimeErrorShape }).strict()
 ]);
 
 export type RuntimeError = z.infer<typeof RuntimeErrorSchema>;
