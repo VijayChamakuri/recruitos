@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | d2aa7e5 |
+| origin/main | 4a2cd1a |
 | Migration lock held by | Cursor, for the full chain below |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
@@ -37,7 +37,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/proposal-persistence-3840 | chain step 2 | in review (draft #23) |
+| Cursor | cursor/candidate-head-persistence-3840 | chain step 3 | in progress |
 | Claude Code | (none) | Item 4 verified already complete on main via #11 and #12. Idle, reserved for composition root, command use-cases, scheduler T5, deferred until Cursor's migration chain lands. | idle-reserved |
 | Antigravity | (none) | PR #21 merged (#21). Idle until Cursor finishes migration chain step 1 or next assignment. | idle-complete |
 
@@ -63,3 +63,5 @@ your own rows plus the log.
 - 2026-09-07 Cursor: #22 rebased onto aa79802, public API regenerated, checks green. Ready for review.
 - 2026-09-07 Cursor: PR #22 merged to main at d2aa7e5. Starting chain step 2 on cursor/proposal-persistence-3840.
 - 2026-09-07 Cursor: draft PR #23 opened for proposal, review-decision, and proposal-head persistence. Checks green locally aside from the known architecture-under-coverage vitest worker timeout.
+- 2026-09-07 Cursor: PR #23 squash-merged to main at 4a2cd1a. Branch cursor/proposal-persistence-3840 deleted.
+- 2026-09-07 Cursor: starting chain step 3 on cursor/candidate-head-persistence-3840 for candidate_head. Claude stays held until step 4, candidate_result_seal, lands.
