@@ -252,22 +252,20 @@ function canonicalizeScore(
     contributions: draft.contributions
   });
   const hashed = hashOrdered(content);
-  const score = ScoreResultSchema.safeParse({
-    scoreResultId: draft.scoreResultId,
-    candidateResultId: candidateTriageResultId,
-    aggregateText: content.aggregate,
-    confidenceText: content.confidence,
-    aggregateBasisPoints: aggregatePoints.value,
-    confidenceBasisPoints: confidencePoints.value,
-    content,
-    contentJson: hashed.json,
-    contentHash: hashed.hash,
-    createdAt
-  });
-  if (!score.success) {
-    return err(persistenceFailure("Invalid score result content"));
-  }
-  return ok(score.data);
+  return ok(
+    ScoreResultSchema.parse({
+      scoreResultId: draft.scoreResultId,
+      candidateResultId: candidateTriageResultId,
+      aggregateText: content.aggregate,
+      confidenceText: content.confidence,
+      aggregateBasisPoints: aggregatePoints.value,
+      confidenceBasisPoints: confidencePoints.value,
+      content,
+      contentJson: hashed.json,
+      contentHash: hashed.hash,
+      createdAt
+    })
+  );
 }
 
 export function prepareCandidateTriageResult(

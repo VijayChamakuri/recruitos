@@ -1018,6 +1018,72 @@ describe("candidate result preparation", () => {
       error: expect.objectContaining({ message: "Invalid score result content" })
     });
   });
+
+  it("orders multiple associations by child id", () => {
+    const result = unwrap(
+      prepareCandidateTriageResult(
+        unavailableResultDraft({
+          evidenceSpans: [
+            {
+              candidateResultEvidenceSpanId: "candidate-result-span-2",
+              evidenceSpanId: "evidence-span-2"
+            },
+            {
+              candidateResultEvidenceSpanId: "candidate-result-span-1",
+              evidenceSpanId: "evidence-span-1"
+            }
+          ],
+          structuredFacts: [
+            {
+              candidateResultStructuredFactId: "candidate-result-fact-2",
+              structuredFactId: "structured-fact-2"
+            },
+            {
+              candidateResultStructuredFactId: "candidate-result-fact-1",
+              structuredFactId: "structured-fact-1"
+            }
+          ],
+          factConflicts: [
+            {
+              candidateResultFactConflictId: "candidate-result-conflict-2",
+              factConflictId: "fact-conflict-2"
+            },
+            {
+              candidateResultFactConflictId: "candidate-result-conflict-1",
+              factConflictId: "fact-conflict-1"
+            }
+          ],
+          hardRequirementAssessments: [
+            {
+              candidateResultHardRequirementAssessmentId: "candidate-result-requirement-2",
+              hardRequirementAssessmentId: "hard-requirement-assessment-2"
+            },
+            {
+              candidateResultHardRequirementAssessmentId: "candidate-result-requirement-1",
+              hardRequirementAssessmentId: "hard-requirement-assessment-1"
+            }
+          ]
+        })
+      )
+    );
+    expect(result.evidenceSpans.map((span) => span.evidenceSpanId)).toEqual([
+      "evidence-span-1",
+      "evidence-span-2"
+    ]);
+    expect(result.structuredFacts.map((fact) => fact.structuredFactId)).toEqual([
+      "structured-fact-1",
+      "structured-fact-2"
+    ]);
+    expect(result.factConflicts.map((conflict) => conflict.factConflictId)).toEqual([
+      "fact-conflict-1",
+      "fact-conflict-2"
+    ]);
+    expect(
+      result.hardRequirementAssessments.map(
+        (assessment) => assessment.hardRequirementAssessmentId
+      )
+    ).toEqual(["hard-requirement-assessment-1", "hard-requirement-assessment-2"]);
+  });
 });
 
 describe("candidate result persistence", () => {
@@ -1418,7 +1484,7 @@ describe("candidate result persistence", () => {
                   members: [
                     {
                       factConflictMemberId: "fact-conflict-member-3",
-                      structuredFactId: "structured-fact-2"
+                      structuredFactId: "structured-fact-other"
                     },
                     {
                       factConflictMemberId: "fact-conflict-member-4",
@@ -1473,7 +1539,7 @@ describe("candidate result persistence", () => {
                   facts: [
                     {
                       hardRequirementAssessmentFactId: "hard-requirement-assessment-fact-2",
-                      structuredFactId: "structured-fact-2",
+                      structuredFactId: "structured-fact-other",
                       polarity: "supporting"
                     }
                   ]
