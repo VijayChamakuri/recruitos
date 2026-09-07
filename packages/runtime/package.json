@@ -34,6 +34,16 @@
       "import": "./dist/db/index.js",
       "default": "./dist/db/index.js"
     },
+    "./demo-session": {
+      "types": "./dist/demo-session/index.d.ts",
+      "import": "./dist/demo-session/index.js",
+      "default": "./dist/demo-session/index.js"
+    },
+    "./demographics": {
+      "types": "./dist/demographics/index.d.ts",
+      "import": "./dist/demographics/index.js",
+      "default": "./dist/demographics/index.js"
+    },
     "./entities": {
       "types": "./dist/entities/index.d.ts",
       "import": "./dist/entities/index.js",
