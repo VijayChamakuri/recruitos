@@ -39,7 +39,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/triage-attempt-persistence-3840 | chain step 6: `triage_attempt` + `attempt_work_item` + run-seal readiness | building |
+| Cursor | cursor/triage-attempt-persistence-3840 | chain step 6: `triage_attempt` + `attempt_work_item` + run-seal readiness | ready PR |
 | Claude Code | b/core-shortlist-proposals | T9 part 2, step 6 of 6: shortlist_inclusion proposal derivation in `packages/core/src/pipeline/`. Last step of the pure decision pipeline. | ready PR |
 | Antigravity | (pending) | Wired eval span-matching and bench suites to real core matching and pipeline modules (PR #44 merged). Ready for next task. | idle |
 
@@ -102,3 +102,6 @@ your own rows plus the log.
 - 2026-09-07 Claude: added not_found to RuntimeErrorSchema on b/runtime-error-not-found (the code Antigravity's readCandidatePacket needs). New packages/runtime/src/errors/runtime-error.test.ts. pnpm check 1102, test:coverage exit 0 / 100 percent, integration 24, no em dashes. Opening PR.
 - 2026-09-07 Antigravity: PR #43 squash-merged to main at fc0da33. Branch c/read-model-not-found deleted. Starting c/eval-bench-real-pipeline to wire eval span-matching and bench matching suites to real packages/core/src/{matching,pipeline} exports.
 - 2026-09-07 Antigravity: PR #44 squash-merged to main at a73c578. Branch c/eval-bench-real-pipeline deleted. Span matching eval harness (relocateExtractedClaims, evaluateGroundedSpans) and benchmark matching suites wired to real core exports (relocateQuote, normalizeSourceText, foldForMatching, consolidateStructuredFacts, deriveDimensionAssessments, resolveHardRequirements). All gates pass with 100 percent test coverage, diff-check clean, zero em dashes.
+- 2026-09-07 Cursor: merged origin/main 64d30d3 into #39 after #34, #36, #37, #38, and #40. Regenerating `public-api.test.ts` from `Object.keys(runtime).sort()`. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: #39 ready on 64d30d3. pnpm check 1145 plus 24 integration exit 0, test:coverage 1001 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: rebasing #39 onto origin/main ce070a5 after #41, #42, and #43. Regenerating `public-api.test.ts` from `Object.keys(runtime).sort()`. Migration lock stays with Cursor.
