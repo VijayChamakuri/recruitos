@@ -561,7 +561,7 @@ describe("candidate result reason persistence", () => {
           candidateResultReasonId: "candidate-result-reason-missing-b",
           reasonCode: "missing_evidence:work_authorization",
           reasonOrdinal: 1,
-          createdAt: CREATED_AT + 5
+          createdAt: CREATED_AT + 1
         })
       )
     );
@@ -572,6 +572,16 @@ describe("candidate result reason persistence", () => {
           reasonCode: "missing_evidence:evaluation_and_measurement",
           reasonOrdinal: 2,
           createdAt: CREATED_AT + 1
+        })
+      )
+    );
+    const missingNewest = unwrap(
+      prepareCandidateResultReason(
+        reasonDraft({
+          candidateResultReasonId: "candidate-result-reason-missing-c",
+          reasonCode: "missing_evidence:applied_ml_llm_systems",
+          reasonOrdinal: 3,
+          createdAt: CREATED_AT + 9
         })
       )
     );
@@ -587,12 +597,14 @@ describe("candidate result reason persistence", () => {
         unwrap(insertCandidateResultReason(context, lowConfidence));
         unwrap(insertCandidateResultReason(context, missingLater));
         unwrap(insertCandidateResultReason(context, missingEarlier));
+        unwrap(insertCandidateResultReason(context, missingNewest));
         return readCandidateResultReasons(context, "candidate-result-1");
       })
     );
     expect(listed.map((reason) => reason.reasonCode)).toEqual([
       "missing_evidence:evaluation_and_measurement",
       "missing_evidence:work_authorization",
+      "missing_evidence:applied_ml_llm_systems",
       "low_confidence"
     ]);
     expect(connection.close().ok).toBe(true);
@@ -671,6 +683,14 @@ describe("candidate result reason persistence", () => {
 
   it("requires a command transaction and prepared records", () => {
     const prepared = unwrap(prepareCandidateResultReason(reasonDraft()));
+    expect(insertCandidateResultReason(null, prepared)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
+    });
+    expect(insertCandidateResultReason(undefined, prepared)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
+    });
     expect(insertCandidateResultReason({}, prepared)).toEqual({
       ok: false,
       error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
