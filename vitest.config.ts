@@ -40,7 +40,8 @@ export default defineConfig({
         "packages/runtime/src/**/*.test.ts",
         // Adapter contracts declare types only and erase to empty modules,
         // so there is no executable line for coverage to report on.
-        "packages/runtime/src/adapters/**/*.ts"
+        "packages/runtime/src/adapters/candidate-source.ts",
+        "packages/runtime/src/adapters/extraction.ts"
       ],
       thresholds: {
         branches: 100,
