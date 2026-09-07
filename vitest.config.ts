@@ -17,6 +17,9 @@ export default defineConfig({
           include: ["packages/runtime/src/**/*.test.ts"]
         }
       },
+      // Script-boundary tests, not coverage-tracked source. `pnpm test:coverage`
+      // omits this project so v8 instrumentation cannot trip vitest-worker's
+      // onTaskUpdate timeout after the file runs longer than ~100s.
       {
         extends: true,
         test: {

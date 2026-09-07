@@ -1748,3 +1748,19 @@ export const proposalHeads = sqliteTable(
   },
   (table) => [check("proposal_head_version", sql`${table.version} >= 1`)]
 );
+
+export const candidateHeads = sqliteTable(
+  "candidate_head",
+  {
+    candidateId: text("candidate_id")
+      .primaryKey()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    currentResultId: text("current_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    version: integer("version").notNull()
+  },
+  (table) => [check("candidate_head_version", sql`${table.version} >= 1`)]
+);

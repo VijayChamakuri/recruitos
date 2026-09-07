@@ -9,6 +9,7 @@ import {
   actors,
   auditEvents,
   candidateDocuments,
+  candidateHeads,
   candidateResultDimensionAssessments,
   candidateResultEvidenceGaps,
   candidateResultEvidenceSpans,
@@ -351,7 +352,8 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["proposal", proposals],
   ["proposal_evidence_span", proposalEvidenceSpans],
   ["review_decision", reviewDecisions],
-  ["proposal_head", proposalHeads]
+  ["proposal_head", proposalHeads],
+  ["candidate_head", candidateHeads]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {

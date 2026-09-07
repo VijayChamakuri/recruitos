@@ -310,6 +310,23 @@ export const CandidateTriageResultDraftSchema = z
   .strict();
 export type CandidateTriageResultDraft = z.infer<typeof CandidateTriageResultDraftSchema>;
 
+export const CandidateHeadDraftSchema = z
+  .object({
+    candidateId: CandidateIdSchema,
+    currentResultId: CandidateTriageResultIdSchema
+  })
+  .strict();
+export type CandidateHeadDraft = z.infer<typeof CandidateHeadDraftSchema>;
+
+export const CandidateHeadSchema = z
+  .object({
+    candidateId: CandidateIdSchema,
+    currentResultId: CandidateTriageResultIdSchema,
+    version: PositiveIntegerSchema
+  })
+  .strict();
+export type CandidateHead = z.infer<typeof CandidateHeadSchema>;
+
 export const CandidateTriageResultSchema = z
   .object({
     candidateTriageResultId: CandidateTriageResultIdSchema,

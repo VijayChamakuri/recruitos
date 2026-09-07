@@ -15,7 +15,7 @@
     "check:browser": "corepack pnpm build && node scripts/check-browser-bundle.mjs",
     "check:dynamic-code": "node scripts/check-dynamic-code-denied.mjs",
     "test": "vitest run --project core --project runtime --project architecture",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage --project core --project runtime --project integration",
     "test:integration": "corepack pnpm build && vitest run --project integration",
     "test:runtime": "corepack pnpm --filter @recruitos/runtime test",
     "test:types": "corepack pnpm -r test:types && tsc -p tests/tsconfig.json --noEmit",

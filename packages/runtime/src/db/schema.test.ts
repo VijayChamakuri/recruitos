@@ -5,6 +5,7 @@ import {
   actors,
   auditEvents,
   candidateDocuments,
+  candidateHeads,
   candidateResultDimensionAssessments,
   candidateResultEvidenceGaps,
   candidateResultEvidenceSpans,
@@ -655,6 +656,18 @@ describe("runtime Drizzle schema", () => {
     const headConfig = getTableConfig(proposalHeads);
     expect(headConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
       "proposal_head_version"
+    ]);
+    expect(headConfig.indexes).toEqual([]);
+    expect(headConfig.foreignKeys).toHaveLength(2);
+    expect(headConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
+      true
+    );
+  });
+
+  it("exposes candidate-head constraints", () => {
+    const headConfig = getTableConfig(candidateHeads);
+    expect(headConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "candidate_head_version"
     ]);
     expect(headConfig.indexes).toEqual([]);
     expect(headConfig.foreignKeys).toHaveLength(2);
