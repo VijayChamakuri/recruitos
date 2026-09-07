@@ -14,9 +14,9 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 12f667e |
-| Migration lock held by | Cursor, for `demo_session` and `candidate_demographics` |
-| Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
+| origin/main | a9179da |
+| Migration lock held by | none (chain step 7 merged in #46) |
+| Rubric v1 | LOCKED on `a/rubric-v1-lock` (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. |
 
 ## Lanes and file locks
 
@@ -34,13 +34,13 @@ your own rows plus the log.
 4. `candidate_result_seal` (MERGED #26)
 5. `triage_run` + `triage_run_member` + `triage_run_seal` (MERGED #32)
 6. `triage_attempt` + `attempt_work_item` (MERGED #39)
-7. `demo_session` + `candidate_demographics` (mutable singleton demo marker; synthetic audit-only attributes unique per candidate; association gap-check only, no new association tables)
+7. `demo_session` + `candidate_demographics` (MERGED #46)
 
 ## Currently building
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/demo-session-persistence-3840 | chain step 7: `demo_session` + `candidate_demographics` | ready PR |
+| Cursor | a/rubric-v1-lock | Gate 2: lock rubric v1 in `packages/core/src/rubric/` | ready PR |
 | Claude Code | b/core-shortlist-proposals | T9 part 2, step 6 of 6: shortlist_inclusion proposal derivation in `packages/core/src/pipeline/`. Last step of the pure decision pipeline. | ready PR |
 | Antigravity | (pending) | Wired eval span-matching and bench suites to real core matching and pipeline modules (PR #44 merged). Ready for next task. | idle |
 
@@ -114,3 +114,5 @@ your own rows plus the log.
 - 2026-09-07 Cursor: PR #39 squash-merged to main at 12f667e. Starting chain step 7 on cursor/demo-session-persistence-3840 for `demo_session` and `candidate_demographics`. Association tables from the plan already exist. `demo:reset` executor stays in the runtime use-case lane. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: draft PR #46 opened for `demo_session` and `candidate_demographics`. Association gap-check: every plan association table already exists. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: #46 ready on 12f667e. pnpm check 1200 plus 24 integration exit 0, test:coverage 1046 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: PR #46 merged to main at a9179da. Migration lock released. Starting `a/rubric-v1-lock` for Gate 2 rubric v1 lock from the signed RubricAssumptionRecord. Lane is `packages/core/src/rubric/` only.
+- 2026-09-07 Cursor: `a/rubric-v1-lock` ready on a9179da (PR #47). RUBRIC_V1_HASH `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. pnpm check 1214 plus 24 integration exit 0, test:coverage 1060 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Frozen structure untouched. Pipeline owner note for OQ-7 is in the PR body.

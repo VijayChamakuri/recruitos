@@ -7,7 +7,7 @@ import {
   computeConfidence,
   createRational,
   deriveLevel,
-  DRAFT_RUBRIC_V1,
+  RUBRIC_V1,
   shortlistCut,
   validateUtf16Slice
 } from "./index.js";
@@ -21,16 +21,17 @@ describe("public API", () => {
   });
 
   it("exports the rubric and deterministic decision engine from one entry point", () => {
-    expect(DRAFT_RUBRIC_V1.dimensions).toHaveLength(6);
+    expect(RUBRIC_V1.dimensions).toHaveLength(6);
+    expect(RUBRIC_V1.version).toBe(1);
     expect(deriveLevel({ supportingSpanCount: 2, contradictingSpanCount: 0 })).toEqual({
       ok: true,
       value: "partial"
     });
-    const assessments = DRAFT_RUBRIC_V1.dimensions.map((dimension) => ({
+    const assessments = RUBRIC_V1.dimensions.map((dimension) => ({
       dimensionId: dimension.dimensionId,
       level: "none" as const
     }));
-    expect(computeAggregateScore(assessments, DRAFT_RUBRIC_V1).ok).toBe(true);
+    expect(computeAggregateScore(assessments, RUBRIC_V1).ok).toBe(true);
     expect(
       computeConfidence({
         dimensionsWithLocatedSpan: 6,
