@@ -6,6 +6,9 @@ import {
   auditEvents,
   candidateDocuments,
   candidateHeads,
+  triageRunMembers,
+  triageRunSeals,
+  triageRuns,
   candidateResultDimensionAssessments,
   candidateResultEvidenceGaps,
   candidateResultEvidenceSpans,
@@ -683,6 +686,57 @@ describe("runtime Drizzle schema", () => {
     expect(headConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
       true
     );
+  });
+
+  it("exposes the triage run seal constraints and deferred cyclic pair", () => {
+    const runConfig = getTableConfig(triageRuns);
+    expect(runConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "triage_run_created_at",
+      "triage_run_kind"
+    ]);
+    expect(runConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "triage_run_seal_id_unique",
+      "triage_run_snapshot_manifest_unique"
+    ]);
+    expect(runConfig.foreignKeys).toHaveLength(3);
+    const runForeignKeys = runConfig.foreignKeys.map((foreignKey) => ({
+      columns: foreignKey.reference().columns.map((column) => column.name),
+      onDelete: foreignKey.onDelete
+    }));
+    expect(
+      runForeignKeys.find((foreignKey) => foreignKey.columns.includes("seal_id"))?.onDelete
+    ).toBeUndefined();
+    expect(
+      runForeignKeys
+        .filter((foreignKey) => !foreignKey.columns.includes("seal_id"))
+        .every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
+
+    const memberConfig = getTableConfig(triageRunMembers);
+    expect(memberConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "triage_run_member_created_at",
+      "triage_run_member_import_ordinal"
+    ]);
+    expect(memberConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "triage_run_member_result_unique",
+      "triage_run_member_run_access",
+      "triage_run_member_run_candidate_unique",
+      "triage_run_member_run_ordinal_unique"
+    ]);
+    expect(memberConfig.foreignKeys).toHaveLength(3);
+    expect(
+      memberConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
+
+    const sealConfig = getTableConfig(triageRunSeals);
+    expect(sealConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "triage_run_seal_created_at"
+    ]);
+    expect(sealConfig.indexes.map((index) => index.config.name)).toEqual([
+      "triage_run_seal_run_unique"
+    ]);
+    expect(sealConfig.foreignKeys).toHaveLength(1);
+    expect(sealConfig.foreignKeys[0]!.onDelete).toBe("restrict");
   });
 
   it("exposes candidate-head constraints", () => {

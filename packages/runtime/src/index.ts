@@ -14,4 +14,5 @@ export * from "./proposals/index.js";
 export * from "./results/index.js";
 export * from "./resolution/index.js";
 export * from "./roles/index.js";
+export * from "./runs/index.js";
 export * from "./snapshots/index.js";

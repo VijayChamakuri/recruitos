@@ -1789,3 +1789,88 @@ export const candidateHeads = sqliteTable(
   },
   (table) => [check("candidate_head_version", sql`${table.version} >= 1`)]
 );
+
+export const triageRuns = sqliteTable(
+  "triage_run",
+  {
+    triageRunId: text("triage_run_id").primaryKey(),
+    kind: text("kind", { enum: ["main", "variant"] }).notNull(),
+    snapshotId: text("snapshot_id")
+      .notNull()
+      .references(() => runInputSnapshots.runInputSnapshotId, { onDelete: "restrict" }),
+    corpusManifestId: text("corpus_manifest_id")
+      .notNull()
+      .references(() => corpusManifests.corpusManifestId, { onDelete: "restrict" }),
+    // Cyclic pair with triage_run_seal: the seal row is inserted after this
+    // run's members, so this reference must be deferred to commit time.
+    // Omitting onDelete keeps drizzle-kit's SQLite generator on its
+    // deferred-by-default codegen path for this column.
+    sealId: text("seal_id")
+      .notNull()
+      .references((): AnySQLiteColumn => triageRunSeals.triageRunSealId),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("triage_run_seal_id_unique").on(table.sealId),
+    uniqueIndex("triage_run_snapshot_manifest_unique").on(
+      table.snapshotId,
+      table.corpusManifestId
+    ),
+    check("triage_run_kind", sql`${table.kind} IN ('main', 'variant')`),
+    check("triage_run_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const triageRunMembers = sqliteTable(
+  "triage_run_member",
+  {
+    triageRunMemberId: text("triage_run_member_id").primaryKey(),
+    triageRunId: text("triage_run_id")
+      .notNull()
+      .references(() => triageRuns.triageRunId, { onDelete: "restrict" }),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    importOrdinal: integer("import_ordinal").notNull(),
+    initialResultId: text("initial_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("triage_run_member_run_candidate_unique").on(
+      table.triageRunId,
+      table.candidateId
+    ),
+    uniqueIndex("triage_run_member_run_ordinal_unique").on(
+      table.triageRunId,
+      table.importOrdinal
+    ),
+    uniqueIndex("triage_run_member_result_unique").on(table.initialResultId),
+    index("triage_run_member_run_access").on(
+      table.triageRunId,
+      table.candidateId,
+      table.importOrdinal,
+      table.initialResultId
+    ),
+    check("triage_run_member_import_ordinal", sql`${table.importOrdinal} >= 0`),
+    check("triage_run_member_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const triageRunSeals = sqliteTable(
+  "triage_run_seal",
+  {
+    triageRunSealId: text("triage_run_seal_id").primaryKey(),
+    triageRunId: text("triage_run_id")
+      .notNull()
+      .references(() => triageRuns.triageRunId, { onDelete: "restrict" }),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("triage_run_seal_run_unique").on(table.triageRunId),
+    check("triage_run_seal_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
