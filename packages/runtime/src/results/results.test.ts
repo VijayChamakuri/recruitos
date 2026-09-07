@@ -2319,10 +2319,12 @@ describe("candidate result seal", () => {
         createdAt: result.createdAt + 1
       })
     );
-    expect(insertCandidateResultSeal({}, seal)).toEqual({
-      ok: false,
-      error: expect.objectContaining({ message: SEAL_TRANSACTION_REQUIRED })
-    });
+    for (const context of [undefined, null, {}, { nativeDatabase: null }]) {
+      expect(insertCandidateResultSeal(context, seal)).toEqual({
+        ok: false,
+        error: expect.objectContaining({ message: SEAL_TRANSACTION_REQUIRED })
+      });
+    }
     expect(
       insertCandidateResultSeal(failingContext(), {
         candidateResultSealId: "candidate-result-seal-1",
@@ -2362,10 +2364,12 @@ describe("candidate result seal", () => {
     const connection = await openMigratedDatabase();
     const database = nativeDatabase(connection);
     const result = unwrap(prepareCandidateTriageResult(completeResultDraft()));
-    expect(readCandidateResultSeal({}, "candidate-result-seal-1")).toEqual({
-      ok: false,
-      error: expect.objectContaining({ message: SEAL_TRANSACTION_REQUIRED })
-    });
+    for (const context of [undefined, null, {}, { nativeDatabase: null }]) {
+      expect(readCandidateResultSeal(context, "candidate-result-seal-1")).toEqual({
+        ok: false,
+        error: expect.objectContaining({ message: SEAL_TRANSACTION_REQUIRED })
+      });
+    }
     expect(readCandidateResultSeal(failingContext(), "")).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Invalid candidate result seal ID" })

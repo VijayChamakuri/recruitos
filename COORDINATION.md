@@ -37,7 +37,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/candidate-result-seal-persistence-3840 | chain step 4 | draft PR #26 |
+| Cursor | cursor/candidate-result-seal-persistence-3840 | chain step 4 | ready PR #26 |
 | Claude Code | (none) | Held until chain step 4 (`candidate_result_seal`) lands. Then composition root, command use-cases, scheduler T5. | idle-held |
 | Antigravity | (none) | PR #21 merged (#21). Idle until Cursor finishes migration chain step 1 or next assignment. | idle-complete |
 
@@ -69,3 +69,4 @@ your own rows plus the log.
 - 2026-09-07 Cursor: omitted the architecture project from pnpm test:coverage so the gate no longer hits vitest-worker's onTaskUpdate timeout. pnpm test still runs it. #25 ready.
 - 2026-09-07 Cursor: PR #25 squash-merged to main at f2ccea3. Starting chain step 4 on cursor/candidate-result-seal-persistence-3840 for candidate_result_seal. Claude stays held until step 4 lands.
 - 2026-09-07 Cursor: draft PR #26 opened for candidate_result_seal. Cyclic deferred FK, handwritten 0015 SQL, PRAGMA defer_foreign_keys, completeness triggers. Claude stays held until #26 lands.
+- 2026-09-07 Cursor: #26 ready. pnpm check, test:coverage (100 percent including seals.ts), integration, diff-check, and em-dash scan are green. Claude stays held until #26 lands.
