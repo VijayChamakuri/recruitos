@@ -1,6 +1,7 @@
 export * from "./adapters/index.js";
 export * from "./audit/index.js";
 export * from "./commands/index.js";
+export * from "./composition/index.js";
 export * from "./corpus/index.js";
 export * from "./db/index.js";
 export * from "./entities/index.js";

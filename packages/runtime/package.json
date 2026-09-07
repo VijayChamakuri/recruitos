@@ -39,6 +39,11 @@
       "import": "./dist/commands/index.js",
       "default": "./dist/commands/index.js"
     },
+    "./composition": {
+      "types": "./dist/composition/index.d.ts",
+      "import": "./dist/composition/index.js",
+      "default": "./dist/composition/index.js"
+    },
     "./corpus": {
       "types": "./dist/corpus/index.d.ts",
       "import": "./dist/corpus/index.js",
