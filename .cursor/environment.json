@@ -1,0 +1,4 @@
+{
+  "name": "RecruitOS",
+  "install": "bash .cursor/install.sh"
+}
