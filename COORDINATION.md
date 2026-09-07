@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | f9304d2 |
+| origin/main | ade15ef |
 | Migration lock held by | Cursor, for run and scheduler tables (`triage_run`, `triage_run_member`, `triage_run_seal`, then `triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
@@ -22,8 +22,8 @@ your own rows plus the log.
 
 | Agent | Branch prefix | Owns (may edit) | Must not touch |
 |---|---|---|---|
-| Cursor | `a/` or `cursor/` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, stores and core IDs for `triage_run` / `triage_attempt` tables | `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md`, `packages/runtime/src/adapters/` implementations, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**` |
-| Claude Code | `b/` | `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, command use-cases, scheduler runtime (T5), `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, any migration |
+| Cursor | `a/` or `cursor/` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, stores and core IDs for `triage_run` / `triage_attempt` tables | `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md`, `packages/runtime/src/adapters/` implementations, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, `packages/core/src/matching/**`, `packages/core/src/pipeline/**` |
+| Claude Code | `b/` | `packages/core/src/matching/**`, `packages/core/src/pipeline/**`, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, command use-cases, scheduler runtime (T5), `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, any migration |
 | Antigravity | `c/` | `apps/cli/**`, `apps/web/**`, Playwright / eval / benchmark scaffolds, stubbed composition interface | `packages/runtime/src/**`, any migration |
 
 ## Migration chain (Cursor, serial, one PR each)
@@ -39,8 +39,8 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | ready PR #32 |
-| Claude Code | (none) | T9 part 1 `normalizeSourceText` merged #33. Decision pipeline (T9 part 2) next. | next |
+| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | ready PR #32, rematched onto ade15ef |
+| Claude Code | (none) | T9 quote relocation merged #35. Next pipeline steps stay in `packages/core/src/{matching,pipeline}`. | next |
 | Antigravity | (none) | createRuntime wiring + e2e/eval/bench harnesses. Merged #31. | idle-complete |
 
 ## Hard rules
@@ -87,3 +87,5 @@ your own rows plus the log.
 - 2026-09-07 Claude: PR #30 (use-case command contract) merged. Taking T9. Part 1 on b/core-text-normalization: packages/core/src/matching/normalizeSourceText, policy version 1 (strip one leading BOM, fold CR and CRLF to LF, Unicode NFC, nothing else, content preserved verbatim). pnpm check 958, test:coverage exit 0 / 100 percent, integration 21, no em dashes. Opening PR. Part 2 is the decision pipeline (packages/core/src/pipeline/), wants Opus.
 - 2026-09-07 Cursor: merged origin/main f9304d2 into #32 after #33 (source text normalization). Migration lock stays with Cursor.
 - 2026-09-07 Cursor: #32 ready on f9304d2. pnpm check 978 plus 21 integration exit 0, test:coverage 831 exit 0 (runs/store and normalize 100 percent), standalone integration 21, diff-check clean, em-dash scan clean. Attempt-readiness waits for the next drizzle PR.
+- 2026-09-07 Claude: T9 part 1 (PR #33) merged at f9304d2. Starting T9 part 2, the pure decision pipeline, six PRs on b/ branches. Step 1 on b/core-quote-relocation: committed one-to-one fold table (ASCII case, quote family, dash family) plus relocateQuote and relocateQuoteClaim. Exact tier then folded tier, tier order beats position, repeated quotes take the lowest start, model-supplied offsets are discarded and the quote is relocated from stored text. Unlocated returns a typed invalid_evidence failure with details.reason. pnpm check exit 0 (991 core and runtime tests, 21 integration), test:coverage exit 0 with All files 100 percent, git diff --check clean, no em dashes. Files touched: packages/core/src/matching/ only.
+- 2026-09-07 Cursor: merged origin/main ade15ef into #32 after #35 (quote relocation). COORDINATION conflict only. Matching files auto-merged. Migration lock stays with Cursor.
