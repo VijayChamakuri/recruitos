@@ -15,6 +15,10 @@ import {
   corpusManifests,
   corpusMemberDocuments,
   corpusMembers,
+  requirements,
+  roles,
+  rubricDimensions,
+  rubrics,
   runtimeMigrationSmoke,
   sourceDocuments
 } from "./schema.js";
@@ -223,7 +227,11 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["corpus_manifest", corpusManifests],
   ["corpus_member", corpusMembers],
   ["corpus_member_document", corpusMemberDocuments],
-  ["corpus_manifest_seal", corpusManifestSeals]
+  ["corpus_manifest_seal", corpusManifestSeals],
+  ["role", roles],
+  ["requirement", requirements],
+  ["rubric", rubrics],
+  ["rubric_dimension", rubricDimensions]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {

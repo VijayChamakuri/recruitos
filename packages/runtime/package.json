@@ -43,6 +43,11 @@
       "types": "./dist/errors/index.d.ts",
       "import": "./dist/errors/index.js",
       "default": "./dist/errors/index.js"
+    },
+    "./roles": {
+      "types": "./dist/roles/index.d.ts",
+      "import": "./dist/roles/index.js",
+      "default": "./dist/roles/index.js"
     }
   },
   "scripts": {

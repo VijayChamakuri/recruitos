@@ -346,3 +346,93 @@ export const corpusManifestSeals = sqliteTable(
     check("corpus_manifest_seal_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
+
+export const roles = sqliteTable(
+  "role",
+  {
+    roleId: text("role_id").primaryKey(),
+    title: text("title").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    check("role_title", sql`length(${table.title}) BETWEEN 1 AND 200`),
+    check("role_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const requirements = sqliteTable(
+  "requirement",
+  {
+    requirementId: text("requirement_id").primaryKey(),
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.roleId, { onDelete: "restrict" }),
+    kind: text("kind", { enum: ["hard", "scored"] }).notNull(),
+    description: text("description").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    check("requirement_kind", sql`${table.kind} IN ('hard', 'scored')`),
+    check(
+      "requirement_description",
+      sql`length(${table.description}) BETWEEN 1 AND 2000`
+    ),
+    check("requirement_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const rubrics = sqliteTable(
+  "rubric",
+  {
+    rubricId: text("rubric_id").primaryKey(),
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.roleId, { onDelete: "restrict" }),
+    version: text("version").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("rubric_role_version_unique").on(table.roleId, table.version),
+    check("rubric_version", sql`length(${table.version}) BETWEEN 1 AND 64`),
+    check("rubric_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const rubricDimensions = sqliteTable(
+  "rubric_dimension",
+  {
+    rubricDimensionId: text("rubric_dimension_id").primaryKey(),
+    rubricId: text("rubric_id")
+      .notNull()
+      .references(() => rubrics.rubricId, { onDelete: "restrict" }),
+    dimensionId: text("dimension_id").notNull(),
+    weight: integer("weight").notNull(),
+    required: integer("required").notNull(),
+    definition: text("definition").notNull(),
+    jobRelatedJustification: text("job_related_justification").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("rubric_dimension_rubric_ordinal_unique").on(
+      table.rubricId,
+      table.ordinal
+    ),
+    uniqueIndex("rubric_dimension_rubric_dimension_id_unique").on(
+      table.rubricId,
+      table.dimensionId
+    ),
+    check("rubric_dimension_weight", sql`${table.weight} > 0`),
+    check("rubric_dimension_required", sql`${table.required} IN (0, 1)`),
+    check(
+      "rubric_dimension_definition",
+      sql`length(${table.definition}) BETWEEN 1 AND 2000`
+    ),
+    check(
+      "rubric_dimension_job_related_justification",
+      sql`length(${table.jobRelatedJustification}) BETWEEN 1 AND 2000`
+    ),
+    check("rubric_dimension_ordinal", sql`${table.ordinal} >= 0`),
+    check("rubric_dimension_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
