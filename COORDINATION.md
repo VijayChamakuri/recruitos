@@ -40,7 +40,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/demo-session-persistence-3840 | chain step 7: `demo_session` + `candidate_demographics` | building |
+| Cursor | cursor/demo-session-persistence-3840 | chain step 7: `demo_session` + `candidate_demographics` | ready PR |
 | Claude Code | b/core-shortlist-proposals | T9 part 2, step 6 of 6: shortlist_inclusion proposal derivation in `packages/core/src/pipeline/`. Last step of the pure decision pipeline. | ready PR |
 | Antigravity | (pending) | Wired eval span-matching and bench suites to real core matching and pipeline modules (PR #44 merged). Ready for next task. | idle |
 
@@ -112,3 +112,5 @@ your own rows plus the log.
 - 2026-09-07 Cursor: rebasing #39 onto origin/main 5b79f25 after #45. COORDINATION.md is a union of every agent row and log line. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: #39 ready on 5b79f25. pnpm check 1175 plus 24 integration exit 0, test:coverage 1021 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor. Review of 0017 is green. Clear to merge.
 - 2026-09-07 Cursor: PR #39 squash-merged to main at 12f667e. Starting chain step 7 on cursor/demo-session-persistence-3840 for `demo_session` and `candidate_demographics`. Association tables from the plan already exist. `demo:reset` executor stays in the runtime use-case lane. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: draft PR #46 opened for `demo_session` and `candidate_demographics`. Association gap-check: every plan association table already exists. Migration lock stays with Cursor.
+- 2026-09-07 Cursor: #46 ready on 12f667e. pnpm check 1200 plus 24 integration exit 0, test:coverage 1046 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
