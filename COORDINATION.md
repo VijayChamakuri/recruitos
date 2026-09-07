@@ -39,7 +39,7 @@ your own rows plus the log.
 |---|---|---|---|
 | Cursor | (pending) | Takes the run + scheduler migration: `triage_run` + `triage_run_member` + `triage_run_seal`, then `triage_attempt` + `attempt_work_item`. Holds the migration lock. | assigned |
 | Claude Code | b/runtime-usecase-contract | PR 2: `src/use-cases/contract.ts` (envelope builder + `executeCommand` wrapper). No migration. Real use-cases wait on core text normalization (T9, not built). | building |
-| Antigravity | (none) | CLI and Web shells complete. Merged #29. Idle-complete. | idle-complete |
+| Antigravity | c/runtime-composition-wire-and-harnesses | Wire apps/ to createRuntime from #28 + scaffold tests/e2e/ (6 stubs), tests/eval/, bench/ | in progress |
 
 ## Hard rules
 
@@ -77,3 +77,4 @@ your own rows plus the log.
 - 2026-09-07 Antigravity: apps/cli and apps/web complete. CLI parser, envelopes, exit codes, commands (triage, review, packet, status), Web 5 locked routes, safe-text, span-highlight, span-integrity-failure, instrument-band, Playwright and benchmark scaffolds. All 896 tests passing, 100 percent coverage on core/runtime, zero em dashes. Opened PR #29.
 - 2026-09-07 Antigravity: PR #29 merged to main at e8abc07. Branch deleted. Idle-complete.
 - 2026-09-07 Claude: PR #28 (composition root + ports) merged at ef9a1dc. Finding: runtime use-cases (T10) sit on core text normalization (T9), which is not built, so importCandidate and the resolution/proposal use-cases are blocked. Split agreed: Cursor takes the run + scheduler migration and the lock; Claude builds src/use-cases/contract.ts (envelope builder + executeCommand wrapper) on b/runtime-usecase-contract. pnpm check 923, test:coverage exit 0 / 100 percent, integration 21, no em dashes. Opening PR.
+- 2026-09-07 Antigravity: started c/runtime-composition-wire-and-harnesses to wire createRuntime in apps/ and scaffold e2e, eval, and bench harnesses.
