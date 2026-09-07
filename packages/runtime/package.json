@@ -24,6 +24,11 @@
       "import": "./dist/db/index.js",
       "default": "./dist/db/index.js"
     },
+    "./entities": {
+      "types": "./dist/entities/index.d.ts",
+      "import": "./dist/entities/index.js",
+      "default": "./dist/entities/index.js"
+    },
     "./commands": {
       "types": "./dist/commands/index.d.ts",
       "import": "./dist/commands/index.js",

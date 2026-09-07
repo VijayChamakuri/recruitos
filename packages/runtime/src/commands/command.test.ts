@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +26,17 @@ import { CommandEnvelopeSchema, CommandReceiptSchema } from "./schemas.js";
 import { runImmediateTransaction } from "./transaction.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
+
+/**
+ * Reads the migration count from the local journal so adding a migration does
+ * not break unrelated idempotency assertions.
+ */
+function localMigrationCount(): number {
+  const journal = JSON.parse(
+    readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8")
+  ) as { entries: readonly unknown[] };
+  return journal.entries.length;
+}
 const temporaryDirectories: string[] = [];
 const TestPayloadSchema = z.object({ increment: z.number().int().safe() }).strict();
 const TestResultSchema = z.object({ version: z.number().int().safe().nonnegative() }).strict();
@@ -462,7 +474,7 @@ describe("command protocol", () => {
       nativeDatabase(connection)
         .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
         .get()
-    ).toEqual({ count: 3 });
+    ).toEqual({ count: localMigrationCount() });
     expect(connection.close().ok).toBe(true);
   });
 

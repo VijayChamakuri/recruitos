@@ -4,3 +4,4 @@ export * from "./integer.js";
 export * from "./json.js";
 export * from "./rational.js";
 export * from "./sha256.js";
+export * from "./text.js";

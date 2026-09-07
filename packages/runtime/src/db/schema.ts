@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  index,
   integer,
   sqliteTable,
   text,
@@ -113,5 +114,135 @@ export const auditEvents = sqliteTable(
       "audit_event_recorded_at",
       sql`${table.recordedAt} >= ${table.occurredAt}`
     )
+  ]
+);
+
+export const actors = sqliteTable(
+  "actor",
+  {
+    actorId: text("actor_id").primaryKey(),
+    actorKind: text("actor_kind", { enum: ["human", "system"] }).notNull(),
+    displayName: text("display_name").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    check("actor_kind", sql`${table.actorKind} IN ('human', 'system')`),
+    check(
+      "actor_system_identity",
+      sql`(${table.actorKind} = 'system') = (${table.actorId} = 'system:runtime')`
+    ),
+    check(
+      "actor_display_name",
+      sql`length(${table.displayName}) BETWEEN 1 AND 200`
+    ),
+    check("actor_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidates = sqliteTable(
+  "candidate",
+  {
+    candidateId: text("candidate_id").primaryKey(),
+    sourceSystem: text("source_system").notNull(),
+    sourceKey: text("source_key").notNull(),
+    channel: text("channel", { enum: ["inbound", "sourced"] }).notNull(),
+    corpusTag: text("corpus_tag", { enum: ["main", "variant"] }).notNull(),
+    isSynthetic: integer("is_synthetic").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_source_unique").on(table.sourceSystem, table.sourceKey),
+    check(
+      "candidate_source_system",
+      sql`length(${table.sourceSystem}) BETWEEN 1 AND 64`
+    ),
+    check("candidate_source_key", sql`length(${table.sourceKey}) BETWEEN 1 AND 128`),
+    check("candidate_channel", sql`${table.channel} IN ('inbound', 'sourced')`),
+    check("candidate_corpus_tag", sql`${table.corpusTag} IN ('main', 'variant')`),
+    check("candidate_is_synthetic", sql`${table.isSynthetic} = 1`),
+    check("candidate_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const sourceDocuments = sqliteTable(
+  "source_document",
+  {
+    sourceDocumentId: text("source_document_id").primaryKey(),
+    rawText: text("raw_text").notNull(),
+    rawHash: text("raw_hash").notNull(),
+    rawByteLength: integer("raw_byte_length").notNull(),
+    normalizedText: text("normalized_text").notNull(),
+    normalizedHash: text("normalized_hash").notNull(),
+    normalizedLength: integer("normalized_length").notNull(),
+    normalizedByteLength: integer("normalized_byte_length").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("source_document_raw_hash_unique").on(table.rawHash),
+    index("source_document_normalized_hash").on(table.normalizedHash),
+    check(
+      "source_document_raw_hash",
+      sql`length(${table.rawHash}) = 64 AND ${table.rawHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "source_document_normalized_hash",
+      sql`length(${table.normalizedHash}) = 64 AND ${table.normalizedHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "source_document_raw_byte_length",
+      sql`${table.rawByteLength} BETWEEN 1 AND 262144
+        AND ${table.rawByteLength} = length(CAST(${table.rawText} AS BLOB))`
+    ),
+    check(
+      "source_document_normalized_byte_length",
+      sql`${table.normalizedByteLength} BETWEEN 1 AND 131072
+        AND ${table.normalizedByteLength} = length(CAST(${table.normalizedText} AS BLOB))`
+    ),
+    check(
+      "source_document_normalized_length",
+      sql`${table.normalizedLength} BETWEEN 1 AND 50000
+        AND ${table.normalizedLength} >= length(${table.normalizedText})
+        AND ${table.normalizedLength} <= 2 * length(${table.normalizedText})`
+    ),
+    check("source_document_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidateDocuments = sqliteTable(
+  "candidate_document",
+  {
+    candidateDocumentId: text("candidate_document_id").primaryKey(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    sourceDocumentId: text("source_document_id")
+      .notNull()
+      .references(() => sourceDocuments.sourceDocumentId, { onDelete: "restrict" }),
+    documentKind: text("document_kind", {
+      enum: ["resume", "cover_letter", "profile", "recruiter_note"]
+    }).notNull(),
+    label: text("label").notNull(),
+    documentOrdinal: integer("document_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_document_ordinal_unique").on(
+      table.candidateId,
+      table.documentOrdinal
+    ),
+    uniqueIndex("candidate_document_source_unique").on(
+      table.candidateId,
+      table.sourceDocumentId
+    ),
+    check(
+      "candidate_document_kind",
+      sql`${table.documentKind} IN ('resume', 'cover_letter', 'profile', 'recruiter_note')`
+    ),
+    check("candidate_document_label", sql`length(${table.label}) BETWEEN 1 AND 200`),
+    check(
+      "candidate_document_ordinal",
+      sql`${table.documentOrdinal} BETWEEN 0 AND 3`
+    ),
+    check("candidate_document_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
