@@ -815,8 +815,8 @@ describe("hard requirement assessment persistence", () => {
         );
         unwrap(insertHardRequirementAssessment(context, unknown));
         expect(
-          unwrap(readHardRequirementAssessment(context, unknown.hardRequirementAssessmentId)).facts
-        ).toEqual([]);
+          unwrap(readHardRequirementAssessment(context, unknown.hardRequirementAssessmentId))
+        ).toEqual(unknown);
         const twoSupporting = unwrap(
           prepareHardRequirementAssessment(
             assessmentDraft({

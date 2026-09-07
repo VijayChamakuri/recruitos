@@ -10,6 +10,7 @@ import {
   ok,
   sha256Hex,
   structuredFactSemanticKey,
+  type CandidateId,
   type Result,
   type StructuredFactPayload
 } from "@recruitos/core";
@@ -216,7 +217,7 @@ export function validateStructuredFactContent(
 }
 
 function canonicalizeStructuredFactContent(
-  candidateId: string,
+  candidateId: CandidateId,
   payloadInput: unknown
 ): Result<{ content: StructuredFactContent; json: string; hash: string }, RuntimeError> {
   const payload = StructuredFactPayloadSchema.safeParse(payloadInput);
