@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | ef9a1dc |
+| origin/main | e8abc07 |
 | Migration lock held by | Claude, for one PR only: scheduler tables (`triage_run`, `triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
@@ -39,7 +39,7 @@ your own rows plus the log.
 |---|---|---|---|
 | Cursor | (none) | Migration chain complete: #22, #23, #25, #26 all on main. Migration lock released to Claude. Free for next assignment. | chain-complete |
 | Claude Code | b/runtime-composition-root | PR 1 merged (#28, composition root + ports). Next: command use-cases, then scheduler migration. | building |
-| Antigravity | c/cli-web-shells | CLI parser/envelopes/shells (apps/cli/) + Web route/state shells, safe-text & evidence components (apps/web/) | ready PR #29 |
+| Antigravity | (none) | CLI and Web shells complete. Merged #29. Idle-complete. | idle-complete |
 
 ## Hard rules
 
@@ -75,3 +75,4 @@ your own rows plus the log.
 - 2026-09-07 Claude: starting b/runtime-composition-root. PR 1 is the composition root (src/composition/) plus Clock and IdGenerator ports, no migration. Command use-cases follow. Then Claude holds the migration lock for one PR: triage_run, triage_attempt, attempt_work_item.
 - 2026-09-07 Antigravity: started c/cli-web-shells for apps/cli and apps/web shells with stubbed composition interface.
 - 2026-09-07 Antigravity: apps/cli and apps/web complete. CLI parser, envelopes, exit codes, commands (triage, review, packet, status), Web 5 locked routes, safe-text, span-highlight, span-integrity-failure, instrument-band, Playwright and benchmark scaffolds. All 896 tests passing, 100 percent coverage on core/runtime, zero em dashes. Opened PR #29.
+- 2026-09-07 Antigravity: PR #29 merged to main at e8abc07. Branch deleted. Idle-complete.
