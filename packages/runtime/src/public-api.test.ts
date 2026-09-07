@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as runtime from "./index.js";
 
 describe("runtime public API", () => {
-  it("exports the audit, connection, command protocol, immutable entity, corpus, role, rubric, evidence, extraction, snapshot, fact, result, resolution, proposal, schema, persistence pattern, and error foundation", () => {
+  it("exports the audit, connection, command protocol, immutable entity, corpus, role, rubric, evidence, extraction, snapshot, fact, result, composition, schema, persistence pattern, and error foundation", () => {
     expect(Object.keys(runtime).sort()).toEqual([
       "ActorDraftSchema",
       "ActorKindSchema",
@@ -220,7 +220,9 @@ describe("runtime public API", () => {
       "corpusMemberDocuments",
       "corpusMembers",
       "createFixtureExtractionAdapter",
+      "createIncrementingIdGenerator",
       "createNullableSubjectUniqueIndexes",
+      "createRuntime",
       "createRuntimeError",
       "createSyntheticCandidateSourceAdapter",
       "defineMutableHead",
@@ -237,6 +239,7 @@ describe("runtime public API", () => {
       "extractionSpecs",
       "factConflictMembers",
       "factConflicts",
+      "fixedClock",
       "hardRequirementAssessmentFacts",
       "hardRequirementAssessments",
       "hashCandidateTriageResultContent",
@@ -386,12 +389,13 @@ describe("runtime public API", () => {
       "structuredFactProvenances",
       "structuredFactSemanticKey",
       "structuredFacts",
+      "systemClock",
       "validateCandidateTriageResultContent",
       "validateCorpusManifestContent",
       "validateExtractionSpecContent",
       "validateRunInputSnapshotContent",
       "validateStructuredFactContent"
-        ]);
+    ]);
   });
 
   it("creates errors with optional safe details", () => {

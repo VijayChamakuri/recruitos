@@ -14,8 +14,8 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | f2ccea3 |
-| Migration lock held by | Cursor, for the full chain below |
+| origin/main | f19d446 |
+| Migration lock held by | Claude, for one PR only: scheduler tables (`triage_run`, `triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
 ## Lanes and file locks
@@ -37,9 +37,9 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/candidate-result-seal-persistence-3840 | chain step 4 | ready PR #26 |
-| Claude Code | (none) | Held until chain step 4 (`candidate_result_seal`) lands. Then composition root, command use-cases, scheduler T5. | idle-held |
-| Antigravity | (none) | PR #21 merged (#21). Idle until Cursor finishes migration chain step 1 or next assignment. | idle-complete |
+| Cursor | (none) | Migration chain complete: #22, #23, #25, #26 all on main. Migration lock released to Claude. Free for next assignment. | chain-complete |
+| Claude Code | b/runtime-composition-root | PR 1: composition root (`src/composition/`) + `Clock` / `IdGenerator` ports. Then command use-cases, then holds the migration lock for the scheduler table PR. | building |
+| Antigravity | c/* | CLI + web shells under `apps/`. Wire against a stubbed composition interface; swap for the real factory once Claude's composition PR lands. | building |
 
 ## Hard rules
 
@@ -71,3 +71,5 @@ your own rows plus the log.
 - 2026-09-07 Cursor: draft PR #26 opened for candidate_result_seal. Cyclic deferred FK, handwritten 0015 SQL, PRAGMA defer_foreign_keys, completeness triggers. Claude stays held until #26 lands.
 - 2026-09-07 Cursor: #26 ready. pnpm check, test:coverage (100 percent including seals.ts), integration, diff-check, and em-dash scan are green. Claude stays held until #26 lands.
 - 2026-09-07 Cursor: Claude review of #26 confirmed. (1) corepack pnpm test:coverage exits 0: 772 tests, All files 100 percent, architecture omitted from the coverage command. (2) 0015 drops five triggers and recreates all five; no 0010 association trigger is dropped. (3) FK pragmas are migrate-only; command transactions keep restrict FKs immediate. Unsealed backfill comment is in 0015. #26 stays ready. Claude stays held until it lands.
+- 2026-09-07 Vijay: PR #26 merged to main at f19d446. Migration chain complete (all four steps). Migration lock released to Claude for the scheduler table PR only. Cursor is chain-complete. Antigravity cleared to start the apps/ shells.
+- 2026-09-07 Claude: starting b/runtime-composition-root. PR 1 is the composition root (src/composition/) plus Clock and IdGenerator ports, no migration. Command use-cases follow. Then Claude holds the migration lock for one PR: triage_run, triage_attempt, attempt_work_item.
