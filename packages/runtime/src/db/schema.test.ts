@@ -521,6 +521,15 @@ describe("runtime Drizzle schema", () => {
       "candidate_result_reason_ordinal_unique",
       "candidate_result_reason_result_created"
     ]);
+    const reasonIndexByName = Object.fromEntries(
+      reasonConfig.indexes.map((index) => [index.config.name, index])
+    );
+    expect(reasonIndexByName.candidate_result_reason_kind_unique?.config.where).toBeDefined();
+    expect(
+      reasonIndexByName.candidate_result_reason_kind_subject_unique?.config.where
+    ).toBeDefined();
+    expect(reasonIndexByName.candidate_result_reason_ordinal_unique?.config.where).toBeUndefined();
+    expect(reasonIndexByName.candidate_result_reason_result_created?.config.where).toBeUndefined();
     expect(reasonConfig.foreignKeys).toHaveLength(1);
     expect(reasonConfig.foreignKeys[0]!.onDelete).toBe("restrict");
     expect(

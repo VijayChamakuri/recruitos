@@ -74,6 +74,7 @@ type SqlIndex = Readonly<{
   name: string;
   unique: boolean;
   columns: readonly string[];
+  where: string | undefined;
 }>;
 
 type SqlTable = {
@@ -125,6 +126,54 @@ function splitTopLevel(body: string): string[] {
 
 function backtickedList(source: string): string[] {
   return [...source.matchAll(/`([^`]+)`/gu)].map((match) => match[1]!);
+}
+
+function normalizeSqlPredicate(text: string): string {
+  return text.replace(/\s+/gu, " ").replace(/;$/u, "").trim();
+}
+
+/**
+ * Turns a Drizzle index WHERE into the same table-qualified predicate the
+ * committed SQL uses. Without this, dropping `.where()` still matches on name
+ * and columns, which is exactly how SQLite would silently stop enforcing
+ * nullable-subject uniqueness.
+ */
+function drizzleIndexWhere(where: unknown): string | undefined {
+  if (where === undefined || where === null) {
+    return undefined;
+  }
+  if (typeof where !== "object" || !("queryChunks" in where)) {
+    throw new Error("Drizzle index WHERE is not an SQL fragment");
+  }
+  const chunks = (where as { queryChunks: readonly unknown[] }).queryChunks;
+  const parts: string[] = [];
+  for (const chunk of chunks) {
+    if (typeof chunk === "string") {
+      parts.push(chunk);
+      continue;
+    }
+    if (
+      typeof chunk === "object" &&
+      chunk !== null &&
+      "value" in chunk &&
+      Array.isArray((chunk as { value: unknown }).value)
+    ) {
+      parts.push((chunk as { value: string[] }).value.join(""));
+      continue;
+    }
+    if (
+      typeof chunk === "object" &&
+      chunk !== null &&
+      "name" in chunk &&
+      "table" in chunk
+    ) {
+      const column = chunk as { name: string; table: SQLiteTable };
+      parts.push(`"${getTableConfig(column.table).name}"."${column.name}"`);
+      continue;
+    }
+    throw new Error("Unhandled SQL chunk in Drizzle index WHERE");
+  }
+  return normalizeSqlPredicate(parts.join(""));
 }
 
 /** Parses every committed migration into the table shapes it actually creates. */
@@ -189,7 +238,7 @@ function parseMigrations(): Map<string, SqlTable> {
       }
 
       const createIndex =
-        /^CREATE (UNIQUE )?INDEX `([^`]+)` ON `([^`]+)` \(([^)]*)\)(?:\s+WHERE[\s\S]+)?\s*;?$/u.exec(
+        /^CREATE (UNIQUE )?INDEX `([^`]+)` ON `([^`]+)` \(([^)]*)\)(?:\s+WHERE\s+([\s\S]+?))?\s*;?$/u.exec(
           statement
         );
       if (createIndex !== null) {
@@ -198,7 +247,11 @@ function parseMigrations(): Map<string, SqlTable> {
         target!.indexes.push({
           name: createIndex[2]!,
           unique: createIndex[1] !== undefined,
-          columns: backtickedList(createIndex[4]!)
+          columns: backtickedList(createIndex[4]!),
+          where:
+            createIndex[5] === undefined
+              ? undefined
+              : normalizeSqlPredicate(createIndex[5])
         });
       }
     }
@@ -235,7 +288,8 @@ function describeDrizzleTable(table: SQLiteTable): SqlTable {
     indexes: config.indexes.map((index) => ({
       name: index.config.name,
       unique: index.config.unique,
-      columns: index.config.columns.map((column) => (column as { name: string }).name)
+      columns: index.config.columns.map((column) => (column as { name: string }).name),
+      where: drizzleIndexWhere(index.config.where)
     }))
   };
 }

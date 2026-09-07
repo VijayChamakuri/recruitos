@@ -674,6 +674,68 @@ describe("candidate result reason persistence", () => {
             message: "Candidate result reason insert failed"
           })
         });
+        const missingEvidence = unwrap(
+          prepareCandidateResultReason(
+            reasonDraft({
+              candidateResultReasonId: "candidate-result-reason-missing",
+              reasonCode: "missing_evidence:evaluation_and_measurement",
+              reasonOrdinal: 2
+            })
+          )
+        );
+        unwrap(insertCandidateResultReason(context, missingEvidence));
+        expect(
+          insertCandidateResultReason(
+            context,
+            unwrap(
+              prepareCandidateResultReason(
+                reasonDraft({
+                  candidateResultReasonId: "candidate-result-reason-missing-dup",
+                  reasonCode: "missing_evidence:evaluation_and_measurement",
+                  reasonOrdinal: 3
+                })
+              )
+            )
+          )
+        ).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Candidate result reason insert failed"
+          })
+        });
+        expect(
+          insertCandidateResultReason(
+            context,
+            unwrap(
+              prepareCandidateResultReason(
+                reasonDraft({
+                  candidateResultReasonId: "candidate-result-reason-ordinal-dup",
+                  reasonCode: "low_confidence",
+                  reasonOrdinal: 0
+                })
+              )
+            )
+          )
+        ).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Candidate result reason insert failed"
+          })
+        });
+        unwrap(
+          insertCandidateResultReason(
+            context,
+            unwrap(
+              prepareCandidateResultReason(
+                reasonDraft({
+                  candidateResultReasonId: "candidate-result-reason-missing-other",
+                  reasonCode: "missing_evidence:work_authorization",
+                  reasonOrdinal: 4
+                })
+              )
+            )
+          )
+        );
         return ok(undefined);
       })
     );
@@ -797,10 +859,44 @@ describe("candidate result reason schema checks and immutability", () => {
         .prepare("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?")
         .get("candidate_result_reason")
     ).toEqual({ sql: expect.stringContaining("STRICT") });
+    expect(
+      database
+        .prepare("SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = ?")
+        .get("candidate_result_reason_kind_unique")
+    ).toEqual({
+      sql: expect.stringMatching(/WHERE "candidate_result_reason"\."subject_id" is null/u)
+    });
+    expect(
+      database
+        .prepare("SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = ?")
+        .get("candidate_result_reason_kind_subject_unique")
+    ).toEqual({
+      sql: expect.stringMatching(
+        /WHERE "candidate_result_reason"\."subject_id" is not null/u
+      )
+    });
     expect(() =>
       database
         .prepare(
           `INSERT INTO candidate_result_reason (
+            candidate_result_reason_id, candidate_result_id, reason_kind, subject_id,
+            reason_code, reason_ordinal, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          reason.candidateResultReasonId,
+          reason.candidateResultId,
+          reason.reasonKind,
+          reason.subjectId,
+          reason.reasonCode,
+          reason.reasonOrdinal,
+          CREATED_AT
+        )
+    ).toThrow(/immutable/u);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT OR REPLACE INTO candidate_result_reason (
             candidate_result_reason_id, candidate_result_id, reason_kind, subject_id,
             reason_code, reason_ordinal, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?)`
