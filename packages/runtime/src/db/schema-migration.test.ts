@@ -36,6 +36,9 @@ import {
   hardRequirementAssessmentFacts,
   hardRequirementAssessments,
   requirements,
+  resolutionActions,
+  resolutionTaskHeads,
+  resolutionTasks,
   roles,
   rubricDimensions,
   rubrics,
@@ -337,7 +340,10 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["candidate_result_structured_fact", candidateResultStructuredFacts],
   ["candidate_result_fact_conflict", candidateResultFactConflicts],
   ["candidate_result_hard_requirement_assessment", candidateResultHardRequirementAssessments],
-  ["candidate_result_reason", candidateResultReasons]
+  ["candidate_result_reason", candidateResultReasons],
+  ["resolution_task", resolutionTasks],
+  ["resolution_action", resolutionActions],
+  ["resolution_task_head", resolutionTaskHeads]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {

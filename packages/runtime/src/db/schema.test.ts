@@ -32,6 +32,9 @@ import {
   hardRequirementAssessmentFacts,
   hardRequirementAssessments,
   requirements,
+  resolutionActions,
+  resolutionTaskHeads,
+  resolutionTasks,
   roles,
   rubricDimensions,
   rubrics,
@@ -543,5 +546,50 @@ describe("runtime Drizzle schema", () => {
         ...reasonConfig.foreignKeys
       ].every((foreignKey) => foreignKey.onDelete === "restrict")
     ).toBe(true);
+  });
+
+  it("exposes resolution task, action, and mutable task-head constraints", () => {
+    const taskConfig = getTableConfig(resolutionTasks);
+    expect(taskConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "resolution_task_created_at",
+      "resolution_task_ordinal"
+    ]);
+    expect(taskConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "resolution_task_ordinal_unique",
+      "resolution_task_reason_unique",
+      "resolution_task_result_created"
+    ]);
+    expect(taskConfig.foreignKeys).toHaveLength(2);
+    expect(taskConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
+      true
+    );
+
+    const actionConfig = getTableConfig(resolutionActions);
+    expect(actionConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "resolution_action_created_at",
+      "resolution_action_kind",
+      "resolution_action_ordinal",
+      "resolution_action_payload_hash",
+      "resolution_action_payload_json",
+      "resolution_action_shape"
+    ]);
+    expect(actionConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "resolution_action_ordinal_unique",
+      "resolution_action_task_created"
+    ]);
+    expect(actionConfig.foreignKeys).toHaveLength(5);
+    expect(actionConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
+      true
+    );
+
+    const headConfig = getTableConfig(resolutionTaskHeads);
+    expect(headConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "resolution_task_head_version"
+    ]);
+    expect(headConfig.indexes).toEqual([]);
+    expect(headConfig.foreignKeys).toHaveLength(2);
+    expect(headConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
+      true
+    );
   });
 });
