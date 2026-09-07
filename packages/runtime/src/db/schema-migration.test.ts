@@ -422,4 +422,39 @@ describe("Drizzle schema matches the committed migrations", () => {
       /FOREIGN KEY \(`seal_id`\) REFERENCES `candidate_result_seal`\(`candidate_result_seal_id`\)[^\n]*DEFERRABLE INITIALLY DEFERRED/u
     );
   });
+
+  it("restores every trigger 0015 drops for the result-table rebuild", () => {
+    const sql = readFileSync(
+      join(migrationsFolder, "0015_candidate_result_seal_foundation.sql"),
+      "utf8"
+    );
+    const dropped = [...sql.matchAll(/DROP TRIGGER IF EXISTS `([^`]+)`/gu)].map(
+      (match) => match[1]!
+    );
+    expect(dropped).toEqual([
+      "candidate_triage_result_reject_replace",
+      "candidate_triage_result_reject_update",
+      "candidate_triage_result_reject_delete",
+      "candidate_head_insert_result_owner",
+      "candidate_head_update_result_owner"
+    ]);
+    const created = [...sql.matchAll(/CREATE TRIGGER `([^`]+)`/gu)].map((match) => match[1]!);
+    expect(created).toEqual(
+      expect.arrayContaining(dropped)
+    );
+    const sql0010 = readFileSync(
+      join(migrationsFolder, "0010_candidate_result_foundation.sql"),
+      "utf8"
+    );
+    const from0010 = [...sql0010.matchAll(/CREATE TRIGGER `([^`]+)`/gu)].map(
+      (match) => match[1]!
+    );
+    const associationTriggers = from0010.filter(
+      (name) => !name.startsWith("candidate_triage_result_reject_")
+    );
+    expect(associationTriggers.length).toBeGreaterThan(0);
+    for (const name of associationTriggers) {
+      expect(dropped).not.toContain(name);
+    }
+  });
 });

@@ -2505,6 +2505,43 @@ describe("candidate result seal", () => {
             .get()
         ).toContain("DEFERRABLE INITIALLY DEFERRED");
         expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
+        expect(database.pragma("defer_foreign_keys", { simple: true })).toBe(0);
+        const triggerNames = (
+          database
+            .prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name")
+            .pluck()
+            .all() as string[]
+        ).sort();
+        expect(triggerNames).toEqual(
+          expect.arrayContaining([
+            "candidate_triage_result_reject_delete",
+            "candidate_triage_result_reject_replace",
+            "candidate_triage_result_reject_update",
+            "candidate_head_insert_result_owner",
+            "candidate_head_update_result_owner",
+            "score_result_reject_delete",
+            "score_result_reject_replace",
+            "score_result_reject_update",
+            "candidate_result_evidence_span_reject_delete",
+            "candidate_result_evidence_span_reject_replace",
+            "candidate_result_evidence_span_reject_update",
+            "candidate_result_evidence_gap_reject_delete",
+            "candidate_result_evidence_gap_reject_replace",
+            "candidate_result_evidence_gap_reject_update",
+            "candidate_result_dimension_assessment_reject_delete",
+            "candidate_result_dimension_assessment_reject_replace",
+            "candidate_result_dimension_assessment_reject_update",
+            "candidate_result_structured_fact_reject_delete",
+            "candidate_result_structured_fact_reject_replace",
+            "candidate_result_structured_fact_reject_update",
+            "candidate_result_fact_conflict_reject_delete",
+            "candidate_result_fact_conflict_reject_replace",
+            "candidate_result_fact_conflict_reject_update",
+            "candidate_result_hard_requirement_assessment_reject_delete",
+            "candidate_result_hard_requirement_assessment_reject_replace",
+            "candidate_result_hard_requirement_assessment_reject_update"
+          ])
+        );
         return ok(undefined);
       })
     );

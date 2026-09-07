@@ -51,6 +51,10 @@ CREATE TABLE `candidate_triage_result__new` (
 	CONSTRAINT "candidate_triage_result_created_at" CHECK("candidate_triage_result__new"."created_at" >= 0)
 ) STRICT;
 --> statement-breakpoint
+-- The rebuild copies existing rows with seal_id = 'unsealed'. That placeholder
+-- plus candidate_triage_result_seal_id_unique is valid only for 0 or 1 source
+-- rows. Increment-1 always inserts results already sealed, so 0015 runs against
+-- an empty candidate_triage_result.
 INSERT INTO `candidate_triage_result__new` (
 	`candidate_triage_result_id`,
 	`candidate_id`,
