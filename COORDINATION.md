@@ -37,7 +37,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/candidate-head-persistence-3840 | chain step 3 | in progress |
+| Cursor | cursor/candidate-head-persistence-3840 | chain step 3 | in review (draft #25) |
 | Claude Code | (none) | Item 4 verified already complete on main via #11 and #12. Idle, reserved for composition root, command use-cases, scheduler T5, deferred until Cursor's migration chain lands. | idle-reserved |
 | Antigravity | (none) | PR #21 merged (#21). Idle until Cursor finishes migration chain step 1 or next assignment. | idle-complete |
 
@@ -65,3 +65,4 @@ your own rows plus the log.
 - 2026-09-07 Cursor: draft PR #23 opened for proposal, review-decision, and proposal-head persistence. Checks green locally aside from the known architecture-under-coverage vitest worker timeout.
 - 2026-09-07 Cursor: PR #23 squash-merged to main at 4a2cd1a. Branch cursor/proposal-persistence-3840 deleted.
 - 2026-09-07 Cursor: starting chain step 3 on cursor/candidate-head-persistence-3840 for candidate_head. Claude stays held until step 4, candidate_result_seal, lands.
+- 2026-09-07 Cursor: draft PR #25 opened for candidate_head persistence. Checks green locally aside from the known architecture-under-coverage vitest worker timeout.
