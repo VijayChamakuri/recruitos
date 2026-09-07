@@ -1106,9 +1106,7 @@ describe("review decision persistence and proposal heads", () => {
             (decision) => decision.reviewDecisionId
           )
         ).toEqual(["review-decision-1", "review-decision-2", "review-decision-3"]);
-        expect(unwrap(readProposal(context, proposal.proposalId)).payload).toEqual(
-          proposal.payload
-        );
+        expect(unwrap(readProposal(context, proposal.proposalId))).toEqual(proposal);
         return ok(undefined);
       })
     );
