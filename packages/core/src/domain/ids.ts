@@ -46,6 +46,10 @@ export const CandidateResultReasonIdSchema =
   printableAsciiId.brand<"CandidateResultReasonId">();
 export type CandidateResultReasonId = z.infer<typeof CandidateResultReasonIdSchema>;
 
+export const CandidateResultSealIdSchema =
+  printableAsciiId.brand<"CandidateResultSealId">();
+export type CandidateResultSealId = z.infer<typeof CandidateResultSealIdSchema>;
+
 export const CandidateResultStructuredFactIdSchema =
   printableAsciiId.brand<"CandidateResultStructuredFactId">();
 export type CandidateResultStructuredFactId = z.infer<
