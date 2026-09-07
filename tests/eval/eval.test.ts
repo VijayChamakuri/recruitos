@@ -3,9 +3,12 @@ import {
   assignSpanMatches,
   calculateMetrics,
   computeCharacterIou,
+  evaluateGroundedSpans,
+  relocateExtractedClaims,
   runClass1EvaluationGate,
   type Class1EvaluationInput,
   type ExpectedSpan,
+  type ExtractedQuoteClaim,
   type PredictedSpan
 } from "./index.js";
 
@@ -245,5 +248,223 @@ describe("Class 1 Evaluation Gate", () => {
     expect(report.passed).toBe(false);
     expect(report.knownLimitationsCountMet).toBe(false);
     expect(report.violations.some((v) => v.includes("visible known limitations"))).toBe(true);
+  });
+});
+
+describe("Quote Claim Relocation", () => {
+  const sampleResume =
+    "Senior Distributed Systems Engineer with 8 years of experience building high-throughput services.";
+
+  it("relocates exact quote claim and ignores inaccurate model offsets", () => {
+    const claims: ExtractedQuoteClaim[] = [
+      {
+        id: "claim-1",
+        candidateId: "cand-1",
+        documentId: "doc-resume",
+        dimension: "years_experience",
+        polarity: "supporting",
+        quotedText: "8 years of experience",
+        claimedStart: 999, // Inaccurate offset model proposed
+        claimedEnd: 1200,
+        confidence: 0.95
+      }
+    ];
+
+    const result = relocateExtractedClaims({ "doc-resume": sampleResume }, claims);
+    expect(result.totalClaims).toBe(1);
+    expect(result.relocatedSpans.length).toBe(1);
+    expect(result.unlocatedClaims.length).toBe(0);
+    expect(result.exactMatches).toBe(1);
+    expect(result.normalizedMatches).toBe(0);
+    expect(result.relocationRate).toBe(1.0);
+
+    const span = result.relocatedSpans[0];
+    expect(span?.id).toBe("claim-1");
+    expect(span?.start).toBe(41);
+    expect(span?.end).toBe(62);
+    expect(span?.matchedText).toBe("8 years of experience");
+    expect(span?.matchQuality).toBe("exact");
+    expect(span?.confidence).toBe(0.95);
+  });
+
+  it("relocates folded quote claim with case and punctuation normalization", () => {
+    const sourceWithPunctuation =
+      'Led "Mission-Critical" initiatives across distributed platforms.';
+    // Model extract with standard quotes and lower case
+    const claims: ExtractedQuoteClaim[] = [
+      {
+        id: "claim-folded",
+        candidateId: "cand-1",
+        documentId: "doc-resume",
+        dimension: "leadership",
+        polarity: "supporting",
+        quotedText: 'led "mission-critical" initiatives'
+      }
+    ];
+
+    const result = relocateExtractedClaims(
+      { "doc-resume": sourceWithPunctuation },
+      claims
+    );
+    expect(result.relocatedSpans.length).toBe(1);
+    expect(result.normalizedMatches).toBe(1);
+    expect(result.exactMatches).toBe(0);
+
+    const span = result.relocatedSpans[0];
+    expect(span?.start).toBe(0);
+    expect(span?.end).toBe(34);
+    expect(span?.matchedText).toBe('Led "Mission-Critical" initiatives');
+    expect(span?.matchQuality).toBe("normalized");
+  });
+
+  it("records unlocated quote failure when quote does not locate in document", () => {
+    const claims: ExtractedQuoteClaim[] = [
+      {
+        id: "claim-missing",
+        candidateId: "cand-1",
+        documentId: "doc-resume",
+        dimension: "certifications",
+        polarity: "supporting",
+        quotedText: "Certified Kubernetes Administrator CKA-2024"
+      }
+    ];
+
+    const result = relocateExtractedClaims({ "doc-resume": sampleResume }, claims);
+    expect(result.relocatedSpans.length).toBe(0);
+    expect(result.unlocatedClaims.length).toBe(1);
+    expect(result.relocationRate).toBe(0);
+
+    const failure = result.unlocatedClaims[0];
+    expect(failure?.claimId).toBe("claim-missing");
+    expect(failure?.reason).toBe("unlocated");
+    expect(failure?.error).toContain("Quote did not locate in the source text");
+  });
+
+  it("reports failure when documentId is absent from document texts", () => {
+    const claims: ExtractedQuoteClaim[] = [
+      {
+        id: "claim-no-doc",
+        candidateId: "cand-1",
+        documentId: "unknown-document",
+        dimension: "skills",
+        polarity: "supporting",
+        quotedText: "Distributed Systems"
+      }
+    ];
+
+    const result = relocateExtractedClaims({ "doc-resume": sampleResume }, claims);
+    expect(result.relocatedSpans.length).toBe(0);
+    expect(result.unlocatedClaims.length).toBe(1);
+    expect(result.unlocatedClaims[0]?.error).toContain("not found in documentTexts");
+  });
+
+  it("supports ReadonlyMap for document texts lookup", () => {
+    const docMap = new Map<string, string>([["doc-map", sampleResume]]);
+    const claims: ExtractedQuoteClaim[] = [
+      {
+        id: "claim-map",
+        candidateId: "cand-1",
+        documentId: "doc-map",
+        dimension: "title",
+        polarity: "supporting",
+        quotedText: "Senior Distributed Systems Engineer"
+      }
+    ];
+
+    const result = relocateExtractedClaims(docMap, claims);
+    expect(result.relocatedSpans.length).toBe(1);
+    expect(result.relocatedSpans[0]?.start).toBe(0);
+    expect(result.relocatedSpans[0]?.end).toBe(35);
+  });
+
+  it("reports failure when document text cannot be normalized", () => {
+    const claims: ExtractedQuoteClaim[] = [
+      {
+        id: "claim-empty-doc",
+        candidateId: "cand-1",
+        documentId: "doc-empty",
+        dimension: "skills",
+        polarity: "supporting",
+        quotedText: "Distributed Systems"
+      }
+    ];
+
+    const result = relocateExtractedClaims({ "doc-empty": "" }, claims);
+    expect(result.relocatedSpans.length).toBe(0);
+    expect(result.unlocatedClaims.length).toBe(1);
+    expect(result.unlocatedClaims[0]?.error).toContain("Source text is empty");
+  });
+
+  it("handles empty claims array gracefully", () => {
+    const result = relocateExtractedClaims({ "doc-resume": sampleResume }, []);
+    expect(result.totalClaims).toBe(0);
+    expect(result.relocatedSpans.length).toBe(0);
+    expect(result.unlocatedClaims.length).toBe(0);
+    expect(result.relocationRate).toBeNull();
+  });
+});
+
+describe("Grounded Span Evaluation", () => {
+  const resumeText =
+    "Senior Engineer with 8 years of experience building scalable systems. Based in San Francisco.";
+
+  const expected: ExpectedSpan[] = [
+    {
+      id: "exp-years",
+      candidateId: "cand-1",
+      documentId: "doc-1",
+      dimension: "years_experience",
+      polarity: "supporting",
+      start: 21,
+      end: 42,
+      text: "8 years of experience"
+    }
+  ];
+
+  it("evaluates end-to-end relocation and bipartite span matching", () => {
+    const claims: ExtractedQuoteClaim[] = [
+      {
+        id: "claim-1",
+        candidateId: "cand-1",
+        documentId: "doc-1",
+        dimension: "years_experience",
+        polarity: "supporting",
+        quotedText: "8 years of experience",
+        confidence: 0.98
+      },
+      {
+        id: "claim-hallucinated",
+        candidateId: "cand-1",
+        documentId: "doc-1",
+        dimension: "education",
+        polarity: "supporting",
+        quotedText: "Ph.D. in Computer Science from Stanford University"
+      }
+    ];
+
+    const evaluation = evaluateGroundedSpans(expected, { "doc-1": resumeText }, claims);
+
+    // Relocation checks
+    expect(evaluation.relocation.totalClaims).toBe(2);
+    expect(evaluation.relocation.relocatedSpans.length).toBe(1);
+    expect(evaluation.relocation.unlocatedClaims.length).toBe(1);
+    expect(evaluation.relocation.exactMatches).toBe(1);
+
+    // Span match checks
+    expect(evaluation.spanMatches.matches.length).toBe(1);
+    expect(evaluation.spanMatches.matches[0]?.iou).toBe(1.0);
+    expect(evaluation.spanMatches.matches[0]?.isExactBoundary).toBe(true);
+
+    // Relocated precision: 1 match / 1 relocated = 1.0
+    expect(evaluation.spanMatches.metrics.precision).toBe(1.0);
+    // Effective precision over all claims: 1 match / 2 claims = 0.5
+    expect(evaluation.effectivePrecision).toBe(0.5);
+  });
+
+  it("handles empty claims in grounded span evaluation", () => {
+    const evaluation = evaluateGroundedSpans(expected, { "doc-1": resumeText }, []);
+    expect(evaluation.relocation.totalClaims).toBe(0);
+    expect(evaluation.spanMatches.matches.length).toBe(0);
+    expect(evaluation.effectivePrecision).toBeNull();
   });
 });

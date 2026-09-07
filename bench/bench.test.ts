@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computePercentile, computeStats, getMachineProfile, getMemorySnapshot } from "./stats.js";
 import { runBenchmarkTask } from "./runner.js";
+import { createMatchingTasks } from "./suites/matching.js";
 
 describe("Benchmark Statistics", () => {
   it("computes percentiles accurately on sorted arrays", () => {
@@ -56,5 +57,34 @@ describe("Benchmark Runner", () => {
     expect(callCount).toBe(7); // 2 warmup + 5 measurement
     expect(metric.iterations).toBe(5);
     expect(metric.opsPerSec).toBeGreaterThan(0);
+  });
+});
+
+describe("Matching Benchmark Tasks", () => {
+  it("creates and runs all real matching and pipeline benchmark tasks", async () => {
+    const tasks = createMatchingTasks(2);
+    expect(tasks.length).toBe(9);
+
+    const taskNames = tasks.map((t) => t.name);
+    expect(taskNames).toContain("Matching: Character IoU Calculation");
+    expect(taskNames).toContain("Matching: Bipartite Span Assignment");
+    expect(taskNames).toContain("Matching: Source Text Normalization");
+    expect(taskNames).toContain("Matching: Text Folding");
+    expect(taskNames).toContain("Matching: Quote Relocation (Tier 1 Exact)");
+    expect(taskNames).toContain("Matching: Quote Relocation (Tier 2 Folded)");
+    expect(taskNames).toContain("Pipeline: Fact Consolidation");
+    expect(taskNames).toContain("Pipeline: Dimension Assessment Derivation");
+    expect(taskNames).toContain("Pipeline: Hard Requirement Resolution");
+
+    for (const task of tasks) {
+      const metric = await runBenchmarkTask({
+        ...task,
+        warmupIterations: 1,
+        iterations: 2
+      });
+      expect(metric.name).toBe(task.name);
+      expect(metric.iterations).toBe(2);
+      expect(metric.opsPerSec).toBeGreaterThan(0);
+    }
   });
 });
