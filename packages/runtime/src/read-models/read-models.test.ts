@@ -442,21 +442,21 @@ describe("listResolutionTasks Read Model", () => {
 });
 
 describe("readCandidatePacket Read Model", () => {
-  it("returns persistence_failed when candidate does not exist", async () => {
+  it("returns not_found when candidate does not exist", async () => {
     const connection = await openMigratedDatabase();
     try {
       const result = readCandidatePacket(connection.database, "cand-nonexistent");
       expect(result.ok).toBe(false);
       if (result.ok) return;
 
-      expect(result.error.code).toBe("persistence_failed");
+      expect(result.error.code).toBe("not_found");
       expect(result.error.message).toContain("Candidate packet not found");
     } finally {
       connection.close();
     }
   });
 
-  it("returns persistence_failed when candidate exists but decision pipeline has not triaged it (no candidate_head)", async () => {
+  it("returns not_found when candidate exists but decision pipeline has not triaged it (no candidate_head)", async () => {
     const connection = await openMigratedDatabase();
     const nativeDb = getNativeClient(connection);
     try {
@@ -469,7 +469,7 @@ describe("readCandidatePacket Read Model", () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
 
-      expect(result.error.code).toBe("persistence_failed");
+      expect(result.error.code).toBe("not_found");
       expect(result.error.message).toContain("no triage result head written");
     } finally {
       connection.close();
@@ -530,13 +530,36 @@ describe("readCandidatePacket Read Model", () => {
 
   it("handles client errors, bad inputs, and missing candidate/result rows in readCandidatePacket", () => {
     // Bad candidateId
-    expect(readCandidatePacket({}, "").ok).toBe(false);
-    expect(readCandidatePacket({}, "   ").ok).toBe(false);
+    const badIdEmpty = readCandidatePacket({}, "");
+    expect(badIdEmpty.ok).toBe(false);
+    if (!badIdEmpty.ok) {
+      expect(badIdEmpty.error.code).toBe("persistence_failed");
+    }
+
+    const badIdWhitespace = readCandidatePacket({}, "   ");
+    expect(badIdWhitespace.ok).toBe(false);
+    if (!badIdWhitespace.ok) {
+      expect(badIdWhitespace.error.code).toBe("persistence_failed");
+    }
 
     // Bad database
-    expect(readCandidatePacket(null, "cand-1").ok).toBe(false);
-    expect(readCandidatePacket({}, "cand-1").ok).toBe(false);
-    expect(readCandidatePacket({ $client: null }, "cand-1").ok).toBe(false);
+    const badDbNull = readCandidatePacket(null, "cand-1");
+    expect(badDbNull.ok).toBe(false);
+    if (!badDbNull.ok) {
+      expect(badDbNull.error.code).toBe("persistence_failed");
+    }
+
+    const badDbEmpty = readCandidatePacket({}, "cand-1");
+    expect(badDbEmpty.ok).toBe(false);
+    if (!badDbEmpty.ok) {
+      expect(badDbEmpty.error.code).toBe("persistence_failed");
+    }
+
+    const badDbClientNull = readCandidatePacket({ $client: null }, "cand-1");
+    expect(badDbClientNull.ok).toBe(false);
+    if (!badDbClientNull.ok) {
+      expect(badDbClientNull.error.code).toBe("persistence_failed");
+    }
 
     const throwingDb = {
       $client: {
@@ -545,7 +568,11 @@ describe("readCandidatePacket Read Model", () => {
         }
       }
     };
-    expect(readCandidatePacket(throwingDb, "cand-1").ok).toBe(false);
+    const throwingRes = readCandidatePacket(throwingDb, "cand-1");
+    expect(throwingRes.ok).toBe(false);
+    if (!throwingRes.ok) {
+      expect(throwingRes.error.code).toBe("persistence_failed");
+    }
 
     // Mock where candidate/head query returns undefined
     const missingCandDb = {
@@ -557,6 +584,35 @@ describe("readCandidatePacket Read Model", () => {
     };
     const missingCandRes = readCandidatePacket(missingCandDb, "c1");
     expect(missingCandRes.ok).toBe(false);
+    if (!missingCandRes.ok) {
+      expect(missingCandRes.error.code).toBe("not_found");
+    }
+
+    // Mock where candidate exists but head is null
+    const missingHeadDb = {
+      $client: {
+        prepare() {
+          return {
+            get: () => ({
+              candidateId: "c1",
+              sourceSystem: "s",
+              sourceKey: "k",
+              channel: "inbound",
+              corpusTag: "main",
+              isSynthetic: 1,
+              createdAt: 1000,
+              headVersion: null,
+              currentResultId: null
+            })
+          };
+        }
+      }
+    };
+    const missingHeadRes = readCandidatePacket(missingHeadDb, "c1");
+    expect(missingHeadRes.ok).toBe(false);
+    if (!missingHeadRes.ok) {
+      expect(missingHeadRes.error.code).toBe("not_found");
+    }
 
     // Mock where head and cand exist, but triage result returns undefined
     const missingResultDb = {
@@ -586,5 +642,8 @@ describe("readCandidatePacket Read Model", () => {
     };
     const missingResultRes = readCandidatePacket(missingResultDb, "c1");
     expect(missingResultRes.ok).toBe(false);
+    if (!missingResultRes.ok) {
+      expect(missingResultRes.error.code).toBe("not_found");
+    }
   });
 });
