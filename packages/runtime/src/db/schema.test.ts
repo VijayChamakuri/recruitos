@@ -11,6 +11,10 @@ import {
   corpusManifests,
   corpusMemberDocuments,
   corpusMembers,
+  requirements,
+  roles,
+  rubricDimensions,
+  rubrics,
   sourceDocuments
 } from "./schema.js";
 
@@ -145,5 +149,48 @@ describe("runtime Drizzle schema", () => {
       "corpus_manifest_seal_manifest_unique"
     ]);
     expect(sealConfig.foreignKeys).toHaveLength(1);
+  });
+
+  it("exposes the immutable role and rubric constraints", () => {
+    const roleConfig = getTableConfig(roles);
+    expect(roleConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "role_created_at",
+      "role_title"
+    ]);
+    expect(roleConfig.indexes).toEqual([]);
+    expect(roleConfig.foreignKeys).toHaveLength(0);
+
+    const requirementConfig = getTableConfig(requirements);
+    expect(requirementConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "requirement_created_at",
+      "requirement_description",
+      "requirement_kind"
+    ]);
+    expect(requirementConfig.foreignKeys).toHaveLength(1);
+
+    const rubricConfig = getTableConfig(rubrics);
+    expect(rubricConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "rubric_created_at",
+      "rubric_version"
+    ]);
+    expect(rubricConfig.indexes.map((index) => index.config.name)).toEqual([
+      "rubric_role_version_unique"
+    ]);
+    expect(rubricConfig.foreignKeys).toHaveLength(1);
+
+    const dimensionConfig = getTableConfig(rubricDimensions);
+    expect(dimensionConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "rubric_dimension_created_at",
+      "rubric_dimension_definition",
+      "rubric_dimension_job_related_justification",
+      "rubric_dimension_ordinal",
+      "rubric_dimension_required",
+      "rubric_dimension_weight"
+    ]);
+    expect(dimensionConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "rubric_dimension_rubric_dimension_id_unique",
+      "rubric_dimension_rubric_ordinal_unique"
+    ]);
+    expect(dimensionConfig.foreignKeys).toHaveLength(1);
   });
 });
