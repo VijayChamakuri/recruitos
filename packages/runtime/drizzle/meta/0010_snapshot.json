@@ -1,0 +1,4047 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "1d53224c-09df-4851-ad50-287968c9299a",
+  "prevId": "543d041e-98a9-4d84-988b-cec0c7ef9586",
+  "tables": {
+    "actor": {
+      "name": "actor",
+      "columns": {
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_kind": {
+          "name": "actor_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "actor_kind": {
+          "name": "actor_kind",
+          "value": "\"actor\".\"actor_kind\" IN ('human', 'system')"
+        },
+        "actor_system_identity": {
+          "name": "actor_system_identity",
+          "value": "(\"actor\".\"actor_kind\" = 'system') = (\"actor\".\"actor_id\" = 'system:runtime')"
+        },
+        "actor_display_name": {
+          "name": "actor_display_name",
+          "value": "length(\"actor\".\"display_name\") BETWEEN 1 AND 200"
+        },
+        "actor_created_at": {
+          "name": "actor_created_at",
+          "value": "\"actor\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "audit_event": {
+      "name": "audit_event",
+      "columns": {
+        "audit_event_id": {
+          "name": "audit_event_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "event_ordinal": {
+          "name": "event_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_display_name": {
+          "name": "actor_display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_name": {
+          "name": "event_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_version": {
+          "name": "event_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "audit_event_command_ordinal_unique": {
+          "name": "audit_event_command_ordinal_unique",
+          "columns": [
+            "command_id",
+            "event_ordinal"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "audit_event_command_id_command_receipt_command_id_fk": {
+          "name": "audit_event_command_id_command_receipt_command_id_fk",
+          "tableFrom": "audit_event",
+          "tableTo": "command_receipt",
+          "columnsFrom": [
+            "command_id"
+          ],
+          "columnsTo": [
+            "command_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "audit_event_command_ordinal_pair": {
+          "name": "audit_event_command_ordinal_pair",
+          "value": "(\"audit_event\".\"command_id\" IS NULL AND \"audit_event\".\"event_ordinal\" IS NULL) OR (\"audit_event\".\"command_id\" IS NOT NULL AND \"audit_event\".\"event_ordinal\" IS NOT NULL)"
+        },
+        "audit_event_event_ordinal": {
+          "name": "audit_event_event_ordinal",
+          "value": "\"audit_event\".\"event_ordinal\" IS NULL OR \"audit_event\".\"event_ordinal\" >= 0"
+        },
+        "audit_event_actor_display_name": {
+          "name": "audit_event_actor_display_name",
+          "value": "length(\"audit_event\".\"actor_display_name\") BETWEEN 1 AND 200"
+        },
+        "audit_event_name": {
+          "name": "audit_event_name",
+          "value": "length(\"audit_event\".\"event_name\") BETWEEN 1 AND 128"
+        },
+        "audit_event_version": {
+          "name": "audit_event_version",
+          "value": "\"audit_event\".\"event_version\" > 0"
+        },
+        "audit_event_payload_hash": {
+          "name": "audit_event_payload_hash",
+          "value": "length(\"audit_event\".\"payload_hash\") = 64 AND \"audit_event\".\"payload_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "audit_event_occurred_at": {
+          "name": "audit_event_occurred_at",
+          "value": "\"audit_event\".\"occurred_at\" >= 0"
+        },
+        "audit_event_recorded_at": {
+          "name": "audit_event_recorded_at",
+          "value": "\"audit_event\".\"recorded_at\" >= \"audit_event\".\"occurred_at\""
+        }
+      }
+    },
+    "candidate_document": {
+      "name": "candidate_document",
+      "columns": {
+        "candidate_document_id": {
+          "name": "candidate_document_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_document_id": {
+          "name": "source_document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_kind": {
+          "name": "document_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_ordinal": {
+          "name": "document_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_document_ordinal_unique": {
+          "name": "candidate_document_ordinal_unique",
+          "columns": [
+            "candidate_id",
+            "document_ordinal"
+          ],
+          "isUnique": true
+        },
+        "candidate_document_source_unique": {
+          "name": "candidate_document_source_unique",
+          "columns": [
+            "candidate_id",
+            "source_document_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "candidate_document_candidate_id_candidate_candidate_id_fk": {
+          "name": "candidate_document_candidate_id_candidate_candidate_id_fk",
+          "tableFrom": "candidate_document",
+          "tableTo": "candidate",
+          "columnsFrom": [
+            "candidate_id"
+          ],
+          "columnsTo": [
+            "candidate_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_document_source_document_id_source_document_source_document_id_fk": {
+          "name": "candidate_document_source_document_id_source_document_source_document_id_fk",
+          "tableFrom": "candidate_document",
+          "tableTo": "source_document",
+          "columnsFrom": [
+            "source_document_id"
+          ],
+          "columnsTo": [
+            "source_document_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_document_kind": {
+          "name": "candidate_document_kind",
+          "value": "\"candidate_document\".\"document_kind\" IN ('resume', 'cover_letter', 'profile', 'recruiter_note')"
+        },
+        "candidate_document_label": {
+          "name": "candidate_document_label",
+          "value": "length(\"candidate_document\".\"label\") BETWEEN 1 AND 200"
+        },
+        "candidate_document_ordinal": {
+          "name": "candidate_document_ordinal",
+          "value": "\"candidate_document\".\"document_ordinal\" BETWEEN 0 AND 3"
+        },
+        "candidate_document_created_at": {
+          "name": "candidate_document_created_at",
+          "value": "\"candidate_document\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate_result_dimension_assessment": {
+      "name": "candidate_result_dimension_assessment",
+      "columns": {
+        "candidate_result_dimension_assessment_id": {
+          "name": "candidate_result_dimension_assessment_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_result_id": {
+          "name": "candidate_result_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_assessment_id": {
+          "name": "dimension_assessment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "assessment_ordinal": {
+          "name": "assessment_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_result_dimension_assessment_ordinal_unique": {
+          "name": "candidate_result_dimension_assessment_ordinal_unique",
+          "columns": [
+            "candidate_result_id",
+            "assessment_ordinal"
+          ],
+          "isUnique": true
+        },
+        "candidate_result_dimension_assessment_unique": {
+          "name": "candidate_result_dimension_assessment_unique",
+          "columns": [
+            "candidate_result_id",
+            "dimension_assessment_id"
+          ],
+          "isUnique": true
+        },
+        "candidate_result_dimension_assessment_dimension_unique": {
+          "name": "candidate_result_dimension_assessment_dimension_unique",
+          "columns": [
+            "candidate_result_id",
+            "dimension_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "candidate_result_dimension_assessment_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk": {
+          "name": "candidate_result_dimension_assessment_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk",
+          "tableFrom": "candidate_result_dimension_assessment",
+          "tableTo": "candidate_triage_result",
+          "columnsFrom": [
+            "candidate_result_id"
+          ],
+          "columnsTo": [
+            "candidate_triage_result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_result_dimension_assessment_dimension_assessment_id_dimension_assessment_dimension_assessment_id_fk": {
+          "name": "candidate_result_dimension_assessment_dimension_assessment_id_dimension_assessment_dimension_assessment_id_fk",
+          "tableFrom": "candidate_result_dimension_assessment",
+          "tableTo": "dimension_assessment",
+          "columnsFrom": [
+            "dimension_assessment_id"
+          ],
+          "columnsTo": [
+            "dimension_assessment_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_result_dimension_assessment_dimension_id": {
+          "name": "candidate_result_dimension_assessment_dimension_id",
+          "value": "length(\"candidate_result_dimension_assessment\".\"dimension_id\") BETWEEN 1 AND 128"
+        },
+        "candidate_result_dimension_assessment_ordinal": {
+          "name": "candidate_result_dimension_assessment_ordinal",
+          "value": "\"candidate_result_dimension_assessment\".\"assessment_ordinal\" >= 0"
+        },
+        "candidate_result_dimension_assessment_created_at": {
+          "name": "candidate_result_dimension_assessment_created_at",
+          "value": "\"candidate_result_dimension_assessment\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate_result_evidence_gap": {
+      "name": "candidate_result_evidence_gap",
+      "columns": {
+        "candidate_result_evidence_gap_id": {
+          "name": "candidate_result_evidence_gap_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_result_id": {
+          "name": "candidate_result_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence_gap_id": {
+          "name": "evidence_gap_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "gap_ordinal": {
+          "name": "gap_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_result_evidence_gap_ordinal_unique": {
+          "name": "candidate_result_evidence_gap_ordinal_unique",
+          "columns": [
+            "candidate_result_id",
+            "gap_ordinal"
+          ],
+          "isUnique": true
+        },
+        "candidate_result_evidence_gap_unique": {
+          "name": "candidate_result_evidence_gap_unique",
+          "columns": [
+            "candidate_result_id",
+            "evidence_gap_id"
+          ],
+          "isUnique": true
+        },
+        "candidate_result_evidence_gap_dimension_unique": {
+          "name": "candidate_result_evidence_gap_dimension_unique",
+          "columns": [
+            "candidate_result_id",
+            "dimension_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "candidate_result_evidence_gap_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk": {
+          "name": "candidate_result_evidence_gap_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk",
+          "tableFrom": "candidate_result_evidence_gap",
+          "tableTo": "candidate_triage_result",
+          "columnsFrom": [
+            "candidate_result_id"
+          ],
+          "columnsTo": [
+            "candidate_triage_result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_result_evidence_gap_evidence_gap_id_evidence_gap_evidence_gap_id_fk": {
+          "name": "candidate_result_evidence_gap_evidence_gap_id_evidence_gap_evidence_gap_id_fk",
+          "tableFrom": "candidate_result_evidence_gap",
+          "tableTo": "evidence_gap",
+          "columnsFrom": [
+            "evidence_gap_id"
+          ],
+          "columnsTo": [
+            "evidence_gap_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_result_evidence_gap_dimension_id": {
+          "name": "candidate_result_evidence_gap_dimension_id",
+          "value": "length(\"candidate_result_evidence_gap\".\"dimension_id\") BETWEEN 1 AND 128"
+        },
+        "candidate_result_evidence_gap_ordinal": {
+          "name": "candidate_result_evidence_gap_ordinal",
+          "value": "\"candidate_result_evidence_gap\".\"gap_ordinal\" >= 0"
+        },
+        "candidate_result_evidence_gap_created_at": {
+          "name": "candidate_result_evidence_gap_created_at",
+          "value": "\"candidate_result_evidence_gap\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate_result_evidence_span": {
+      "name": "candidate_result_evidence_span",
+      "columns": {
+        "candidate_result_evidence_span_id": {
+          "name": "candidate_result_evidence_span_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_result_id": {
+          "name": "candidate_result_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence_span_id": {
+          "name": "evidence_span_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "span_ordinal": {
+          "name": "span_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_result_evidence_span_ordinal_unique": {
+          "name": "candidate_result_evidence_span_ordinal_unique",
+          "columns": [
+            "candidate_result_id",
+            "span_ordinal"
+          ],
+          "isUnique": true
+        },
+        "candidate_result_evidence_span_unique": {
+          "name": "candidate_result_evidence_span_unique",
+          "columns": [
+            "candidate_result_id",
+            "evidence_span_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "candidate_result_evidence_span_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk": {
+          "name": "candidate_result_evidence_span_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk",
+          "tableFrom": "candidate_result_evidence_span",
+          "tableTo": "candidate_triage_result",
+          "columnsFrom": [
+            "candidate_result_id"
+          ],
+          "columnsTo": [
+            "candidate_triage_result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_result_evidence_span_evidence_span_id_evidence_span_evidence_span_id_fk": {
+          "name": "candidate_result_evidence_span_evidence_span_id_evidence_span_evidence_span_id_fk",
+          "tableFrom": "candidate_result_evidence_span",
+          "tableTo": "evidence_span",
+          "columnsFrom": [
+            "evidence_span_id"
+          ],
+          "columnsTo": [
+            "evidence_span_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_result_evidence_span_ordinal": {
+          "name": "candidate_result_evidence_span_ordinal",
+          "value": "\"candidate_result_evidence_span\".\"span_ordinal\" >= 0"
+        },
+        "candidate_result_evidence_span_created_at": {
+          "name": "candidate_result_evidence_span_created_at",
+          "value": "\"candidate_result_evidence_span\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate_result_fact_conflict": {
+      "name": "candidate_result_fact_conflict",
+      "columns": {
+        "candidate_result_fact_conflict_id": {
+          "name": "candidate_result_fact_conflict_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_result_id": {
+          "name": "candidate_result_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fact_conflict_id": {
+          "name": "fact_conflict_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "conflict_ordinal": {
+          "name": "conflict_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_result_fact_conflict_ordinal_unique": {
+          "name": "candidate_result_fact_conflict_ordinal_unique",
+          "columns": [
+            "candidate_result_id",
+            "conflict_ordinal"
+          ],
+          "isUnique": true
+        },
+        "candidate_result_fact_conflict_unique": {
+          "name": "candidate_result_fact_conflict_unique",
+          "columns": [
+            "candidate_result_id",
+            "fact_conflict_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "candidate_result_fact_conflict_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk": {
+          "name": "candidate_result_fact_conflict_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk",
+          "tableFrom": "candidate_result_fact_conflict",
+          "tableTo": "candidate_triage_result",
+          "columnsFrom": [
+            "candidate_result_id"
+          ],
+          "columnsTo": [
+            "candidate_triage_result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_result_fact_conflict_fact_conflict_id_fact_conflict_fact_conflict_id_fk": {
+          "name": "candidate_result_fact_conflict_fact_conflict_id_fact_conflict_fact_conflict_id_fk",
+          "tableFrom": "candidate_result_fact_conflict",
+          "tableTo": "fact_conflict",
+          "columnsFrom": [
+            "fact_conflict_id"
+          ],
+          "columnsTo": [
+            "fact_conflict_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_result_fact_conflict_ordinal": {
+          "name": "candidate_result_fact_conflict_ordinal",
+          "value": "\"candidate_result_fact_conflict\".\"conflict_ordinal\" >= 0"
+        },
+        "candidate_result_fact_conflict_created_at": {
+          "name": "candidate_result_fact_conflict_created_at",
+          "value": "\"candidate_result_fact_conflict\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate_result_hard_requirement_assessment": {
+      "name": "candidate_result_hard_requirement_assessment",
+      "columns": {
+        "candidate_result_hard_requirement_assessment_id": {
+          "name": "candidate_result_hard_requirement_assessment_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_result_id": {
+          "name": "candidate_result_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "hard_requirement_assessment_id": {
+          "name": "hard_requirement_assessment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requirement_ordinal": {
+          "name": "requirement_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_result_hard_requirement_assessment_ordinal_unique": {
+          "name": "candidate_result_hard_requirement_assessment_ordinal_unique",
+          "columns": [
+            "candidate_result_id",
+            "requirement_ordinal"
+          ],
+          "isUnique": true
+        },
+        "candidate_result_hard_requirement_assessment_unique": {
+          "name": "candidate_result_hard_requirement_assessment_unique",
+          "columns": [
+            "candidate_result_id",
+            "hard_requirement_assessment_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "candidate_result_hard_requirement_assessment_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk": {
+          "name": "candidate_result_hard_requirement_assessment_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk",
+          "tableFrom": "candidate_result_hard_requirement_assessment",
+          "tableTo": "candidate_triage_result",
+          "columnsFrom": [
+            "candidate_result_id"
+          ],
+          "columnsTo": [
+            "candidate_triage_result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_result_hard_requirement_assessment_hard_requirement_assessment_id_hard_requirement_assessment_hard_requirement_assessment_id_fk": {
+          "name": "candidate_result_hard_requirement_assessment_hard_requirement_assessment_id_hard_requirement_assessment_hard_requirement_assessment_id_fk",
+          "tableFrom": "candidate_result_hard_requirement_assessment",
+          "tableTo": "hard_requirement_assessment",
+          "columnsFrom": [
+            "hard_requirement_assessment_id"
+          ],
+          "columnsTo": [
+            "hard_requirement_assessment_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_result_hard_requirement_assessment_ordinal": {
+          "name": "candidate_result_hard_requirement_assessment_ordinal",
+          "value": "\"candidate_result_hard_requirement_assessment\".\"requirement_ordinal\" >= 0"
+        },
+        "candidate_result_hard_requirement_assessment_created_at": {
+          "name": "candidate_result_hard_requirement_assessment_created_at",
+          "value": "\"candidate_result_hard_requirement_assessment\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate_result_structured_fact": {
+      "name": "candidate_result_structured_fact",
+      "columns": {
+        "candidate_result_structured_fact_id": {
+          "name": "candidate_result_structured_fact_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_result_id": {
+          "name": "candidate_result_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "structured_fact_id": {
+          "name": "structured_fact_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fact_ordinal": {
+          "name": "fact_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_result_structured_fact_ordinal_unique": {
+          "name": "candidate_result_structured_fact_ordinal_unique",
+          "columns": [
+            "candidate_result_id",
+            "fact_ordinal"
+          ],
+          "isUnique": true
+        },
+        "candidate_result_structured_fact_unique": {
+          "name": "candidate_result_structured_fact_unique",
+          "columns": [
+            "candidate_result_id",
+            "structured_fact_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "candidate_result_structured_fact_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk": {
+          "name": "candidate_result_structured_fact_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk",
+          "tableFrom": "candidate_result_structured_fact",
+          "tableTo": "candidate_triage_result",
+          "columnsFrom": [
+            "candidate_result_id"
+          ],
+          "columnsTo": [
+            "candidate_triage_result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_result_structured_fact_structured_fact_id_structured_fact_structured_fact_id_fk": {
+          "name": "candidate_result_structured_fact_structured_fact_id_structured_fact_structured_fact_id_fk",
+          "tableFrom": "candidate_result_structured_fact",
+          "tableTo": "structured_fact",
+          "columnsFrom": [
+            "structured_fact_id"
+          ],
+          "columnsTo": [
+            "structured_fact_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_result_structured_fact_ordinal": {
+          "name": "candidate_result_structured_fact_ordinal",
+          "value": "\"candidate_result_structured_fact\".\"fact_ordinal\" >= 0"
+        },
+        "candidate_result_structured_fact_created_at": {
+          "name": "candidate_result_structured_fact_created_at",
+          "value": "\"candidate_result_structured_fact\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate_triage_result": {
+      "name": "candidate_triage_result",
+      "columns": {
+        "candidate_triage_result_id": {
+          "name": "candidate_triage_result_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "availability": {
+          "name": "availability",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "supersedes_result_id": {
+          "name": "supersedes_result_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_triage_result_content_hash_unique": {
+          "name": "candidate_triage_result_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "candidate_triage_result_candidate_created": {
+          "name": "candidate_triage_result_candidate_created",
+          "columns": [
+            "candidate_id",
+            "created_at",
+            "candidate_triage_result_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "candidate_triage_result_candidate_id_candidate_candidate_id_fk": {
+          "name": "candidate_triage_result_candidate_id_candidate_candidate_id_fk",
+          "tableFrom": "candidate_triage_result",
+          "tableTo": "candidate",
+          "columnsFrom": [
+            "candidate_id"
+          ],
+          "columnsTo": [
+            "candidate_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "candidate_triage_result_supersedes_result_id_candidate_triage_result_candidate_triage_result_id_fk": {
+          "name": "candidate_triage_result_supersedes_result_id_candidate_triage_result_candidate_triage_result_id_fk",
+          "tableFrom": "candidate_triage_result",
+          "tableTo": "candidate_triage_result",
+          "columnsFrom": [
+            "supersedes_result_id"
+          ],
+          "columnsTo": [
+            "candidate_triage_result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_triage_result_kind": {
+          "name": "candidate_triage_result_kind",
+          "value": "\"candidate_triage_result\".\"kind\" IN ('initial', 'correction')"
+        },
+        "candidate_triage_result_availability": {
+          "name": "candidate_triage_result_availability",
+          "value": "\"candidate_triage_result\".\"availability\" IN ('complete', 'unavailable')"
+        },
+        "candidate_triage_result_status": {
+          "name": "candidate_triage_result_status",
+          "value": "\"candidate_triage_result\".\"status\" IN ('scored', 'rejected_hard_requirement', 'escalated')"
+        },
+        "candidate_triage_result_lineage": {
+          "name": "candidate_triage_result_lineage",
+          "value": "(\n        \"candidate_triage_result\".\"kind\" = 'initial' AND \"candidate_triage_result\".\"supersedes_result_id\" IS NULL\n      ) OR (\n        \"candidate_triage_result\".\"kind\" = 'correction' AND \"candidate_triage_result\".\"supersedes_result_id\" IS NOT NULL\n      )"
+        },
+        "candidate_triage_result_availability_status": {
+          "name": "candidate_triage_result_availability_status",
+          "value": "(\n        \"candidate_triage_result\".\"availability\" = 'unavailable' AND \"candidate_triage_result\".\"status\" = 'escalated'\n      ) OR (\n        \"candidate_triage_result\".\"availability\" = 'complete'\n        AND \"candidate_triage_result\".\"status\" IN ('scored', 'escalated', 'rejected_hard_requirement')\n      )"
+        },
+        "candidate_triage_result_content_json": {
+          "name": "candidate_triage_result_content_json",
+          "value": "json_valid(\"candidate_triage_result\".\"content_json\") AND json_type(\"candidate_triage_result\".\"content_json\") = 'object'"
+        },
+        "candidate_triage_result_content_hash": {
+          "name": "candidate_triage_result_content_hash",
+          "value": "length(\"candidate_triage_result\".\"content_hash\") = 64 AND \"candidate_triage_result\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "candidate_triage_result_created_at": {
+          "name": "candidate_triage_result_created_at",
+          "value": "\"candidate_triage_result\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "candidate": {
+      "name": "candidate",
+      "columns": {
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_system": {
+          "name": "source_system",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_key": {
+          "name": "source_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corpus_tag": {
+          "name": "corpus_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_synthetic": {
+          "name": "is_synthetic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "candidate_source_unique": {
+          "name": "candidate_source_unique",
+          "columns": [
+            "source_system",
+            "source_key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "candidate_source_system": {
+          "name": "candidate_source_system",
+          "value": "length(\"candidate\".\"source_system\") BETWEEN 1 AND 64"
+        },
+        "candidate_source_key": {
+          "name": "candidate_source_key",
+          "value": "length(\"candidate\".\"source_key\") BETWEEN 1 AND 128"
+        },
+        "candidate_channel": {
+          "name": "candidate_channel",
+          "value": "\"candidate\".\"channel\" IN ('inbound', 'sourced')"
+        },
+        "candidate_corpus_tag": {
+          "name": "candidate_corpus_tag",
+          "value": "\"candidate\".\"corpus_tag\" IN ('main', 'variant')"
+        },
+        "candidate_is_synthetic": {
+          "name": "candidate_is_synthetic",
+          "value": "\"candidate\".\"is_synthetic\" = 1"
+        },
+        "candidate_created_at": {
+          "name": "candidate_created_at",
+          "value": "\"candidate\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "command_receipt": {
+      "name": "command_receipt",
+      "columns": {
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "command_name": {
+          "name": "command_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expected_version": {
+          "name": "expected_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "result_json": {
+          "name": "result_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "result_hash": {
+          "name": "result_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "command_receipt_expected_version": {
+          "name": "command_receipt_expected_version",
+          "value": "\"command_receipt\".\"expected_version\" >= 0"
+        },
+        "command_receipt_created_at": {
+          "name": "command_receipt_created_at",
+          "value": "\"command_receipt\".\"created_at\" >= 0"
+        },
+        "command_receipt_completed_at": {
+          "name": "command_receipt_completed_at",
+          "value": "\"command_receipt\".\"completed_at\" IS NULL OR \"command_receipt\".\"completed_at\" >= \"command_receipt\".\"created_at\""
+        },
+        "command_receipt_status": {
+          "name": "command_receipt_status",
+          "value": "\"command_receipt\".\"status\" IN ('in_progress', 'succeeded', 'failed')"
+        },
+        "command_receipt_terminal_shape": {
+          "name": "command_receipt_terminal_shape",
+          "value": "(\n        \"command_receipt\".\"status\" = 'in_progress'\n        AND \"command_receipt\".\"result_json\" IS NULL\n        AND \"command_receipt\".\"result_hash\" IS NULL\n        AND \"command_receipt\".\"error_code\" IS NULL\n        AND \"command_receipt\".\"error_message\" IS NULL\n        AND \"command_receipt\".\"completed_at\" IS NULL\n      ) OR (\n        \"command_receipt\".\"status\" = 'succeeded'\n        AND \"command_receipt\".\"result_json\" IS NOT NULL\n        AND \"command_receipt\".\"result_hash\" IS NOT NULL\n        AND \"command_receipt\".\"error_code\" IS NULL\n        AND \"command_receipt\".\"error_message\" IS NULL\n        AND \"command_receipt\".\"completed_at\" IS NOT NULL\n      ) OR (\n        \"command_receipt\".\"status\" = 'failed'\n        AND \"command_receipt\".\"result_json\" IS NULL\n        AND \"command_receipt\".\"result_hash\" IS NULL\n        AND \"command_receipt\".\"error_code\" IS NOT NULL\n        AND \"command_receipt\".\"error_message\" IS NOT NULL\n        AND \"command_receipt\".\"completed_at\" IS NOT NULL\n      )"
+        }
+      }
+    },
+    "corpus_manifest_seal": {
+      "name": "corpus_manifest_seal",
+      "columns": {
+        "corpus_manifest_seal_id": {
+          "name": "corpus_manifest_seal_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "manifest_id": {
+          "name": "manifest_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "corpus_manifest_seal_manifest_unique": {
+          "name": "corpus_manifest_seal_manifest_unique",
+          "columns": [
+            "manifest_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "corpus_manifest_seal_manifest_id_corpus_manifest_corpus_manifest_id_fk": {
+          "name": "corpus_manifest_seal_manifest_id_corpus_manifest_corpus_manifest_id_fk",
+          "tableFrom": "corpus_manifest_seal",
+          "tableTo": "corpus_manifest",
+          "columnsFrom": [
+            "manifest_id"
+          ],
+          "columnsTo": [
+            "corpus_manifest_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "corpus_manifest_seal_created_at": {
+          "name": "corpus_manifest_seal_created_at",
+          "value": "\"corpus_manifest_seal\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "corpus_manifest": {
+      "name": "corpus_manifest",
+      "columns": {
+        "corpus_manifest_id": {
+          "name": "corpus_manifest_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seal_id": {
+          "name": "seal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "corpus_manifest_content_hash_unique": {
+          "name": "corpus_manifest_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "corpus_manifest_seal_id_unique": {
+          "name": "corpus_manifest_seal_id_unique",
+          "columns": [
+            "seal_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "corpus_manifest_seal_id_corpus_manifest_seal_corpus_manifest_seal_id_fk": {
+          "name": "corpus_manifest_seal_id_corpus_manifest_seal_corpus_manifest_seal_id_fk",
+          "tableFrom": "corpus_manifest",
+          "tableTo": "corpus_manifest_seal",
+          "columnsFrom": [
+            "seal_id"
+          ],
+          "columnsTo": [
+            "corpus_manifest_seal_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "corpus_manifest_kind": {
+          "name": "corpus_manifest_kind",
+          "value": "\"corpus_manifest\".\"kind\" IN ('main', 'variant')"
+        },
+        "corpus_manifest_content_hash": {
+          "name": "corpus_manifest_content_hash",
+          "value": "length(\"corpus_manifest\".\"content_hash\") = 64 AND \"corpus_manifest\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "corpus_manifest_created_at": {
+          "name": "corpus_manifest_created_at",
+          "value": "\"corpus_manifest\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "corpus_member_document": {
+      "name": "corpus_member_document",
+      "columns": {
+        "corpus_member_document_id": {
+          "name": "corpus_member_document_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corpus_member_id": {
+          "name": "corpus_member_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_document_id": {
+          "name": "candidate_document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_ordinal": {
+          "name": "document_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "corpus_member_document_ordinal_unique": {
+          "name": "corpus_member_document_ordinal_unique",
+          "columns": [
+            "corpus_member_id",
+            "document_ordinal"
+          ],
+          "isUnique": true
+        },
+        "corpus_member_document_candidate_document_unique": {
+          "name": "corpus_member_document_candidate_document_unique",
+          "columns": [
+            "corpus_member_id",
+            "candidate_document_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "corpus_member_document_corpus_member_id_corpus_member_corpus_member_id_fk": {
+          "name": "corpus_member_document_corpus_member_id_corpus_member_corpus_member_id_fk",
+          "tableFrom": "corpus_member_document",
+          "tableTo": "corpus_member",
+          "columnsFrom": [
+            "corpus_member_id"
+          ],
+          "columnsTo": [
+            "corpus_member_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "corpus_member_document_candidate_document_id_candidate_document_candidate_document_id_fk": {
+          "name": "corpus_member_document_candidate_document_id_candidate_document_candidate_document_id_fk",
+          "tableFrom": "corpus_member_document",
+          "tableTo": "candidate_document",
+          "columnsFrom": [
+            "candidate_document_id"
+          ],
+          "columnsTo": [
+            "candidate_document_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "corpus_member_document_ordinal": {
+          "name": "corpus_member_document_ordinal",
+          "value": "\"corpus_member_document\".\"document_ordinal\" BETWEEN 0 AND 3"
+        },
+        "corpus_member_document_created_at": {
+          "name": "corpus_member_document_created_at",
+          "value": "\"corpus_member_document\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "corpus_member": {
+      "name": "corpus_member",
+      "columns": {
+        "corpus_member_id": {
+          "name": "corpus_member_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "manifest_id": {
+          "name": "manifest_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "import_ordinal": {
+          "name": "import_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "corpus_member_manifest_candidate_unique": {
+          "name": "corpus_member_manifest_candidate_unique",
+          "columns": [
+            "manifest_id",
+            "candidate_id"
+          ],
+          "isUnique": true
+        },
+        "corpus_member_manifest_ordinal_unique": {
+          "name": "corpus_member_manifest_ordinal_unique",
+          "columns": [
+            "manifest_id",
+            "import_ordinal"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "corpus_member_manifest_id_corpus_manifest_corpus_manifest_id_fk": {
+          "name": "corpus_member_manifest_id_corpus_manifest_corpus_manifest_id_fk",
+          "tableFrom": "corpus_member",
+          "tableTo": "corpus_manifest",
+          "columnsFrom": [
+            "manifest_id"
+          ],
+          "columnsTo": [
+            "corpus_manifest_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "corpus_member_candidate_id_candidate_candidate_id_fk": {
+          "name": "corpus_member_candidate_id_candidate_candidate_id_fk",
+          "tableFrom": "corpus_member",
+          "tableTo": "candidate",
+          "columnsFrom": [
+            "candidate_id"
+          ],
+          "columnsTo": [
+            "candidate_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "corpus_member_import_ordinal": {
+          "name": "corpus_member_import_ordinal",
+          "value": "\"corpus_member\".\"import_ordinal\" >= 0"
+        },
+        "corpus_member_created_at": {
+          "name": "corpus_member_created_at",
+          "value": "\"corpus_member\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "dimension_assessment_evidence_span": {
+      "name": "dimension_assessment_evidence_span",
+      "columns": {
+        "dimension_assessment_evidence_span_id": {
+          "name": "dimension_assessment_evidence_span_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_assessment_id": {
+          "name": "dimension_assessment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence_span_id": {
+          "name": "evidence_span_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "span_ordinal": {
+          "name": "span_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "dimension_assessment_evidence_span_ordinal_unique": {
+          "name": "dimension_assessment_evidence_span_ordinal_unique",
+          "columns": [
+            "dimension_assessment_id",
+            "span_ordinal"
+          ],
+          "isUnique": true
+        },
+        "dimension_assessment_evidence_span_unique": {
+          "name": "dimension_assessment_evidence_span_unique",
+          "columns": [
+            "dimension_assessment_id",
+            "evidence_span_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "dimension_assessment_evidence_span_dimension_assessment_id_dimension_assessment_dimension_assessment_id_fk": {
+          "name": "dimension_assessment_evidence_span_dimension_assessment_id_dimension_assessment_dimension_assessment_id_fk",
+          "tableFrom": "dimension_assessment_evidence_span",
+          "tableTo": "dimension_assessment",
+          "columnsFrom": [
+            "dimension_assessment_id"
+          ],
+          "columnsTo": [
+            "dimension_assessment_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "dimension_assessment_evidence_span_evidence_span_id_evidence_span_evidence_span_id_fk": {
+          "name": "dimension_assessment_evidence_span_evidence_span_id_evidence_span_evidence_span_id_fk",
+          "tableFrom": "dimension_assessment_evidence_span",
+          "tableTo": "evidence_span",
+          "columnsFrom": [
+            "evidence_span_id"
+          ],
+          "columnsTo": [
+            "evidence_span_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "dimension_assessment_evidence_span_ordinal": {
+          "name": "dimension_assessment_evidence_span_ordinal",
+          "value": "\"dimension_assessment_evidence_span\".\"span_ordinal\" >= 0"
+        },
+        "dimension_assessment_evidence_span_created_at": {
+          "name": "dimension_assessment_evidence_span_created_at",
+          "value": "\"dimension_assessment_evidence_span\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "dimension_assessment": {
+      "name": "dimension_assessment",
+      "columns": {
+        "dimension_assessment_id": {
+          "name": "dimension_assessment_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "level": {
+          "name": "level",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "dimension_assessment_dimension": {
+          "name": "dimension_assessment_dimension",
+          "columns": [
+            "dimension_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "dimension_assessment_actor_id_actor_actor_id_fk": {
+          "name": "dimension_assessment_actor_id_actor_actor_id_fk",
+          "tableFrom": "dimension_assessment",
+          "tableTo": "actor",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "actor_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "dimension_assessment_dimension_id": {
+          "name": "dimension_assessment_dimension_id",
+          "value": "length(\"dimension_assessment\".\"dimension_id\") BETWEEN 1 AND 128"
+        },
+        "dimension_assessment_level": {
+          "name": "dimension_assessment_level",
+          "value": "\"dimension_assessment\".\"level\" IN ('none', 'weak', 'partial', 'strong')"
+        },
+        "dimension_assessment_source": {
+          "name": "dimension_assessment_source",
+          "value": "\"dimension_assessment\".\"source\" IN ('extracted', 'human')"
+        },
+        "dimension_assessment_actor_presence": {
+          "name": "dimension_assessment_actor_presence",
+          "value": "(\"dimension_assessment\".\"source\" = 'human') = (\"dimension_assessment\".\"actor_id\" IS NOT NULL)"
+        },
+        "dimension_assessment_created_at": {
+          "name": "dimension_assessment_created_at",
+          "value": "\"dimension_assessment\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "evidence_gap": {
+      "name": "evidence_gap",
+      "columns": {
+        "evidence_gap_id": {
+          "name": "evidence_gap_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason_code": {
+          "name": "reason_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "documents_searched_json": {
+          "name": "documents_searched_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "documents_searched_hash": {
+          "name": "documents_searched_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "evidence_gap_dimension": {
+          "name": "evidence_gap_dimension",
+          "columns": [
+            "dimension_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "evidence_gap_dimension_id": {
+          "name": "evidence_gap_dimension_id",
+          "value": "length(\"evidence_gap\".\"dimension_id\") BETWEEN 1 AND 128"
+        },
+        "evidence_gap_reason_code": {
+          "name": "evidence_gap_reason_code",
+          "value": "length(\"evidence_gap\".\"reason_code\") BETWEEN 1 AND 256\n        AND \"evidence_gap\".\"reason_code\" NOT GLOB '*[^!-~]*'"
+        },
+        "evidence_gap_documents_searched_json": {
+          "name": "evidence_gap_documents_searched_json",
+          "value": "json_valid(\"evidence_gap\".\"documents_searched_json\")\n        AND json_type(\"evidence_gap\".\"documents_searched_json\") = 'array'\n        AND json_array_length(\"evidence_gap\".\"documents_searched_json\") >= 1"
+        },
+        "evidence_gap_documents_searched_hash": {
+          "name": "evidence_gap_documents_searched_hash",
+          "value": "length(\"evidence_gap\".\"documents_searched_hash\") = 64 AND \"evidence_gap\".\"documents_searched_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "evidence_gap_created_at": {
+          "name": "evidence_gap_created_at",
+          "value": "\"evidence_gap\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "evidence_span": {
+      "name": "evidence_span",
+      "columns": {
+        "evidence_span_id": {
+          "name": "evidence_span_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start": {
+          "name": "start",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end": {
+          "name": "end",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quoted_text": {
+          "name": "quoted_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "polarity": {
+          "name": "polarity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "match_quality": {
+          "name": "match_quality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "extractor_version": {
+          "name": "extractor_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "evidence_span_document": {
+          "name": "evidence_span_document",
+          "columns": [
+            "document_id"
+          ],
+          "isUnique": false
+        },
+        "evidence_span_dimension": {
+          "name": "evidence_span_dimension",
+          "columns": [
+            "dimension_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "evidence_span_document_id_source_document_source_document_id_fk": {
+          "name": "evidence_span_document_id_source_document_source_document_id_fk",
+          "tableFrom": "evidence_span",
+          "tableTo": "source_document",
+          "columnsFrom": [
+            "document_id"
+          ],
+          "columnsTo": [
+            "source_document_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "evidence_span_start": {
+          "name": "evidence_span_start",
+          "value": "\"evidence_span\".\"start\" >= 0"
+        },
+        "evidence_span_end": {
+          "name": "evidence_span_end",
+          "value": "\"evidence_span\".\"end\" > \"evidence_span\".\"start\""
+        },
+        "evidence_span_quoted_text": {
+          "name": "evidence_span_quoted_text",
+          "value": "length(\"evidence_span\".\"quoted_text\") BETWEEN 1 AND 240"
+        },
+        "evidence_span_dimension_id": {
+          "name": "evidence_span_dimension_id",
+          "value": "length(\"evidence_span\".\"dimension_id\") BETWEEN 1 AND 128"
+        },
+        "evidence_span_polarity": {
+          "name": "evidence_span_polarity",
+          "value": "\"evidence_span\".\"polarity\" IN ('supporting', 'contradicting')"
+        },
+        "evidence_span_source": {
+          "name": "evidence_span_source",
+          "value": "\"evidence_span\".\"source\" IN ('extracted', 'human')"
+        },
+        "evidence_span_match_quality": {
+          "name": "evidence_span_match_quality",
+          "value": "\"evidence_span\".\"match_quality\" IN ('exact', 'normalized', 'fuzzy')"
+        },
+        "evidence_span_extractor_version": {
+          "name": "evidence_span_extractor_version",
+          "value": "length(\"evidence_span\".\"extractor_version\") BETWEEN 1 AND 64"
+        },
+        "evidence_span_created_at": {
+          "name": "evidence_span_created_at",
+          "value": "\"evidence_span\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "extraction_artifact": {
+      "name": "extraction_artifact",
+      "columns": {
+        "extraction_artifact_id": {
+          "name": "extraction_artifact_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "spec_id": {
+          "name": "spec_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_document_id": {
+          "name": "source_document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accepted_output_json": {
+          "name": "accepted_output_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accepted_output_hash": {
+          "name": "accepted_output_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rejected_claims_json": {
+          "name": "rejected_claims_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rejected_claims_hash": {
+          "name": "rejected_claims_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "extraction_artifact_content_hash_unique": {
+          "name": "extraction_artifact_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "extraction_artifact_spec": {
+          "name": "extraction_artifact_spec",
+          "columns": [
+            "spec_id"
+          ],
+          "isUnique": false
+        },
+        "extraction_artifact_document": {
+          "name": "extraction_artifact_document",
+          "columns": [
+            "source_document_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "extraction_artifact_spec_id_extraction_spec_extraction_spec_id_fk": {
+          "name": "extraction_artifact_spec_id_extraction_spec_extraction_spec_id_fk",
+          "tableFrom": "extraction_artifact",
+          "tableTo": "extraction_spec",
+          "columnsFrom": [
+            "spec_id"
+          ],
+          "columnsTo": [
+            "extraction_spec_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "extraction_artifact_source_document_id_source_document_source_document_id_fk": {
+          "name": "extraction_artifact_source_document_id_source_document_source_document_id_fk",
+          "tableFrom": "extraction_artifact",
+          "tableTo": "source_document",
+          "columnsFrom": [
+            "source_document_id"
+          ],
+          "columnsTo": [
+            "source_document_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "extraction_artifact_accepted_output_json": {
+          "name": "extraction_artifact_accepted_output_json",
+          "value": "json_valid(\"extraction_artifact\".\"accepted_output_json\")\n        AND json_type(\"extraction_artifact\".\"accepted_output_json\") = 'object'\n        AND json_type(json_extract(\"extraction_artifact\".\"accepted_output_json\", '$.spans')) = 'array'\n        AND json_array_length(json_extract(\"extraction_artifact\".\"accepted_output_json\", '$.spans')) BETWEEN 0 AND 12"
+        },
+        "extraction_artifact_accepted_output_hash": {
+          "name": "extraction_artifact_accepted_output_hash",
+          "value": "length(\"extraction_artifact\".\"accepted_output_hash\") = 64 AND \"extraction_artifact\".\"accepted_output_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_artifact_rejected_claims_json": {
+          "name": "extraction_artifact_rejected_claims_json",
+          "value": "json_valid(\"extraction_artifact\".\"rejected_claims_json\")\n        AND json_type(\"extraction_artifact\".\"rejected_claims_json\") = 'array'\n        AND json_array_length(\"extraction_artifact\".\"rejected_claims_json\") BETWEEN 0 AND 8"
+        },
+        "extraction_artifact_rejected_claims_hash": {
+          "name": "extraction_artifact_rejected_claims_hash",
+          "value": "length(\"extraction_artifact\".\"rejected_claims_hash\") = 64 AND \"extraction_artifact\".\"rejected_claims_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_artifact_content_hash": {
+          "name": "extraction_artifact_content_hash",
+          "value": "length(\"extraction_artifact\".\"content_hash\") = 64 AND \"extraction_artifact\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_artifact_created_at": {
+          "name": "extraction_artifact_created_at",
+          "value": "\"extraction_artifact\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "extraction_failure": {
+      "name": "extraction_failure",
+      "columns": {
+        "extraction_failure_id": {
+          "name": "extraction_failure_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "spec_id": {
+          "name": "spec_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_document_id": {
+          "name": "source_document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "error_class": {
+          "name": "error_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "response_hash": {
+          "name": "response_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "response_byte_length": {
+          "name": "response_byte_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "diagnostic_json": {
+          "name": "diagnostic_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "diagnostic_hash": {
+          "name": "diagnostic_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "extraction_failure_content_hash_unique": {
+          "name": "extraction_failure_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "extraction_failure_spec": {
+          "name": "extraction_failure_spec",
+          "columns": [
+            "spec_id"
+          ],
+          "isUnique": false
+        },
+        "extraction_failure_document": {
+          "name": "extraction_failure_document",
+          "columns": [
+            "source_document_id"
+          ],
+          "isUnique": false
+        },
+        "extraction_failure_error_class": {
+          "name": "extraction_failure_error_class",
+          "columns": [
+            "error_class"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "extraction_failure_spec_id_extraction_spec_extraction_spec_id_fk": {
+          "name": "extraction_failure_spec_id_extraction_spec_extraction_spec_id_fk",
+          "tableFrom": "extraction_failure",
+          "tableTo": "extraction_spec",
+          "columnsFrom": [
+            "spec_id"
+          ],
+          "columnsTo": [
+            "extraction_spec_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "extraction_failure_source_document_id_source_document_source_document_id_fk": {
+          "name": "extraction_failure_source_document_id_source_document_source_document_id_fk",
+          "tableFrom": "extraction_failure",
+          "tableTo": "source_document",
+          "columnsFrom": [
+            "source_document_id"
+          ],
+          "columnsTo": [
+            "source_document_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "extraction_failure_error_class": {
+          "name": "extraction_failure_error_class",
+          "value": "\"extraction_failure\".\"error_class\" IN ('structurally_invalid', 'oversized_response', 'identity_mismatch', 'cardinality_exceeded')"
+        },
+        "extraction_failure_response_hash": {
+          "name": "extraction_failure_response_hash",
+          "value": "length(\"extraction_failure\".\"response_hash\") = 64 AND \"extraction_failure\".\"response_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_failure_response_byte_length": {
+          "name": "extraction_failure_response_byte_length",
+          "value": "\"extraction_failure\".\"response_byte_length\" >= 0"
+        },
+        "extraction_failure_oversized_response": {
+          "name": "extraction_failure_oversized_response",
+          "value": "(\"extraction_failure\".\"error_class\" = 'oversized_response') = (\"extraction_failure\".\"response_byte_length\" > 65536)"
+        },
+        "extraction_failure_diagnostic_json": {
+          "name": "extraction_failure_diagnostic_json",
+          "value": "json_valid(\"extraction_failure\".\"diagnostic_json\")\n        AND json_type(\"extraction_failure\".\"diagnostic_json\") = 'object'\n        AND json_type(json_extract(\"extraction_failure\".\"diagnostic_json\", '$.details')) = 'array'\n        AND json_array_length(json_extract(\"extraction_failure\".\"diagnostic_json\", '$.details')) BETWEEN 0 AND 8"
+        },
+        "extraction_failure_diagnostic_hash": {
+          "name": "extraction_failure_diagnostic_hash",
+          "value": "length(\"extraction_failure\".\"diagnostic_hash\") = 64 AND \"extraction_failure\".\"diagnostic_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_failure_content_hash": {
+          "name": "extraction_failure_content_hash",
+          "value": "length(\"extraction_failure\".\"content_hash\") = 64 AND \"extraction_failure\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_failure_created_at": {
+          "name": "extraction_failure_created_at",
+          "value": "\"extraction_failure\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "extraction_run": {
+      "name": "extraction_run",
+      "columns": {
+        "extraction_run_id": {
+          "name": "extraction_run_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "spans_returned": {
+          "name": "spans_returned",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "spans_located": {
+          "name": "spans_located",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dropped_quotes_json": {
+          "name": "dropped_quotes_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dropped_quotes_hash": {
+          "name": "dropped_quotes_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "model_id": {
+          "name": "model_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fixture_key": {
+          "name": "fixture_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "extraction_run_spans_returned": {
+          "name": "extraction_run_spans_returned",
+          "value": "\"extraction_run\".\"spans_returned\" >= 0"
+        },
+        "extraction_run_spans_located": {
+          "name": "extraction_run_spans_located",
+          "value": "\"extraction_run\".\"spans_located\" >= 0 AND \"extraction_run\".\"spans_located\" <= \"extraction_run\".\"spans_returned\""
+        },
+        "extraction_run_dropped_quotes_json": {
+          "name": "extraction_run_dropped_quotes_json",
+          "value": "json_valid(\"extraction_run\".\"dropped_quotes_json\")\n        AND json_type(\"extraction_run\".\"dropped_quotes_json\") = 'array'\n        AND json_array_length(\"extraction_run\".\"dropped_quotes_json\") = \"extraction_run\".\"spans_returned\" - \"extraction_run\".\"spans_located\""
+        },
+        "extraction_run_dropped_quotes_hash": {
+          "name": "extraction_run_dropped_quotes_hash",
+          "value": "length(\"extraction_run\".\"dropped_quotes_hash\") = 64 AND \"extraction_run\".\"dropped_quotes_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_run_model_id": {
+          "name": "extraction_run_model_id",
+          "value": "length(\"extraction_run\".\"model_id\") BETWEEN 1 AND 200"
+        },
+        "extraction_run_fixture_key": {
+          "name": "extraction_run_fixture_key",
+          "value": "\"extraction_run\".\"fixture_key\" IS NULL OR (length(\"extraction_run\".\"fixture_key\") = 64 AND \"extraction_run\".\"fixture_key\" NOT GLOB '*[^0-9a-f]*')"
+        },
+        "extraction_run_created_at": {
+          "name": "extraction_run_created_at",
+          "value": "\"extraction_run\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "extraction_spec": {
+      "name": "extraction_spec",
+      "columns": {
+        "extraction_spec_id": {
+          "name": "extraction_spec_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "model_id": {
+          "name": "model_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "extractor_version": {
+          "name": "extractor_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt_hash": {
+          "name": "prompt_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "schema_hash": {
+          "name": "schema_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "extraction_spec_content_hash_unique": {
+          "name": "extraction_spec_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "extraction_spec_dimension": {
+          "name": "extraction_spec_dimension",
+          "columns": [
+            "dimension_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "extraction_spec_content_json": {
+          "name": "extraction_spec_content_json",
+          "value": "json_valid(\"extraction_spec\".\"content_json\") AND json_type(\"extraction_spec\".\"content_json\") = 'object'"
+        },
+        "extraction_spec_content_hash": {
+          "name": "extraction_spec_content_hash",
+          "value": "length(\"extraction_spec\".\"content_hash\") = 64 AND \"extraction_spec\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_spec_model_id": {
+          "name": "extraction_spec_model_id",
+          "value": "length(\"extraction_spec\".\"model_id\") BETWEEN 1 AND 200"
+        },
+        "extraction_spec_extractor_version": {
+          "name": "extraction_spec_extractor_version",
+          "value": "length(\"extraction_spec\".\"extractor_version\") BETWEEN 1 AND 64"
+        },
+        "extraction_spec_prompt_hash": {
+          "name": "extraction_spec_prompt_hash",
+          "value": "length(\"extraction_spec\".\"prompt_hash\") = 64 AND \"extraction_spec\".\"prompt_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_spec_schema_hash": {
+          "name": "extraction_spec_schema_hash",
+          "value": "length(\"extraction_spec\".\"schema_hash\") = 64 AND \"extraction_spec\".\"schema_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "extraction_spec_dimension_id": {
+          "name": "extraction_spec_dimension_id",
+          "value": "length(\"extraction_spec\".\"dimension_id\") BETWEEN 1 AND 128"
+        },
+        "extraction_spec_created_at": {
+          "name": "extraction_spec_created_at",
+          "value": "\"extraction_spec\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "fact_conflict_member": {
+      "name": "fact_conflict_member",
+      "columns": {
+        "fact_conflict_member_id": {
+          "name": "fact_conflict_member_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fact_conflict_id": {
+          "name": "fact_conflict_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "structured_fact_id": {
+          "name": "structured_fact_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "member_ordinal": {
+          "name": "member_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fact_conflict_member_ordinal_unique": {
+          "name": "fact_conflict_member_ordinal_unique",
+          "columns": [
+            "fact_conflict_id",
+            "member_ordinal"
+          ],
+          "isUnique": true
+        },
+        "fact_conflict_member_fact_unique": {
+          "name": "fact_conflict_member_fact_unique",
+          "columns": [
+            "fact_conflict_id",
+            "structured_fact_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "fact_conflict_member_fact_conflict_id_fact_conflict_fact_conflict_id_fk": {
+          "name": "fact_conflict_member_fact_conflict_id_fact_conflict_fact_conflict_id_fk",
+          "tableFrom": "fact_conflict_member",
+          "tableTo": "fact_conflict",
+          "columnsFrom": [
+            "fact_conflict_id"
+          ],
+          "columnsTo": [
+            "fact_conflict_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "fact_conflict_member_structured_fact_id_structured_fact_structured_fact_id_fk": {
+          "name": "fact_conflict_member_structured_fact_id_structured_fact_structured_fact_id_fk",
+          "tableFrom": "fact_conflict_member",
+          "tableTo": "structured_fact",
+          "columnsFrom": [
+            "structured_fact_id"
+          ],
+          "columnsTo": [
+            "structured_fact_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "fact_conflict_member_ordinal": {
+          "name": "fact_conflict_member_ordinal",
+          "value": "\"fact_conflict_member\".\"member_ordinal\" >= 0"
+        },
+        "fact_conflict_member_created_at": {
+          "name": "fact_conflict_member_created_at",
+          "value": "\"fact_conflict_member\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "fact_conflict": {
+      "name": "fact_conflict",
+      "columns": {
+        "fact_conflict_id": {
+          "name": "fact_conflict_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fact_conflict_content_hash_unique": {
+          "name": "fact_conflict_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "fact_conflict_content_json": {
+          "name": "fact_conflict_content_json",
+          "value": "json_valid(\"fact_conflict\".\"content_json\")\n        AND json_type(\"fact_conflict\".\"content_json\") = 'object'\n        AND json_type(json_extract(\"fact_conflict\".\"content_json\", '$.memberIds')) = 'array'\n        AND json_array_length(json_extract(\"fact_conflict\".\"content_json\", '$.memberIds')) >= 2"
+        },
+        "fact_conflict_content_hash": {
+          "name": "fact_conflict_content_hash",
+          "value": "length(\"fact_conflict\".\"content_hash\") = 64 AND \"fact_conflict\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "fact_conflict_created_at": {
+          "name": "fact_conflict_created_at",
+          "value": "\"fact_conflict\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "hard_requirement_assessment_fact": {
+      "name": "hard_requirement_assessment_fact",
+      "columns": {
+        "hard_requirement_assessment_fact_id": {
+          "name": "hard_requirement_assessment_fact_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "hard_requirement_assessment_id": {
+          "name": "hard_requirement_assessment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "structured_fact_id": {
+          "name": "structured_fact_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "polarity": {
+          "name": "polarity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fact_ordinal": {
+          "name": "fact_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "hard_requirement_assessment_fact_ordinal_unique": {
+          "name": "hard_requirement_assessment_fact_ordinal_unique",
+          "columns": [
+            "hard_requirement_assessment_id",
+            "fact_ordinal"
+          ],
+          "isUnique": true
+        },
+        "hard_requirement_assessment_fact_unique": {
+          "name": "hard_requirement_assessment_fact_unique",
+          "columns": [
+            "hard_requirement_assessment_id",
+            "structured_fact_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "hard_requirement_assessment_fact_hard_requirement_assessment_id_hard_requirement_assessment_hard_requirement_assessment_id_fk": {
+          "name": "hard_requirement_assessment_fact_hard_requirement_assessment_id_hard_requirement_assessment_hard_requirement_assessment_id_fk",
+          "tableFrom": "hard_requirement_assessment_fact",
+          "tableTo": "hard_requirement_assessment",
+          "columnsFrom": [
+            "hard_requirement_assessment_id"
+          ],
+          "columnsTo": [
+            "hard_requirement_assessment_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "hard_requirement_assessment_fact_structured_fact_id_structured_fact_structured_fact_id_fk": {
+          "name": "hard_requirement_assessment_fact_structured_fact_id_structured_fact_structured_fact_id_fk",
+          "tableFrom": "hard_requirement_assessment_fact",
+          "tableTo": "structured_fact",
+          "columnsFrom": [
+            "structured_fact_id"
+          ],
+          "columnsTo": [
+            "structured_fact_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "hard_requirement_assessment_fact_polarity": {
+          "name": "hard_requirement_assessment_fact_polarity",
+          "value": "\"hard_requirement_assessment_fact\".\"polarity\" IN ('supporting', 'contradicting')"
+        },
+        "hard_requirement_assessment_fact_ordinal": {
+          "name": "hard_requirement_assessment_fact_ordinal",
+          "value": "\"hard_requirement_assessment_fact\".\"fact_ordinal\" >= 0"
+        },
+        "hard_requirement_assessment_fact_created_at": {
+          "name": "hard_requirement_assessment_fact_created_at",
+          "value": "\"hard_requirement_assessment_fact\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "hard_requirement_assessment": {
+      "name": "hard_requirement_assessment",
+      "columns": {
+        "hard_requirement_assessment_id": {
+          "name": "hard_requirement_assessment_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requirement_field_id": {
+          "name": "requirement_field_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "hard_requirement_assessment_content_hash_unique": {
+          "name": "hard_requirement_assessment_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "hard_requirement_assessment_candidate": {
+          "name": "hard_requirement_assessment_candidate",
+          "columns": [
+            "candidate_id"
+          ],
+          "isUnique": false
+        },
+        "hard_requirement_assessment_field": {
+          "name": "hard_requirement_assessment_field",
+          "columns": [
+            "requirement_field_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "hard_requirement_assessment_candidate_id_candidate_candidate_id_fk": {
+          "name": "hard_requirement_assessment_candidate_id_candidate_candidate_id_fk",
+          "tableFrom": "hard_requirement_assessment",
+          "tableTo": "candidate",
+          "columnsFrom": [
+            "candidate_id"
+          ],
+          "columnsTo": [
+            "candidate_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "hard_requirement_assessment_requirement_field_id": {
+          "name": "hard_requirement_assessment_requirement_field_id",
+          "value": "\"hard_requirement_assessment\".\"requirement_field_id\" IN ('years_experience', 'work_authorization', 'current_title', 'employer_history')"
+        },
+        "hard_requirement_assessment_outcome": {
+          "name": "hard_requirement_assessment_outcome",
+          "value": "\"hard_requirement_assessment\".\"outcome\" IN ('pass', 'fail', 'unknown')"
+        },
+        "hard_requirement_assessment_content_json": {
+          "name": "hard_requirement_assessment_content_json",
+          "value": "json_valid(\"hard_requirement_assessment\".\"content_json\")\n        AND json_type(\"hard_requirement_assessment\".\"content_json\") = 'object'\n        AND json_type(json_extract(\"hard_requirement_assessment\".\"content_json\", '$.facts')) = 'array'\n        AND (\n          \"hard_requirement_assessment\".\"outcome\" = 'unknown'\n          OR json_array_length(json_extract(\"hard_requirement_assessment\".\"content_json\", '$.facts')) >= 1\n        )"
+        },
+        "hard_requirement_assessment_content_hash": {
+          "name": "hard_requirement_assessment_content_hash",
+          "value": "length(\"hard_requirement_assessment\".\"content_hash\") = 64 AND \"hard_requirement_assessment\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "hard_requirement_assessment_created_at": {
+          "name": "hard_requirement_assessment_created_at",
+          "value": "\"hard_requirement_assessment\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "requirement": {
+      "name": "requirement",
+      "columns": {
+        "requirement_id": {
+          "name": "requirement_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "requirement_role_id_role_role_id_fk": {
+          "name": "requirement_role_id_role_role_id_fk",
+          "tableFrom": "requirement",
+          "tableTo": "role",
+          "columnsFrom": [
+            "role_id"
+          ],
+          "columnsTo": [
+            "role_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "requirement_kind": {
+          "name": "requirement_kind",
+          "value": "\"requirement\".\"kind\" IN ('hard', 'scored')"
+        },
+        "requirement_description": {
+          "name": "requirement_description",
+          "value": "length(\"requirement\".\"description\") BETWEEN 1 AND 2000"
+        },
+        "requirement_created_at": {
+          "name": "requirement_created_at",
+          "value": "\"requirement\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "role": {
+      "name": "role",
+      "columns": {
+        "role_id": {
+          "name": "role_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "role_title": {
+          "name": "role_title",
+          "value": "length(\"role\".\"title\") BETWEEN 1 AND 200"
+        },
+        "role_created_at": {
+          "name": "role_created_at",
+          "value": "\"role\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "rubric_dimension": {
+      "name": "rubric_dimension",
+      "columns": {
+        "rubric_dimension_id": {
+          "name": "rubric_dimension_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rubric_id": {
+          "name": "rubric_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "weight": {
+          "name": "weight",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "required": {
+          "name": "required",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "definition": {
+          "name": "definition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "job_related_justification": {
+          "name": "job_related_justification",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ordinal": {
+          "name": "ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "rubric_dimension_rubric_ordinal_unique": {
+          "name": "rubric_dimension_rubric_ordinal_unique",
+          "columns": [
+            "rubric_id",
+            "ordinal"
+          ],
+          "isUnique": true
+        },
+        "rubric_dimension_rubric_dimension_id_unique": {
+          "name": "rubric_dimension_rubric_dimension_id_unique",
+          "columns": [
+            "rubric_id",
+            "dimension_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "rubric_dimension_rubric_id_rubric_rubric_id_fk": {
+          "name": "rubric_dimension_rubric_id_rubric_rubric_id_fk",
+          "tableFrom": "rubric_dimension",
+          "tableTo": "rubric",
+          "columnsFrom": [
+            "rubric_id"
+          ],
+          "columnsTo": [
+            "rubric_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "rubric_dimension_weight": {
+          "name": "rubric_dimension_weight",
+          "value": "\"rubric_dimension\".\"weight\" > 0"
+        },
+        "rubric_dimension_required": {
+          "name": "rubric_dimension_required",
+          "value": "\"rubric_dimension\".\"required\" IN (0, 1)"
+        },
+        "rubric_dimension_definition": {
+          "name": "rubric_dimension_definition",
+          "value": "length(\"rubric_dimension\".\"definition\") BETWEEN 1 AND 2000"
+        },
+        "rubric_dimension_job_related_justification": {
+          "name": "rubric_dimension_job_related_justification",
+          "value": "length(\"rubric_dimension\".\"job_related_justification\") BETWEEN 1 AND 2000"
+        },
+        "rubric_dimension_ordinal": {
+          "name": "rubric_dimension_ordinal",
+          "value": "\"rubric_dimension\".\"ordinal\" >= 0"
+        },
+        "rubric_dimension_created_at": {
+          "name": "rubric_dimension_created_at",
+          "value": "\"rubric_dimension\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "rubric": {
+      "name": "rubric",
+      "columns": {
+        "rubric_id": {
+          "name": "rubric_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "rubric_role_version_unique": {
+          "name": "rubric_role_version_unique",
+          "columns": [
+            "role_id",
+            "version"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "rubric_role_id_role_role_id_fk": {
+          "name": "rubric_role_id_role_role_id_fk",
+          "tableFrom": "rubric",
+          "tableTo": "role",
+          "columnsFrom": [
+            "role_id"
+          ],
+          "columnsTo": [
+            "role_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "rubric_version": {
+          "name": "rubric_version",
+          "value": "length(\"rubric\".\"version\") BETWEEN 1 AND 64"
+        },
+        "rubric_created_at": {
+          "name": "rubric_created_at",
+          "value": "\"rubric\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "run_input_snapshot": {
+      "name": "run_input_snapshot",
+      "columns": {
+        "run_input_snapshot_id": {
+          "name": "run_input_snapshot_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "frozen_date": {
+          "name": "frozen_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rubric_version": {
+          "name": "rubric_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "extractor_version": {
+          "name": "extractor_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt_template_version": {
+          "name": "prompt_template_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "run_input_snapshot_content_hash_unique": {
+          "name": "run_input_snapshot_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "run_input_snapshot_role": {
+          "name": "run_input_snapshot_role",
+          "columns": [
+            "role_id"
+          ],
+          "isUnique": false
+        },
+        "run_input_snapshot_frozen_date": {
+          "name": "run_input_snapshot_frozen_date",
+          "columns": [
+            "frozen_date"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "run_input_snapshot_role_id_role_role_id_fk": {
+          "name": "run_input_snapshot_role_id_role_role_id_fk",
+          "tableFrom": "run_input_snapshot",
+          "tableTo": "role",
+          "columnsFrom": [
+            "role_id"
+          ],
+          "columnsTo": [
+            "role_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "run_input_snapshot_content_json": {
+          "name": "run_input_snapshot_content_json",
+          "value": "json_valid(\"run_input_snapshot\".\"content_json\") AND json_type(\"run_input_snapshot\".\"content_json\") = 'object'"
+        },
+        "run_input_snapshot_content_hash": {
+          "name": "run_input_snapshot_content_hash",
+          "value": "length(\"run_input_snapshot\".\"content_hash\") = 64 AND \"run_input_snapshot\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "run_input_snapshot_frozen_date": {
+          "name": "run_input_snapshot_frozen_date",
+          "value": "length(\"run_input_snapshot\".\"frozen_date\") = 10\n        AND \"run_input_snapshot\".\"frozen_date\" GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
+        },
+        "run_input_snapshot_rubric_version": {
+          "name": "run_input_snapshot_rubric_version",
+          "value": "length(\"run_input_snapshot\".\"rubric_version\") BETWEEN 1 AND 64"
+        },
+        "run_input_snapshot_extractor_version": {
+          "name": "run_input_snapshot_extractor_version",
+          "value": "length(\"run_input_snapshot\".\"extractor_version\") BETWEEN 1 AND 64"
+        },
+        "run_input_snapshot_prompt_template_version": {
+          "name": "run_input_snapshot_prompt_template_version",
+          "value": "length(\"run_input_snapshot\".\"prompt_template_version\") BETWEEN 1 AND 64"
+        },
+        "run_input_snapshot_created_at": {
+          "name": "run_input_snapshot_created_at",
+          "value": "\"run_input_snapshot\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "runtime_migration_smoke": {
+      "name": "runtime_migration_smoke",
+      "columns": {
+        "singleton": {
+          "name": "singleton",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "applied": {
+          "name": "applied",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "score_result": {
+      "name": "score_result",
+      "columns": {
+        "score_result_id": {
+          "name": "score_result_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_result_id": {
+          "name": "candidate_result_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aggregate_text": {
+          "name": "aggregate_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confidence_text": {
+          "name": "confidence_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aggregate_basis_points": {
+          "name": "aggregate_basis_points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confidence_basis_points": {
+          "name": "confidence_basis_points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "score_result_candidate_result_unique": {
+          "name": "score_result_candidate_result_unique",
+          "columns": [
+            "candidate_result_id"
+          ],
+          "isUnique": true
+        },
+        "score_result_content_hash_unique": {
+          "name": "score_result_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "score_result_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk": {
+          "name": "score_result_candidate_result_id_candidate_triage_result_candidate_triage_result_id_fk",
+          "tableFrom": "score_result",
+          "tableTo": "candidate_triage_result",
+          "columnsFrom": [
+            "candidate_result_id"
+          ],
+          "columnsTo": [
+            "candidate_triage_result_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "score_result_aggregate_text": {
+          "name": "score_result_aggregate_text",
+          "value": "length(\"score_result\".\"aggregate_text\") BETWEEN 3 AND 64\n        AND \"score_result\".\"aggregate_text\" NOT GLOB '*[^0-9/]*'"
+        },
+        "score_result_confidence_text": {
+          "name": "score_result_confidence_text",
+          "value": "length(\"score_result\".\"confidence_text\") BETWEEN 3 AND 64\n        AND \"score_result\".\"confidence_text\" NOT GLOB '*[^0-9/]*'"
+        },
+        "score_result_aggregate_basis_points": {
+          "name": "score_result_aggregate_basis_points",
+          "value": "\"score_result\".\"aggregate_basis_points\" BETWEEN 0 AND 10000"
+        },
+        "score_result_confidence_basis_points": {
+          "name": "score_result_confidence_basis_points",
+          "value": "\"score_result\".\"confidence_basis_points\" BETWEEN 0 AND 10000"
+        },
+        "score_result_content_json": {
+          "name": "score_result_content_json",
+          "value": "json_valid(\"score_result\".\"content_json\")\n        AND json_type(\"score_result\".\"content_json\") = 'object'\n        AND json_type(json_extract(\"score_result\".\"content_json\", '$.contributions')) = 'array'\n        AND json_array_length(json_extract(\"score_result\".\"content_json\", '$.contributions')) = 6"
+        },
+        "score_result_content_hash": {
+          "name": "score_result_content_hash",
+          "value": "length(\"score_result\".\"content_hash\") = 64 AND \"score_result\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "score_result_created_at": {
+          "name": "score_result_created_at",
+          "value": "\"score_result\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "source_document": {
+      "name": "source_document",
+      "columns": {
+        "source_document_id": {
+          "name": "source_document_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "raw_text": {
+          "name": "raw_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "raw_hash": {
+          "name": "raw_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "raw_byte_length": {
+          "name": "raw_byte_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_text": {
+          "name": "normalized_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_hash": {
+          "name": "normalized_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_length": {
+          "name": "normalized_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_byte_length": {
+          "name": "normalized_byte_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "source_document_raw_hash_unique": {
+          "name": "source_document_raw_hash_unique",
+          "columns": [
+            "raw_hash"
+          ],
+          "isUnique": true
+        },
+        "source_document_normalized_hash": {
+          "name": "source_document_normalized_hash",
+          "columns": [
+            "normalized_hash"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "source_document_raw_hash": {
+          "name": "source_document_raw_hash",
+          "value": "length(\"source_document\".\"raw_hash\") = 64 AND \"source_document\".\"raw_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "source_document_normalized_hash": {
+          "name": "source_document_normalized_hash",
+          "value": "length(\"source_document\".\"normalized_hash\") = 64 AND \"source_document\".\"normalized_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "source_document_raw_byte_length": {
+          "name": "source_document_raw_byte_length",
+          "value": "\"source_document\".\"raw_byte_length\" BETWEEN 1 AND 262144\n        AND \"source_document\".\"raw_byte_length\" = length(CAST(\"source_document\".\"raw_text\" AS BLOB))"
+        },
+        "source_document_normalized_byte_length": {
+          "name": "source_document_normalized_byte_length",
+          "value": "\"source_document\".\"normalized_byte_length\" BETWEEN 1 AND 131072\n        AND \"source_document\".\"normalized_byte_length\" = length(CAST(\"source_document\".\"normalized_text\" AS BLOB))"
+        },
+        "source_document_normalized_length": {
+          "name": "source_document_normalized_length",
+          "value": "\"source_document\".\"normalized_length\" BETWEEN 1 AND 50000\n        AND \"source_document\".\"normalized_length\" >= length(\"source_document\".\"normalized_text\")\n        AND \"source_document\".\"normalized_length\" <= 2 * length(\"source_document\".\"normalized_text\")"
+        },
+        "source_document_created_at": {
+          "name": "source_document_created_at",
+          "value": "\"source_document\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "structured_fact_evidence_span": {
+      "name": "structured_fact_evidence_span",
+      "columns": {
+        "structured_fact_evidence_span_id": {
+          "name": "structured_fact_evidence_span_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "structured_fact_id": {
+          "name": "structured_fact_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence_span_id": {
+          "name": "evidence_span_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "span_ordinal": {
+          "name": "span_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "structured_fact_evidence_span_ordinal_unique": {
+          "name": "structured_fact_evidence_span_ordinal_unique",
+          "columns": [
+            "structured_fact_id",
+            "span_ordinal"
+          ],
+          "isUnique": true
+        },
+        "structured_fact_evidence_span_unique": {
+          "name": "structured_fact_evidence_span_unique",
+          "columns": [
+            "structured_fact_id",
+            "evidence_span_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "structured_fact_evidence_span_structured_fact_id_structured_fact_structured_fact_id_fk": {
+          "name": "structured_fact_evidence_span_structured_fact_id_structured_fact_structured_fact_id_fk",
+          "tableFrom": "structured_fact_evidence_span",
+          "tableTo": "structured_fact",
+          "columnsFrom": [
+            "structured_fact_id"
+          ],
+          "columnsTo": [
+            "structured_fact_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "structured_fact_evidence_span_evidence_span_id_evidence_span_evidence_span_id_fk": {
+          "name": "structured_fact_evidence_span_evidence_span_id_evidence_span_evidence_span_id_fk",
+          "tableFrom": "structured_fact_evidence_span",
+          "tableTo": "evidence_span",
+          "columnsFrom": [
+            "evidence_span_id"
+          ],
+          "columnsTo": [
+            "evidence_span_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "structured_fact_evidence_span_ordinal": {
+          "name": "structured_fact_evidence_span_ordinal",
+          "value": "\"structured_fact_evidence_span\".\"span_ordinal\" >= 0"
+        },
+        "structured_fact_evidence_span_created_at": {
+          "name": "structured_fact_evidence_span_created_at",
+          "value": "\"structured_fact_evidence_span\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "structured_fact_provenance": {
+      "name": "structured_fact_provenance",
+      "columns": {
+        "structured_fact_provenance_id": {
+          "name": "structured_fact_provenance_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "structured_fact_id": {
+          "name": "structured_fact_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "structured_fact_provenance_fact": {
+          "name": "structured_fact_provenance_fact",
+          "columns": [
+            "structured_fact_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "structured_fact_provenance_structured_fact_id_structured_fact_structured_fact_id_fk": {
+          "name": "structured_fact_provenance_structured_fact_id_structured_fact_structured_fact_id_fk",
+          "tableFrom": "structured_fact_provenance",
+          "tableTo": "structured_fact",
+          "columnsFrom": [
+            "structured_fact_id"
+          ],
+          "columnsTo": [
+            "structured_fact_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "structured_fact_provenance_actor_id_actor_actor_id_fk": {
+          "name": "structured_fact_provenance_actor_id_actor_actor_id_fk",
+          "tableFrom": "structured_fact_provenance",
+          "tableTo": "actor",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "actor_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "structured_fact_provenance_source": {
+          "name": "structured_fact_provenance_source",
+          "value": "\"structured_fact_provenance\".\"source\" IN ('parsed', 'extracted', 'human')"
+        },
+        "structured_fact_provenance_actor_presence": {
+          "name": "structured_fact_provenance_actor_presence",
+          "value": "(\"structured_fact_provenance\".\"source\" = 'human') = (\"structured_fact_provenance\".\"actor_id\" IS NOT NULL)"
+        },
+        "structured_fact_provenance_created_at": {
+          "name": "structured_fact_provenance_created_at",
+          "value": "\"structured_fact_provenance\".\"created_at\" >= 0"
+        }
+      }
+    },
+    "structured_fact": {
+      "name": "structured_fact",
+      "columns": {
+        "structured_fact_id": {
+          "name": "structured_fact_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "semantic_key": {
+          "name": "semantic_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "structured_fact_content_hash_unique": {
+          "name": "structured_fact_content_hash_unique",
+          "columns": [
+            "content_hash"
+          ],
+          "isUnique": true
+        },
+        "structured_fact_semantic_key_unique": {
+          "name": "structured_fact_semantic_key_unique",
+          "columns": [
+            "candidate_id",
+            "kind",
+            "semantic_key"
+          ],
+          "isUnique": true
+        },
+        "structured_fact_candidate": {
+          "name": "structured_fact_candidate",
+          "columns": [
+            "candidate_id"
+          ],
+          "isUnique": false
+        },
+        "structured_fact_kind": {
+          "name": "structured_fact_kind",
+          "columns": [
+            "kind"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "structured_fact_candidate_id_candidate_candidate_id_fk": {
+          "name": "structured_fact_candidate_id_candidate_candidate_id_fk",
+          "tableFrom": "structured_fact",
+          "tableTo": "candidate",
+          "columnsFrom": [
+            "candidate_id"
+          ],
+          "columnsTo": [
+            "candidate_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "structured_fact_kind": {
+          "name": "structured_fact_kind",
+          "value": "\"structured_fact\".\"kind\" IN ('employment_interval', 'work_authorization_statement', 'current_title', 'employer_history_entry', 'claimed_experience')"
+        },
+        "structured_fact_semantic_key": {
+          "name": "structured_fact_semantic_key",
+          "value": "length(\"structured_fact\".\"semantic_key\") BETWEEN 1 AND 256"
+        },
+        "structured_fact_payload_json": {
+          "name": "structured_fact_payload_json",
+          "value": "json_valid(\"structured_fact\".\"payload_json\") AND json_type(\"structured_fact\".\"payload_json\") = 'object'"
+        },
+        "structured_fact_content_json": {
+          "name": "structured_fact_content_json",
+          "value": "json_valid(\"structured_fact\".\"content_json\") AND json_type(\"structured_fact\".\"content_json\") = 'object'"
+        },
+        "structured_fact_content_hash": {
+          "name": "structured_fact_content_hash",
+          "value": "length(\"structured_fact\".\"content_hash\") = 64 AND \"structured_fact\".\"content_hash\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "structured_fact_created_at": {
+          "name": "structured_fact_created_at",
+          "value": "\"structured_fact\".\"created_at\" >= 0"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

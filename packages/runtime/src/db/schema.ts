@@ -1082,3 +1082,333 @@ export const hardRequirementAssessmentFacts = sqliteTable(
   ]
 );
 
+export const candidateTriageResults = sqliteTable(
+  "candidate_triage_result",
+  {
+    candidateTriageResultId: text("candidate_triage_result_id").primaryKey(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    kind: text("kind", { enum: ["initial", "correction"] }).notNull(),
+    availability: text("availability", { enum: ["complete", "unavailable"] }).notNull(),
+    status: text("status", {
+      enum: ["scored", "rejected_hard_requirement", "escalated"]
+    }).notNull(),
+    supersedesResultId: text("supersedes_result_id").references(
+      (): AnySQLiteColumn => candidateTriageResults.candidateTriageResultId,
+      { onDelete: "restrict" }
+    ),
+    contentJson: text("content_json").notNull(),
+    contentHash: text("content_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_triage_result_content_hash_unique").on(table.contentHash),
+    index("candidate_triage_result_candidate_created").on(
+      table.candidateId,
+      table.createdAt,
+      table.candidateTriageResultId
+    ),
+    check("candidate_triage_result_kind", sql`${table.kind} IN ('initial', 'correction')`),
+    check(
+      "candidate_triage_result_availability",
+      sql`${table.availability} IN ('complete', 'unavailable')`
+    ),
+    check(
+      "candidate_triage_result_status",
+      sql`${table.status} IN ('scored', 'rejected_hard_requirement', 'escalated')`
+    ),
+    check(
+      "candidate_triage_result_lineage",
+      sql`(
+        ${table.kind} = 'initial' AND ${table.supersedesResultId} IS NULL
+      ) OR (
+        ${table.kind} = 'correction' AND ${table.supersedesResultId} IS NOT NULL
+      )`
+    ),
+    check(
+      "candidate_triage_result_availability_status",
+      sql`(
+        ${table.availability} = 'unavailable' AND ${table.status} = 'escalated'
+      ) OR (
+        ${table.availability} = 'complete'
+        AND ${table.status} IN ('scored', 'escalated', 'rejected_hard_requirement')
+      )`
+    ),
+    check(
+      "candidate_triage_result_content_json",
+      sql`json_valid(${table.contentJson}) AND json_type(${table.contentJson}) = 'object'`
+    ),
+    check(
+      "candidate_triage_result_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("candidate_triage_result_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const scoreResults = sqliteTable(
+  "score_result",
+  {
+    scoreResultId: text("score_result_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    aggregateText: text("aggregate_text").notNull(),
+    confidenceText: text("confidence_text").notNull(),
+    aggregateBasisPoints: integer("aggregate_basis_points").notNull(),
+    confidenceBasisPoints: integer("confidence_basis_points").notNull(),
+    contentJson: text("content_json").notNull(),
+    contentHash: text("content_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("score_result_candidate_result_unique").on(table.candidateResultId),
+    uniqueIndex("score_result_content_hash_unique").on(table.contentHash),
+    check(
+      "score_result_aggregate_text",
+      sql`length(${table.aggregateText}) BETWEEN 3 AND 64
+        AND ${table.aggregateText} NOT GLOB '*[^0-9/]*'`
+    ),
+    check(
+      "score_result_confidence_text",
+      sql`length(${table.confidenceText}) BETWEEN 3 AND 64
+        AND ${table.confidenceText} NOT GLOB '*[^0-9/]*'`
+    ),
+    check(
+      "score_result_aggregate_basis_points",
+      sql`${table.aggregateBasisPoints} BETWEEN 0 AND 10000`
+    ),
+    check(
+      "score_result_confidence_basis_points",
+      sql`${table.confidenceBasisPoints} BETWEEN 0 AND 10000`
+    ),
+    check(
+      "score_result_content_json",
+      sql`json_valid(${table.contentJson})
+        AND json_type(${table.contentJson}) = 'object'
+        AND json_type(json_extract(${table.contentJson}, '$.contributions')) = 'array'
+        AND json_array_length(json_extract(${table.contentJson}, '$.contributions')) = 6`
+    ),
+    check(
+      "score_result_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("score_result_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidateResultEvidenceSpans = sqliteTable(
+  "candidate_result_evidence_span",
+  {
+    candidateResultEvidenceSpanId: text("candidate_result_evidence_span_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    evidenceSpanId: text("evidence_span_id")
+      .notNull()
+      .references(() => evidenceSpans.evidenceSpanId, { onDelete: "restrict" }),
+    spanOrdinal: integer("span_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_result_evidence_span_ordinal_unique").on(
+      table.candidateResultId,
+      table.spanOrdinal
+    ),
+    uniqueIndex("candidate_result_evidence_span_unique").on(
+      table.candidateResultId,
+      table.evidenceSpanId
+    ),
+    check("candidate_result_evidence_span_ordinal", sql`${table.spanOrdinal} >= 0`),
+    check("candidate_result_evidence_span_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidateResultEvidenceGaps = sqliteTable(
+  "candidate_result_evidence_gap",
+  {
+    candidateResultEvidenceGapId: text("candidate_result_evidence_gap_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    evidenceGapId: text("evidence_gap_id")
+      .notNull()
+      .references(() => evidenceGaps.evidenceGapId, { onDelete: "restrict" }),
+    dimensionId: text("dimension_id").notNull(),
+    gapOrdinal: integer("gap_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_result_evidence_gap_ordinal_unique").on(
+      table.candidateResultId,
+      table.gapOrdinal
+    ),
+    uniqueIndex("candidate_result_evidence_gap_unique").on(
+      table.candidateResultId,
+      table.evidenceGapId
+    ),
+    uniqueIndex("candidate_result_evidence_gap_dimension_unique").on(
+      table.candidateResultId,
+      table.dimensionId
+    ),
+    check(
+      "candidate_result_evidence_gap_dimension_id",
+      sql`length(${table.dimensionId}) BETWEEN 1 AND 128`
+    ),
+    check("candidate_result_evidence_gap_ordinal", sql`${table.gapOrdinal} >= 0`),
+    check("candidate_result_evidence_gap_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidateResultDimensionAssessments = sqliteTable(
+  "candidate_result_dimension_assessment",
+  {
+    candidateResultDimensionAssessmentId: text(
+      "candidate_result_dimension_assessment_id"
+    ).primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    dimensionAssessmentId: text("dimension_assessment_id")
+      .notNull()
+      .references(() => dimensionAssessments.dimensionAssessmentId, {
+        onDelete: "restrict"
+      }),
+    dimensionId: text("dimension_id").notNull(),
+    assessmentOrdinal: integer("assessment_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_result_dimension_assessment_ordinal_unique").on(
+      table.candidateResultId,
+      table.assessmentOrdinal
+    ),
+    uniqueIndex("candidate_result_dimension_assessment_unique").on(
+      table.candidateResultId,
+      table.dimensionAssessmentId
+    ),
+    uniqueIndex("candidate_result_dimension_assessment_dimension_unique").on(
+      table.candidateResultId,
+      table.dimensionId
+    ),
+    check(
+      "candidate_result_dimension_assessment_dimension_id",
+      sql`length(${table.dimensionId}) BETWEEN 1 AND 128`
+    ),
+    check(
+      "candidate_result_dimension_assessment_ordinal",
+      sql`${table.assessmentOrdinal} >= 0`
+    ),
+    check(
+      "candidate_result_dimension_assessment_created_at",
+      sql`${table.createdAt} >= 0`
+    )
+  ]
+);
+
+export const candidateResultStructuredFacts = sqliteTable(
+  "candidate_result_structured_fact",
+  {
+    candidateResultStructuredFactId: text("candidate_result_structured_fact_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    structuredFactId: text("structured_fact_id")
+      .notNull()
+      .references(() => structuredFacts.structuredFactId, { onDelete: "restrict" }),
+    factOrdinal: integer("fact_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_result_structured_fact_ordinal_unique").on(
+      table.candidateResultId,
+      table.factOrdinal
+    ),
+    uniqueIndex("candidate_result_structured_fact_unique").on(
+      table.candidateResultId,
+      table.structuredFactId
+    ),
+    check("candidate_result_structured_fact_ordinal", sql`${table.factOrdinal} >= 0`),
+    check("candidate_result_structured_fact_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidateResultFactConflicts = sqliteTable(
+  "candidate_result_fact_conflict",
+  {
+    candidateResultFactConflictId: text("candidate_result_fact_conflict_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    factConflictId: text("fact_conflict_id")
+      .notNull()
+      .references(() => factConflicts.factConflictId, { onDelete: "restrict" }),
+    conflictOrdinal: integer("conflict_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_result_fact_conflict_ordinal_unique").on(
+      table.candidateResultId,
+      table.conflictOrdinal
+    ),
+    uniqueIndex("candidate_result_fact_conflict_unique").on(
+      table.candidateResultId,
+      table.factConflictId
+    ),
+    check("candidate_result_fact_conflict_ordinal", sql`${table.conflictOrdinal} >= 0`),
+    check("candidate_result_fact_conflict_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidateResultHardRequirementAssessments = sqliteTable(
+  "candidate_result_hard_requirement_assessment",
+  {
+    candidateResultHardRequirementAssessmentId: text(
+      "candidate_result_hard_requirement_assessment_id"
+    ).primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    hardRequirementAssessmentId: text("hard_requirement_assessment_id")
+      .notNull()
+      .references(() => hardRequirementAssessments.hardRequirementAssessmentId, {
+        onDelete: "restrict"
+      }),
+    requirementOrdinal: integer("requirement_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_result_hard_requirement_assessment_ordinal_unique").on(
+      table.candidateResultId,
+      table.requirementOrdinal
+    ),
+    uniqueIndex("candidate_result_hard_requirement_assessment_unique").on(
+      table.candidateResultId,
+      table.hardRequirementAssessmentId
+    ),
+    check(
+      "candidate_result_hard_requirement_assessment_ordinal",
+      sql`${table.requirementOrdinal} >= 0`
+    ),
+    check(
+      "candidate_result_hard_requirement_assessment_created_at",
+      sql`${table.createdAt} >= 0`
+    )
+  ]
+);
+
