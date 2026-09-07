@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as runtime from "./index.js";
 
 describe("runtime public API", () => {
-  it("exports the audit, connection, command protocol, immutable entity, corpus, role, rubric, evidence, extraction, schema, and error foundation", () => {
+  it("exports the audit, connection, command protocol, immutable entity, corpus, role, rubric, evidence, extraction, snapshot, schema, and error foundation", () => {
     expect(Object.keys(runtime).sort()).toEqual([
       "ActorDraftSchema",
       "ActorKindSchema",
@@ -89,6 +89,12 @@ describe("runtime public API", () => {
       "RoleSchema",
       "RubricDimensionDraftSchema",
       "RubricDraftSchema",
+      "RunInputScoringPolicySchema",
+      "RunInputSnapshotContentSchema",
+      "RunInputSnapshotDimensionSchema",
+      "RunInputSnapshotDraftSchema",
+      "RunInputSnapshotLimitsSchema",
+      "RunInputSnapshotSchema",
       "RuntimeDatabaseOptionsSchema",
       "RuntimeErrorSchema",
       "SYSTEM_ACTOR_ID",
@@ -119,6 +125,7 @@ describe("runtime public API", () => {
       "extractionSpecs",
       "hashCorpusManifestContent",
       "hashExtractionSpecContent",
+      "hashRunInputSnapshotContent",
       "insertActor",
       "insertCandidate",
       "insertCandidateDocument",
@@ -138,6 +145,7 @@ describe("runtime public API", () => {
       "insertRole",
       "insertRubric",
       "insertRubricDimension",
+      "insertRunInputSnapshot",
       "insertSourceDocument",
       "openRuntimeDatabase",
       "prepareActor",
@@ -160,6 +168,7 @@ describe("runtime public API", () => {
       "prepareRole",
       "prepareRubric",
       "prepareRubricDimension",
+      "prepareRunInputSnapshot",
       "prepareSourceDocument",
       "readActor",
       "readAuditEvent",
@@ -186,16 +195,20 @@ describe("runtime public API", () => {
       "readRole",
       "readRubric",
       "readRubricDimension",
+      "readRunInputSnapshot",
+      "readRunInputSnapshotByContentHash",
       "readSourceDocument",
       "requirements",
       "roles",
       "rubricDimensions",
       "rubrics",
       "runImmediateTransaction",
+      "runInputSnapshots",
       "runtimeMigrationSmoke",
       "sourceDocuments",
       "validateCorpusManifestContent",
-      "validateExtractionSpecContent"
+      "validateExtractionSpecContent",
+      "validateRunInputSnapshotContent"
     ]);
   });
 

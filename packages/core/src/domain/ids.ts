@@ -78,6 +78,9 @@ export type ReviewDecisionId = z.infer<typeof ReviewDecisionIdSchema>;
 export const RoleIdSchema = printableAsciiId.brand<"RoleId">();
 export type RoleId = z.infer<typeof RoleIdSchema>;
 
+export const RunInputSnapshotIdSchema = printableAsciiId.brand<"RunInputSnapshotId">();
+export type RunInputSnapshotId = z.infer<typeof RunInputSnapshotIdSchema>;
+
 export const RubricDimensionIdSchema = printableAsciiId.brand<"RubricDimensionId">();
 export type RubricDimensionId = z.infer<typeof RubricDimensionIdSchema>;
 

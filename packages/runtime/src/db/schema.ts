@@ -794,3 +794,51 @@ export const extractionFailures = sqliteTable(
   ]
 );
 
+export const runInputSnapshots = sqliteTable(
+  "run_input_snapshot",
+  {
+    runInputSnapshotId: text("run_input_snapshot_id").primaryKey(),
+    contentJson: text("content_json").notNull(),
+    contentHash: text("content_hash").notNull(),
+    frozenDate: text("frozen_date").notNull(),
+    rubricVersion: text("rubric_version").notNull(),
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.roleId, { onDelete: "restrict" }),
+    extractorVersion: text("extractor_version").notNull(),
+    promptTemplateVersion: text("prompt_template_version").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("run_input_snapshot_content_hash_unique").on(table.contentHash),
+    index("run_input_snapshot_role").on(table.roleId),
+    index("run_input_snapshot_frozen_date").on(table.frozenDate),
+    check(
+      "run_input_snapshot_content_json",
+      sql`json_valid(${table.contentJson}) AND json_type(${table.contentJson}) = 'object'`
+    ),
+    check(
+      "run_input_snapshot_content_hash",
+      sql`length(${table.contentHash}) = 64 AND ${table.contentHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check(
+      "run_input_snapshot_frozen_date",
+      sql`length(${table.frozenDate}) = 10
+        AND ${table.frozenDate} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
+    ),
+    check(
+      "run_input_snapshot_rubric_version",
+      sql`length(${table.rubricVersion}) BETWEEN 1 AND 64`
+    ),
+    check(
+      "run_input_snapshot_extractor_version",
+      sql`length(${table.extractorVersion}) BETWEEN 1 AND 64`
+    ),
+    check(
+      "run_input_snapshot_prompt_template_version",
+      sql`length(${table.promptTemplateVersion}) BETWEEN 1 AND 64`
+    ),
+    check("run_input_snapshot_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+

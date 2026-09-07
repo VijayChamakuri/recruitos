@@ -27,6 +27,7 @@ import {
   roles,
   rubricDimensions,
   rubrics,
+  runInputSnapshots,
   runtimeMigrationSmoke,
   sourceDocuments
 } from "./schema.js";
@@ -247,7 +248,8 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["dimension_assessment_evidence_span", dimensionAssessmentEvidenceSpans],
   ["extraction_spec", extractionSpecs],
   ["extraction_artifact", extractionArtifacts],
-  ["extraction_failure", extractionFailures]
+  ["extraction_failure", extractionFailures],
+  ["run_input_snapshot", runInputSnapshots]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {
