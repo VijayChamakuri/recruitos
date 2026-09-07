@@ -14,6 +14,7 @@ import {
   candidateResultEvidenceSpans,
   candidateResultFactConflicts,
   candidateResultHardRequirementAssessments,
+  candidateResultReasons,
   candidateResultStructuredFacts,
   candidateTriageResults,
   candidates,
@@ -188,7 +189,9 @@ function parseMigrations(): Map<string, SqlTable> {
       }
 
       const createIndex =
-        /^CREATE (UNIQUE )?INDEX `([^`]+)` ON `([^`]+)` \(([^)]*)\)\s*;?$/u.exec(statement);
+        /^CREATE (UNIQUE )?INDEX `([^`]+)` ON `([^`]+)` \(([^)]*)\)(?:\s+WHERE[\s\S]+)?\s*;?$/u.exec(
+          statement
+        );
       if (createIndex !== null) {
         const target = tables.get(createIndex[3]!);
         expect(target, `index ${createIndex[2]!} targets an unknown table`).toBeDefined();
@@ -279,7 +282,8 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["candidate_result_dimension_assessment", candidateResultDimensionAssessments],
   ["candidate_result_structured_fact", candidateResultStructuredFacts],
   ["candidate_result_fact_conflict", candidateResultFactConflicts],
-  ["candidate_result_hard_requirement_assessment", candidateResultHardRequirementAssessments]
+  ["candidate_result_hard_requirement_assessment", candidateResultHardRequirementAssessments],
+  ["candidate_result_reason", candidateResultReasons]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {
