@@ -5,6 +5,7 @@ export * from "./facts.js";
 export * from "./hashes.js";
 export * from "./ids.js";
 export * from "./integers.js";
+export * from "./proposal.js";
 export * from "./reason-code.js";
 export * from "./resolution.js";
 export * from "./status.js";

@@ -1621,3 +1621,130 @@ export const resolutionTaskHeads = sqliteTable(
   ]
 );
 
+export const proposals = sqliteTable(
+  "proposal",
+  {
+    proposalId: text("proposal_id").primaryKey(),
+    candidateResultId: text("candidate_result_id")
+      .notNull()
+      .references(() => candidateTriageResults.candidateTriageResultId, {
+        onDelete: "restrict"
+      }),
+    proposalKind: text("proposal_kind").notNull(),
+    proposalOrdinal: integer("proposal_ordinal").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("proposal_ordinal_unique").on(table.candidateResultId, table.proposalOrdinal),
+    uniqueIndex("proposal_shortlist_result_unique")
+      .on(table.candidateResultId)
+      .where(sql`${table.proposalKind} = 'shortlist_inclusion'`),
+    index("proposal_result_created").on(
+      table.candidateResultId,
+      table.createdAt,
+      table.proposalId
+    ),
+    check(
+      "proposal_kind",
+      sql`${table.proposalKind} IN (
+        'follow_up_draft',
+        'ats_stage_change',
+        'shortlist_inclusion',
+        'rejection'
+      )`
+    ),
+    check(
+      "proposal_payload_json",
+      sql`json_valid(${table.payloadJson}) AND json_type(${table.payloadJson}) = 'object'`
+    ),
+    check(
+      "proposal_payload_hash",
+      sql`length(${table.payloadHash}) = 64 AND ${table.payloadHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("proposal_ordinal", sql`${table.proposalOrdinal} >= 0`),
+    check("proposal_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const proposalEvidenceSpans = sqliteTable(
+  "proposal_evidence_span",
+  {
+    proposalEvidenceSpanId: text("proposal_evidence_span_id").primaryKey(),
+    proposalId: text("proposal_id")
+      .notNull()
+      .references(() => proposals.proposalId, { onDelete: "restrict" }),
+    evidenceSpanId: text("evidence_span_id")
+      .notNull()
+      .references(() => evidenceSpans.evidenceSpanId, { onDelete: "restrict" }),
+    spanOrdinal: integer("span_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("proposal_evidence_span_ordinal_unique").on(table.proposalId, table.spanOrdinal),
+    uniqueIndex("proposal_evidence_span_unique").on(table.proposalId, table.evidenceSpanId),
+    check("proposal_evidence_span_ordinal", sql`${table.spanOrdinal} >= 0`),
+    check("proposal_evidence_span_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const reviewDecisions = sqliteTable(
+  "review_decision",
+  {
+    reviewDecisionId: text("review_decision_id").primaryKey(),
+    proposalId: text("proposal_id")
+      .notNull()
+      .references(() => proposals.proposalId, { onDelete: "restrict" }),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => actors.actorId, { onDelete: "restrict" }),
+    decisionKind: text("decision_kind").notNull(),
+    decisionOrdinal: integer("decision_ordinal").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("review_decision_ordinal_unique").on(table.proposalId, table.decisionOrdinal),
+    index("review_decision_proposal_created").on(
+      table.proposalId,
+      table.createdAt,
+      table.reviewDecisionId
+    ),
+    check(
+      "review_decision_kind",
+      sql`${table.decisionKind} IN (
+        'approve',
+        'edit',
+        'reject',
+        'request_evidence'
+      )`
+    ),
+    check("review_decision_actor", sql`${table.actorId} != 'system:runtime'`),
+    check(
+      "review_decision_payload_json",
+      sql`json_valid(${table.payloadJson}) AND json_type(${table.payloadJson}) = 'object'`
+    ),
+    check(
+      "review_decision_payload_hash",
+      sql`length(${table.payloadHash}) = 64 AND ${table.payloadHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("review_decision_ordinal", sql`${table.decisionOrdinal} >= 0`),
+    check("review_decision_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const proposalHeads = sqliteTable(
+  "proposal_head",
+  {
+    proposalId: text("proposal_id")
+      .primaryKey()
+      .references(() => proposals.proposalId, { onDelete: "restrict" }),
+    currentDecisionId: text("current_decision_id")
+      .notNull()
+      .references(() => reviewDecisions.reviewDecisionId, { onDelete: "restrict" }),
+    version: integer("version").notNull()
+  },
+  (table) => [check("proposal_head_version", sql`${table.version} >= 1`)]
+);
