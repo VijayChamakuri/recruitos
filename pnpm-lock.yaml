@@ -27,6 +27,24 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@24.3.1)(tsx@4.23.13)
 
+  apps/cli:
+    dependencies:
+      '@recruitos/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      zod:
+        specifier: 4.1.5
+        version: 4.1.5
+
+  apps/web:
+    dependencies:
+      '@recruitos/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@recruitos/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
   packages/core:
     dependencies:
       zod:

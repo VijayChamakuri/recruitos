@@ -1,0 +1,244 @@
+import type { Result } from "@recruitos/core";
+
+export type RuntimeError = Readonly<{
+  code: string;
+  message: string;
+  retryable: boolean;
+  details?: unknown;
+}>;
+
+export type CandidateTriageStatus =
+  | "shortlisted"
+  | "reviewed"
+  | "escalated"
+  | "rejected"
+  | "pending";
+
+export type CandidateSummary = Readonly<{
+  candidateId: string;
+  sourceKey: string;
+  channel: "inbound" | "sourced";
+  roleId: string;
+  roleTitle: string;
+  status: CandidateTriageStatus;
+  score: number | null;
+  confidence: number | null;
+  reasons: readonly string[];
+  tasksCount: number;
+  sealed: boolean;
+  createdAt: number;
+}>;
+
+export type ArithmeticTerm = Readonly<{
+  dimensionId: string;
+  dimensionName: string;
+  weight: number;
+  level: "none" | "weak" | "partial" | "strong";
+  levelScore: number;
+  weightedScore: number;
+}>;
+
+export type EvidenceSpan = Readonly<{
+  evidenceSpanId: string;
+  dimensionId: string;
+  start: number;
+  end: number;
+  quotedText: string;
+  polarity: "supporting" | "contradicting";
+  matchQuality: "exact" | "normalized" | "fuzzy";
+  documentId: string;
+}>;
+
+export type EvidenceGap = Readonly<{
+  dimensionId: string;
+  reason: string;
+}>;
+
+export type CandidateSourceDocumentView = Readonly<{
+  documentId: string;
+  documentKind: string;
+  label: string;
+  text: string;
+}>;
+
+export type CandidatePacket = Readonly<{
+  candidateId: string;
+  sourceKey: string;
+  channel: "inbound" | "sourced";
+  corpusTag: string;
+  roleId: string;
+  roleTitle: string;
+  status: CandidateTriageStatus;
+  score: number | null;
+  confidence: number | null;
+  contentHash: string;
+  sealed: boolean;
+  createdAt: number;
+  arithmeticTerms: readonly ArithmeticTerm[];
+  evidenceSpans: readonly EvidenceSpan[];
+  evidenceGaps: readonly EvidenceGap[];
+  documents: readonly CandidateSourceDocumentView[];
+  tasks: readonly ResolutionTaskSummary[];
+}>;
+
+export type TriageRunSummary = Readonly<{
+  runId: string;
+  roleId: string;
+  totalCandidates: number;
+  scoredCount: number;
+  escalatedCount: number;
+  shortlistCount: number;
+  sealedCount: number;
+  durationMs: number;
+  sealed: boolean;
+}>;
+
+export type ResolutionTaskStatus =
+  | "open"
+  | "review_required"
+  | "resolved"
+  | "dismissed";
+
+export type ResolutionTaskSummary = Readonly<{
+  resolutionTaskId: string;
+  candidateId: string;
+  candidateResultId: string;
+  reasonCode: string;
+  status: ResolutionTaskStatus;
+  taskOrdinal: number;
+  currentActionId?: string;
+  version: number;
+  createdAt: number;
+}>;
+
+export type ResolutionTaskDetail = ResolutionTaskSummary &
+  Readonly<{
+    actions: readonly {
+      actionId: string;
+      actorId: string;
+      actionKind: string;
+      rationale: string;
+      createdAt: number;
+    }[];
+  }>;
+
+export type ProposalStatus = "pending" | "approved" | "rejected";
+
+export type ProposalSummary = Readonly<{
+  proposalId: string;
+  candidateId: string;
+  kind: string;
+  status: ProposalStatus;
+  proposedChange: string;
+  version: number;
+  createdAt: number;
+}>;
+
+export type SystemStatusSummary = Readonly<{
+  databasePath: string;
+  schemaVersion: number;
+  activeRunId: string;
+  candidateCount: number;
+  openTasksCount: number;
+  pendingProposalsCount: number;
+  auditEventsCount: number;
+  knownLimitationsCount: number;
+  isSealed: boolean;
+}>;
+
+export type AuditEventSummary = Readonly<{
+  auditEventId: string;
+  eventName: string;
+  actorId: string;
+  occurredAt: number;
+  payloadHash: string;
+}>;
+
+export type ListCandidatesOptions = Readonly<{
+  roleId?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+  channel?: ("inbound" | "sourced") | undefined;
+  status?: CandidateTriageStatus | undefined;
+}>;
+
+export type RunTriageOptions = Readonly<{
+  roleId?: string | undefined;
+  candidateIds?: readonly string[] | undefined;
+  dryRun?: boolean | undefined;
+}>;
+
+export type ListResolutionTasksOptions = Readonly<{
+  candidateId?: string | undefined;
+  status?: ResolutionTaskStatus | undefined;
+}>;
+
+export type RecordResolutionActionInput = Readonly<{
+  taskId: string;
+  actionKind: string;
+  actorId: string;
+  rationale: string;
+  expectedVersion: number;
+}>;
+
+export type ListProposalsOptions = Readonly<{
+  candidateId?: string | undefined;
+  status?: ProposalStatus | undefined;
+}>;
+
+export type RecordReviewDecisionInput = Readonly<{
+  proposalId: string;
+  decision: "approve" | "reject";
+  actorId: string;
+  rationale: string;
+  expectedVersion: number;
+}>;
+
+export type ListAuditEventsOptions = Readonly<{
+  limit?: number | undefined;
+}>;
+
+export interface RecruitosComposition {
+  listCandidates(
+    options?: ListCandidatesOptions
+  ): Promise<Result<readonly CandidateSummary[], RuntimeError>>;
+
+  getCandidatePacket(
+    candidateId: string
+  ): Promise<Result<CandidatePacket, RuntimeError>>;
+
+  runTriage(
+    options?: RunTriageOptions
+  ): Promise<Result<TriageRunSummary, RuntimeError>>;
+
+  getStatus(): Promise<Result<SystemStatusSummary, RuntimeError>>;
+
+  listResolutionTasks(
+    options?: ListResolutionTasksOptions
+  ): Promise<Result<readonly ResolutionTaskSummary[], RuntimeError>>;
+
+  getResolutionTask(
+    taskId: string
+  ): Promise<Result<ResolutionTaskDetail, RuntimeError>>;
+
+  recordResolutionAction(
+    input: RecordResolutionActionInput
+  ): Promise<
+    Result<
+      { actionId: string; newVersion: number; derivedStatus: ResolutionTaskStatus },
+      RuntimeError
+    >
+  >;
+
+  listProposals(
+    options?: ListProposalsOptions
+  ): Promise<Result<readonly ProposalSummary[], RuntimeError>>;
+
+  recordReviewDecision(
+    input: RecordReviewDecisionInput
+  ): Promise<Result<{ decisionId: string; newVersion: number }, RuntimeError>>;
+
+  listAuditEvents(
+    options?: ListAuditEventsOptions
+  ): Promise<Result<readonly AuditEventSummary[], RuntimeError>>;
+}

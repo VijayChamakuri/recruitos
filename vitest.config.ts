@@ -33,6 +33,20 @@ export default defineConfig({
           name: "integration",
           include: ["tests/integration/**/*.test.ts"]
         }
+      },
+      {
+        extends: true,
+        test: {
+          name: "cli",
+          include: ["apps/cli/src/**/*.test.ts"]
+        }
+      },
+      {
+        extends: true,
+        test: {
+          name: "web",
+          include: ["apps/web/src/**/*.test.ts"]
+        }
       }
     ],
     coverage: {

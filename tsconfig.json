@@ -2,6 +2,8 @@
   "files": [],
   "references": [
     { "path": "./packages/core" },
-    { "path": "./packages/runtime" }
+    { "path": "./packages/runtime" },
+    { "path": "./apps/cli" },
+    { "path": "./apps/web" }
   ]
 }
