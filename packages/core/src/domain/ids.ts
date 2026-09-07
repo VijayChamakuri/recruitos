@@ -9,6 +9,12 @@ const printableAsciiId = z
 export const ActorIdSchema = printableAsciiId.brand<"ActorId">();
 export type ActorId = z.infer<typeof ActorIdSchema>;
 
+export const AttemptClaimIdSchema = printableAsciiId.brand<"AttemptClaimId">();
+export type AttemptClaimId = z.infer<typeof AttemptClaimIdSchema>;
+
+export const AttemptWorkItemIdSchema = printableAsciiId.brand<"AttemptWorkItemId">();
+export type AttemptWorkItemId = z.infer<typeof AttemptWorkItemIdSchema>;
+
 export const AuditEventIdSchema = printableAsciiId.brand<"AuditEventId">();
 export type AuditEventId = z.infer<typeof AuditEventIdSchema>;
 
@@ -164,6 +170,9 @@ export type StructuredFactId = z.infer<typeof StructuredFactIdSchema>;
 export const StructuredFactProvenanceIdSchema =
   printableAsciiId.brand<"StructuredFactProvenanceId">();
 export type StructuredFactProvenanceId = z.infer<typeof StructuredFactProvenanceIdSchema>;
+
+export const TriageAttemptIdSchema = printableAsciiId.brand<"TriageAttemptId">();
+export type TriageAttemptId = z.infer<typeof TriageAttemptIdSchema>;
 
 export const TriageRunIdSchema = printableAsciiId.brand<"TriageRunId">();
 export type TriageRunId = z.infer<typeof TriageRunIdSchema>;

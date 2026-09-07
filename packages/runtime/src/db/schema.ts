@@ -1874,3 +1874,177 @@ export const triageRunSeals = sqliteTable(
     check("triage_run_seal_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
+
+export const triageAttempts = sqliteTable(
+  "triage_attempt",
+  {
+    triageAttemptId: text("triage_attempt_id").primaryKey(),
+    kind: text("kind", {
+      enum: ["main_run", "variant_run", "candidate_correction"]
+    }).notNull(),
+    snapshotId: text("snapshot_id")
+      .notNull()
+      .references(() => runInputSnapshots.runInputSnapshotId, { onDelete: "restrict" }),
+    corpusManifestId: text("corpus_manifest_id")
+      .notNull()
+      .references(() => corpusManifests.corpusManifestId, { onDelete: "restrict" }),
+    originRunId: text("origin_run_id").references(() => triageRuns.triageRunId, {
+      onDelete: "restrict"
+    }),
+    baseResultId: text("base_result_id").references(
+      () => candidateTriageResults.candidateTriageResultId,
+      { onDelete: "restrict" }
+    ),
+    requestActionId: text("request_action_id").references(
+      () => resolutionActions.resolutionActionId,
+      { onDelete: "restrict" }
+    ),
+    scopeCandidateId: text("scope_candidate_id").references(() => candidates.candidateId, {
+      onDelete: "restrict"
+    }),
+    status: text("status", {
+      enum: ["in_progress", "ready", "blocked"]
+    }).notNull(),
+    version: integer("version").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("triage_attempt_official_snapshot_manifest_unique")
+      .on(table.kind, table.snapshotId, table.corpusManifestId)
+      .where(sql`${table.kind} IN ('main_run', 'variant_run')`),
+    uniqueIndex("triage_attempt_correction_request_unique")
+      .on(table.requestActionId)
+      .where(sql`${table.kind} = 'candidate_correction'`),
+    index("triage_attempt_snapshot_manifest").on(table.snapshotId, table.corpusManifestId),
+    check(
+      "triage_attempt_kind",
+      sql`${table.kind} IN ('main_run', 'variant_run', 'candidate_correction')`
+    ),
+    check("triage_attempt_status", sql`${table.status} IN ('in_progress', 'ready', 'blocked')`),
+    check("triage_attempt_version", sql`${table.version} >= 1`),
+    check("triage_attempt_created_at", sql`${table.createdAt} >= 0`),
+    check("triage_attempt_updated_at", sql`${table.updatedAt} >= ${table.createdAt}`),
+    check(
+      "triage_attempt_kind_shape",
+      sql`(
+        ${table.kind} IN ('main_run', 'variant_run')
+        AND ${table.baseResultId} IS NULL
+        AND ${table.requestActionId} IS NULL
+        AND ${table.scopeCandidateId} IS NULL
+      ) OR (
+        ${table.kind} = 'candidate_correction'
+        AND ${table.baseResultId} IS NOT NULL
+        AND ${table.requestActionId} IS NOT NULL
+        AND ${table.scopeCandidateId} IS NOT NULL
+      )`
+    )
+  ]
+);
+
+export const attemptWorkItems = sqliteTable(
+  "attempt_work_item",
+  {
+    attemptWorkItemId: text("attempt_work_item_id").primaryKey(),
+    triageAttemptId: text("triage_attempt_id")
+      .notNull()
+      .references(() => triageAttempts.triageAttemptId, { onDelete: "restrict" }),
+    workItemKey: text("work_item_key").notNull(),
+    manifestOrdinal: integer("manifest_ordinal").notNull(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    candidateDocumentId: text("candidate_document_id")
+      .notNull()
+      .references(() => candidateDocuments.candidateDocumentId, { onDelete: "restrict" }),
+    dimensionId: text("dimension_id").notNull(),
+    extractionSpecId: text("extraction_spec_id")
+      .notNull()
+      .references(() => extractionSpecs.extractionSpecId, { onDelete: "restrict" }),
+    state: text("state", {
+      enum: [
+        "pending",
+        "claimed",
+        "succeeded",
+        "reviewable_failure",
+        "retryable_failure",
+        "blocked_failure"
+      ]
+    }).notNull(),
+    claimId: text("claim_id"),
+    claimedAt: integer("claimed_at"),
+    claimExpiresAt: integer("claim_expires_at"),
+    attemptCount: integer("attempt_count").notNull(),
+    extractionArtifactId: text("extraction_artifact_id").references(
+      () => extractionArtifacts.extractionArtifactId,
+      { onDelete: "restrict" }
+    ),
+    extractionFailureId: text("extraction_failure_id").references(
+      () => extractionFailures.extractionFailureId,
+      { onDelete: "restrict" }
+    ),
+    version: integer("version").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("attempt_work_item_attempt_key_unique").on(
+      table.triageAttemptId,
+      table.workItemKey
+    ),
+    index("attempt_work_item_attempt_state_ordinal").on(
+      table.triageAttemptId,
+      table.state,
+      table.manifestOrdinal,
+      table.workItemKey
+    ),
+    index("attempt_work_item_active_claim_expiry")
+      .on(table.claimExpiresAt, table.attemptWorkItemId)
+      .where(sql`${table.state} = 'claimed'`),
+    check("attempt_work_item_work_item_key", sql`length(${table.workItemKey}) BETWEEN 1 AND 200`),
+    check("attempt_work_item_manifest_ordinal", sql`${table.manifestOrdinal} >= 0`),
+    check("attempt_work_item_dimension_id", sql`length(${table.dimensionId}) BETWEEN 1 AND 128`),
+    check(
+      "attempt_work_item_state",
+      sql`${table.state} IN (
+        'pending',
+        'claimed',
+        'succeeded',
+        'reviewable_failure',
+        'retryable_failure',
+        'blocked_failure'
+      )`
+    ),
+    check("attempt_work_item_attempt_count", sql`${table.attemptCount} >= 0`),
+    check("attempt_work_item_version", sql`${table.version} >= 1`),
+    check("attempt_work_item_created_at", sql`${table.createdAt} >= 0`),
+    check("attempt_work_item_updated_at", sql`${table.updatedAt} >= ${table.createdAt}`),
+    check(
+      "attempt_work_item_state_shape",
+      sql`(
+        ${table.state} = 'pending'
+        AND ${table.claimId} IS NULL
+        AND ${table.claimedAt} IS NULL
+        AND ${table.claimExpiresAt} IS NULL
+        AND ${table.extractionArtifactId} IS NULL
+        AND ${table.extractionFailureId} IS NULL
+      ) OR (
+        ${table.state} = 'claimed'
+        AND ${table.claimId} IS NOT NULL
+        AND ${table.claimedAt} IS NOT NULL
+        AND ${table.claimExpiresAt} IS NOT NULL
+        AND ${table.claimExpiresAt} >= ${table.claimedAt}
+        AND ${table.extractionArtifactId} IS NULL
+        AND ${table.extractionFailureId} IS NULL
+      ) OR (
+        ${table.state} = 'succeeded'
+        AND ${table.extractionArtifactId} IS NOT NULL
+        AND ${table.extractionFailureId} IS NULL
+      ) OR (
+        ${table.state} IN ('reviewable_failure', 'retryable_failure', 'blocked_failure')
+        AND ${table.extractionFailureId} IS NOT NULL
+        AND ${table.extractionArtifactId} IS NULL
+      )`
+    )
+  ]
+);

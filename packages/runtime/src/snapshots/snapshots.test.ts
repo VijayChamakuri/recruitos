@@ -625,6 +625,8 @@ describe("stored run input snapshot validation", () => {
         created_at integer NOT NULL
       ) STRICT;
       INSERT INTO run_input_snapshot_rebuilt SELECT * FROM run_input_snapshot;
+      DROP TABLE IF EXISTS attempt_work_item;
+      DROP TABLE IF EXISTS triage_attempt;
       DROP TABLE run_input_snapshot;
       ALTER TABLE run_input_snapshot_rebuilt RENAME TO run_input_snapshot;
     `);

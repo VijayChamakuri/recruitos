@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   actors,
+  attemptWorkItems,
   auditEvents,
   candidateDocuments,
   candidateHeads,
+  triageAttempts,
   triageRunMembers,
   triageRunSeals,
   triageRuns,
@@ -737,6 +739,61 @@ describe("runtime Drizzle schema", () => {
     ]);
     expect(sealConfig.foreignKeys).toHaveLength(1);
     expect(sealConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+  });
+
+  it("exposes triage attempt and work-item constraints", () => {
+    const attemptConfig = getTableConfig(triageAttempts);
+    expect(attemptConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "triage_attempt_created_at",
+      "triage_attempt_kind",
+      "triage_attempt_kind_shape",
+      "triage_attempt_status",
+      "triage_attempt_updated_at",
+      "triage_attempt_version"
+    ]);
+    expect(attemptConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "triage_attempt_correction_request_unique",
+      "triage_attempt_official_snapshot_manifest_unique",
+      "triage_attempt_snapshot_manifest"
+    ]);
+    const attemptIndexByName = Object.fromEntries(
+      attemptConfig.indexes.map((index) => [index.config.name, index])
+    );
+    expect(attemptIndexByName.triage_attempt_official_snapshot_manifest_unique?.config.where).toBeDefined();
+    expect(attemptIndexByName.triage_attempt_correction_request_unique?.config.where).toBeDefined();
+    expect(attemptIndexByName.triage_attempt_snapshot_manifest?.config.where).toBeUndefined();
+    expect(attemptConfig.foreignKeys).toHaveLength(6);
+    expect(
+      attemptConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
+
+    const itemConfig = getTableConfig(attemptWorkItems);
+    expect(itemConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "attempt_work_item_attempt_count",
+      "attempt_work_item_created_at",
+      "attempt_work_item_dimension_id",
+      "attempt_work_item_manifest_ordinal",
+      "attempt_work_item_state",
+      "attempt_work_item_state_shape",
+      "attempt_work_item_updated_at",
+      "attempt_work_item_version",
+      "attempt_work_item_work_item_key"
+    ]);
+    expect(itemConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "attempt_work_item_active_claim_expiry",
+      "attempt_work_item_attempt_key_unique",
+      "attempt_work_item_attempt_state_ordinal"
+    ]);
+    const itemIndexByName = Object.fromEntries(
+      itemConfig.indexes.map((index) => [index.config.name, index])
+    );
+    expect(itemIndexByName.attempt_work_item_active_claim_expiry?.config.where).toBeDefined();
+    expect(itemIndexByName.attempt_work_item_attempt_key_unique?.config.where).toBeUndefined();
+    expect(itemIndexByName.attempt_work_item_attempt_state_ordinal?.config.where).toBeUndefined();
+    expect(itemConfig.foreignKeys).toHaveLength(6);
+    expect(itemConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
+      true
+    );
   });
 
   it("exposes candidate-head constraints", () => {

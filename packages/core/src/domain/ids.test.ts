@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   ActorIdSchema,
+  AttemptClaimIdSchema,
+  AttemptWorkItemIdSchema,
   AuditEventIdSchema,
   CandidateIdSchema,
   CandidateResultDimensionAssessmentIdSchema,
@@ -45,6 +47,7 @@ import {
   StructuredFactEvidenceSpanIdSchema,
   StructuredFactIdSchema,
   StructuredFactProvenanceIdSchema,
+  TriageAttemptIdSchema,
   TriageRunIdSchema,
   TriageRunMemberIdSchema,
   TriageRunSealIdSchema,
@@ -54,6 +57,8 @@ import {
 
 const schemas = [
   ActorIdSchema,
+  AttemptClaimIdSchema,
+  AttemptWorkItemIdSchema,
   AuditEventIdSchema,
   CandidateIdSchema,
   CandidateResultDimensionAssessmentIdSchema,
@@ -97,6 +102,7 @@ const schemas = [
   StructuredFactEvidenceSpanIdSchema,
   StructuredFactIdSchema,
   StructuredFactProvenanceIdSchema,
+  TriageAttemptIdSchema,
   TriageRunIdSchema,
   TriageRunMemberIdSchema,
   TriageRunSealIdSchema

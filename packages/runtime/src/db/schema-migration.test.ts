@@ -7,9 +7,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   actors,
+  attemptWorkItems,
   auditEvents,
   candidateDocuments,
   candidateHeads,
+  triageAttempts,
   triageRunMembers,
   triageRunSeals,
   triageRuns,
@@ -380,7 +382,9 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["candidate_head", candidateHeads],
   ["triage_run", triageRuns],
   ["triage_run_member", triageRunMembers],
-  ["triage_run_seal", triageRunSeals]
+  ["triage_run_seal", triageRunSeals],
+  ["triage_attempt", triageAttempts],
+  ["attempt_work_item", attemptWorkItems]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {
@@ -472,5 +476,22 @@ describe("Drizzle schema matches the committed migrations", () => {
     for (const name of associationTriggers) {
       expect(dropped).not.toContain(name);
     }
+  });
+
+  it("restores the run-seal completeness trigger 0017 drops for attempt readiness", () => {
+    const sql = readFileSync(
+      join(migrationsFolder, "0017_triage_attempt_foundation.sql"),
+      "utf8"
+    );
+    const dropped = [...sql.matchAll(/DROP TRIGGER IF EXISTS `([^`]+)`/gu)].map(
+      (match) => match[1]!
+    );
+    expect(dropped).toEqual(["triage_run_seal_reject_incomplete"]);
+    const created = [...sql.matchAll(/CREATE TRIGGER `([^`]+)`/gu)].map((match) => match[1]!);
+    expect(created).toEqual(expect.arrayContaining(dropped));
+    expect(sql).toContain("main_run");
+    expect(sql).toContain("variant_run");
+    expect(sql).toContain("attempt_work_item");
+    expect(sql).toContain("reviewable_failure");
   });
 });

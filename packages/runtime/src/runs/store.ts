@@ -205,8 +205,8 @@ export function insertTriageRunMember(
 /**
  * Seal insert is the commit-time completeness proof. SQL triggers enforce
  * snapshot alignment, exact corpus membership, sealed initial results,
- * candidate head pointers, and exclusion of correction results. Attempt
- * readiness lands with triage_attempt.
+ * candidate head pointers, exclusion of correction results, and official
+ * attempt readiness.
  */
 export function insertTriageRunSeal(
   contextInput: unknown,
