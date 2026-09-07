@@ -744,12 +744,36 @@ describe("triage run persistence", () => {
   });
 
   it("requires an active command transaction for insert and read", () => {
+    const preparedRun = unwrap(prepareTriageRun(runDraft()));
+    const preparedMember = unwrap(prepareTriageRunMember(memberDraft(0)));
+    const preparedSeal = unwrap(prepareTriageRunSeal(sealDraft()));
+
     for (const contextInput of [undefined, null, {}, { nativeDatabase: null }]) {
-      expect(insertTriageRun(contextInput, unwrap(prepareTriageRun(runDraft())))).toEqual({
+      expect(insertTriageRun(contextInput, preparedRun)).toEqual({
+        ok: false,
+        error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
+      });
+      expect(insertTriageRunMember(contextInput, preparedMember)).toEqual({
+        ok: false,
+        error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
+      });
+      expect(insertTriageRunSeal(contextInput, preparedSeal)).toEqual({
         ok: false,
         error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
       });
       expect(readTriageRun(contextInput, "triage-run-1")).toEqual({
+        ok: false,
+        error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
+      });
+      expect(readTriageRunMember(contextInput, "triage-run-member-1")).toEqual({
+        ok: false,
+        error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
+      });
+      expect(readTriageRunMembers(contextInput, "triage-run-1")).toEqual({
+        ok: false,
+        error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
+      });
+      expect(readTriageRunSeal(contextInput, "triage-run-seal-1")).toEqual({
         ok: false,
         error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
       });
