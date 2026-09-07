@@ -6,14 +6,17 @@ import { fileURLToPath } from "node:url";
 import {
   computeAggregateScore,
   computeConfidence,
+  createDomainError,
   DRAFT_RUBRIC_V1,
+  err,
   formatRational,
   ok,
   sha256Hex,
   type Result
 } from "@recruitos/core";
+import * as core from "@recruitos/core";
 import type BetterSqlite3 from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { runImmediateTransaction, type ImmediateTransactionContext } from "../commands/index.js";
 import { openRuntimeDatabase, type RuntimeDatabaseConnection } from "../db/index.js";
@@ -59,7 +62,8 @@ import {
   readResolutionTask,
   readResolutionTaskHead,
   readResolutionTasks,
-  readResolutionTaskStatus
+  readResolutionTaskStatus,
+  ResolutionActionSchema
 } from "./index.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
@@ -685,6 +689,25 @@ describe("resolution task and action preparation", () => {
         message: "Resolution action actor does not match action kind"
       })
     });
+    const stringify = vi.spyOn(core, "canonicalJsonStringify").mockReturnValueOnce(
+      err(createDomainError("invalid_input", "Value is not canonical JSON"))
+    );
+    expect(prepareResolutionAction(actionDraft())).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Resolution action payload is not canonical JSON"
+      })
+    });
+    stringify.mockRestore();
+    const parse = vi.spyOn(ResolutionActionSchema, "safeParse").mockReturnValueOnce({
+      success: false,
+      error: { issues: [] }
+    } as never);
+    expect(prepareResolutionAction(actionDraft())).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid resolution action input" })
+    });
+    parse.mockRestore();
     expect(
       prepareResolutionAction(
         actionDraft({
@@ -1348,6 +1371,10 @@ describe("resolution action persistence and task heads", () => {
       ok: false,
       error: expect.objectContaining({ message: HEAD_TRANSACTION_REQUIRED })
     });
+    expect(readResolutionTaskStatus({}, "resolution-task-1")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: TASK_TRANSACTION_REQUIRED })
+    });
     expect(insertResolutionAction(failingContext(), prepared, 0)).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Resolution action insert failed" })
@@ -1366,6 +1393,24 @@ describe("resolution action persistence and task heads", () => {
     ).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Mutable head read failed" })
+    });
+    expect(
+      insertResolutionAction(
+        failingContext((sql) => {
+          if (sql.includes("INSERT INTO") && sql.includes("resolution_task_head")) {
+            throw new Error("head write boom");
+          }
+          return {
+            get: () => (sql.includes("resolution_task_head") ? undefined : {}),
+            run: () => ({ changes: 1 })
+          };
+        }),
+        prepared,
+        0
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Mutable head initialization failed" })
     });
     expect(insertResolutionAction(failingContext(), { resolutionActionId: "x" }, 0)).toEqual({
       ok: false,
@@ -1925,6 +1970,75 @@ describe("resolution schema checks and immutability", () => {
       ok: false,
       error: expect.objectContaining({
         message: "Resolution task head current_action_id must belong to the task"
+      })
+    });
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("surfaces a corrupt task head when deriving status", async () => {
+    const connection = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+    const task = unwrap(prepareResolutionTask(taskDraft()));
+    const action = unwrap(prepareResolutionAction(actionDraft()));
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedParents(context);
+        seedUnavailableResult(context);
+        seedReason(context);
+        unwrap(insertResolutionTask(context, task));
+        unwrap(insertResolutionAction(context, action, 0));
+        return ok(undefined);
+      })
+    );
+    rebuildTableWithoutChecks(database, "resolution_task_head", RESOLUTION_TASK_HEAD_COLUMNS, [
+      "resolution_task_head_reject_replace",
+      "resolution_task_head_insert_version",
+      "resolution_task_head_insert_action_owner",
+      "resolution_task_head_update_identity",
+      "resolution_task_head_update_version",
+      "resolution_task_head_update_action_owner"
+    ]);
+    database
+      .prepare("UPDATE resolution_task_head SET current_action_id = ?")
+      .run("x".repeat(150));
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readResolutionTaskStatus(context, task.resolutionTaskId)
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Stored resolution task head is invalid" })
+    });
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("surfaces a corrupt current action when deriving status", async () => {
+    const connection = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+    const task = unwrap(prepareResolutionTask(taskDraft()));
+    const action = unwrap(prepareResolutionAction(actionDraft()));
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedParents(context);
+        seedUnavailableResult(context);
+        seedReason(context);
+        unwrap(insertResolutionTask(context, task));
+        unwrap(insertResolutionAction(context, action, 0));
+        return ok(undefined);
+      })
+    );
+    rebuildTableWithoutChecks(database, "resolution_action", RESOLUTION_ACTION_COLUMNS, [
+      "resolution_action_reject_replace"
+    ]);
+    database.prepare("UPDATE resolution_action SET payload_json = ?").run("{");
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readResolutionTaskStatus(context, task.resolutionTaskId)
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Stored resolution action payload is not valid JSON"
       })
     });
     expect(connection.close().ok).toBe(true);
