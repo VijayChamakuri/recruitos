@@ -19,6 +19,11 @@
       "import": "./dist/adapters/index.js",
       "default": "./dist/adapters/index.js"
     },
+    "./attempts": {
+      "types": "./dist/attempts/index.d.ts",
+      "import": "./dist/attempts/index.js",
+      "default": "./dist/attempts/index.js"
+    },
     "./audit": {
       "types": "./dist/audit/index.d.ts",
       "import": "./dist/audit/index.js",

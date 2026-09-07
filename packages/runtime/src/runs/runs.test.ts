@@ -8,6 +8,7 @@ import {
   SCORING_POLICY_V1,
   err,
   ok,
+  sha256Hex,
   type Result
 } from "@recruitos/core";
 import type BetterSqlite3 from "better-sqlite3";
@@ -34,6 +35,20 @@ import {
   prepareCorpusMember,
   prepareCorpusMemberDocument
 } from "../corpus/index.js";
+import {
+  claimAttemptWorkItem,
+  completeAttemptWorkItem,
+  insertAttemptWorkItem,
+  insertTriageAttempt,
+  prepareAttemptWorkItem,
+  prepareTriageAttempt
+} from "../attempts/index.js";
+import {
+  insertExtractionArtifact,
+  insertExtractionSpec,
+  prepareExtractionArtifact,
+  prepareExtractionSpec
+} from "../extraction/index.js";
 import {
   insertResolutionTask,
   prepareResolutionTask
@@ -69,6 +84,10 @@ import {
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 const temporaryDirectories: string[] = [];
 const CREATED_AT = 1_788_700_000_000;
+const CLAIMED_AT = CREATED_AT + 1_000;
+const COMPLETED_AT = CREATED_AT + 2_000;
+const PROMPT_HASH = sha256Hex("prompt-template-v1");
+const SCHEMA_HASH = sha256Hex("extraction-output-schema-v1");
 const TRANSACTION_REQUIRED = "Triage run rows require an active command transaction";
 
 const TRIAGE_RUN_COLUMNS = `
@@ -460,10 +479,117 @@ function seedOfficialParents(
   }
 }
 
+function specDraft() {
+  return {
+    extractionSpecId: "extraction-spec-1",
+    content: {
+      modelId: "test-extractor",
+      extractorVersion: "extractor-v1",
+      promptTemplateVersion: "prompt-v1",
+      promptHash: PROMPT_HASH,
+      schemaHash: SCHEMA_HASH,
+      dimensionId: "evaluation_practice",
+      dimensionDefinition: "Evidence of structured evaluation practice.",
+      jobRelatedJustification: "Hiring managers review evaluation quality.",
+      limits: { ...EXTRACTION_LIMITS }
+    },
+    createdAt: CREATED_AT
+  };
+}
+
+function officialAttemptDraft() {
+  return {
+    triageAttemptId: "triage-attempt-1",
+    kind: "variant_run",
+    snapshotId: "run-input-snapshot-1",
+    corpusManifestId: "corpus-manifest-1",
+    originRunId: null,
+    baseResultId: null,
+    requestActionId: null,
+    scopeCandidateId: null,
+    status: "in_progress",
+    version: 1,
+    createdAt: CREATED_AT,
+    updatedAt: CREATED_AT
+  };
+}
+
+function workItemDraft(index: number) {
+  return {
+    attemptWorkItemId: `attempt-work-item-${index + 1}`,
+    triageAttemptId: "triage-attempt-1",
+    workItemKey: `candidate-${index + 1}:candidate-document-${index + 1}:evaluation_practice`,
+    manifestOrdinal: index,
+    candidateId: `candidate-${index + 1}`,
+    candidateDocumentId: `candidate-document-${index + 1}`,
+    dimensionId: "evaluation_practice",
+    extractionSpecId: "extraction-spec-1",
+    createdAt: CREATED_AT
+  };
+}
+
+function seedOfficialAttemptReady(
+  context: ImmediateTransactionContext,
+  memberCount = 1
+): void {
+  unwrap(insertExtractionSpec(context, unwrap(prepareExtractionSpec(specDraft()))));
+  unwrap(insertTriageAttempt(context, unwrap(prepareTriageAttempt(officialAttemptDraft()))));
+  for (let index = 0; index < memberCount; index += 1) {
+    unwrap(
+      insertExtractionArtifact(
+        context,
+        unwrap(
+          prepareExtractionArtifact({
+            extractionArtifactId: `extraction-artifact-${index + 1}`,
+            specId: "extraction-spec-1",
+            sourceDocumentId: `source-document-${index + 1}`,
+            acceptedOutput: {
+              dimensionId: "evaluation_practice",
+              proposedLevel: "partial",
+              spans: [
+                {
+                  start: 0,
+                  end: 9,
+                  quotedText: "Candidate",
+                  polarity: "supporting",
+                  matchQuality: "exact"
+                }
+              ]
+            },
+            rejectedClaims: [],
+            createdAt: CREATED_AT
+          })
+        )
+      )
+    );
+    unwrap(
+      insertAttemptWorkItem(context, unwrap(prepareAttemptWorkItem(workItemDraft(index))))
+    );
+    unwrap(
+      claimAttemptWorkItem(context, {
+        attemptWorkItemId: `attempt-work-item-${index + 1}`,
+        claimId: `attempt-claim-${index + 1}`,
+        claimedAt: CLAIMED_AT,
+        claimExpiresAt: CLAIMED_AT + 60_000,
+        expectedVersion: 1
+      })
+    );
+    unwrap(
+      completeAttemptWorkItem(context, {
+        attemptWorkItemId: `attempt-work-item-${index + 1}`,
+        extractionArtifactId: `extraction-artifact-${index + 1}`,
+        completedAt: COMPLETED_AT,
+        expectedVersion: 2
+      })
+    );
+  }
+}
+
 function publishOfficialRun(
   context: ImmediateTransactionContext,
   memberCount = 1
 ): void {
+  seedOfficialAttemptReady(context, memberCount);
   unwrap(insertTriageRun(context, unwrap(prepareTriageRun(runDraft()))));
   for (let index = 0; index < memberCount; index += 1) {
     unwrap(
@@ -535,6 +661,55 @@ describe("triage run persistence", () => {
         return ok(undefined);
       })
     );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a seal when the official attempt is missing or still pending", async () => {
+    const connection = await openMigratedDatabase();
+    expect(
+      runImmediateTransaction(connection, (context) => {
+        seedOfficialParents(context, 2);
+        unwrap(insertTriageRun(context, unwrap(prepareTriageRun(runDraft()))));
+        unwrap(
+          insertTriageRunMember(context, unwrap(prepareTriageRunMember(memberDraft(0))))
+        );
+        unwrap(
+          insertTriageRunMember(context, unwrap(prepareTriageRunMember(memberDraft(1))))
+        );
+        expect(
+          insertTriageRunSeal(context, unwrap(prepareTriageRunSeal(sealDraft())))
+        ).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Triage run seal insert failed" })
+        });
+        unwrap(insertExtractionSpec(context, unwrap(prepareExtractionSpec(specDraft()))));
+        unwrap(
+          insertTriageAttempt(context, unwrap(prepareTriageAttempt(officialAttemptDraft())))
+        );
+        unwrap(
+          insertAttemptWorkItem(context, unwrap(prepareAttemptWorkItem(workItemDraft(0))))
+        );
+        unwrap(
+          insertAttemptWorkItem(context, unwrap(prepareAttemptWorkItem(workItemDraft(1))))
+        );
+        expect(
+          insertTriageRunSeal(context, unwrap(prepareTriageRunSeal(sealDraft())))
+        ).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: "Triage run seal insert failed" })
+        });
+        return err({
+          code: "persistence_failed",
+          message: "rolled back after expected attempt-readiness failures",
+          retryable: false
+        } as RuntimeError);
+      })
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "rolled back after expected attempt-readiness failures"
+      })
+    });
     expect(connection.close().ok).toBe(true);
   });
 
