@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as runtime from "./index.js";
 
 describe("runtime public API", () => {
-  it("exports the audit, connection, command protocol, immutable entity, corpus, role, rubric, evidence, extraction, snapshot, fact, result, run, composition, schema, persistence pattern, and error foundation", () => {
+  it("exports the audit, connection, command protocol, immutable entity, corpus, role, rubric, evidence, extraction, snapshot, fact, result, run, composition, use case, schema, persistence pattern, and error foundation", () => {
     expect(Object.keys(runtime).sort()).toEqual([
       "ActorDraftSchema",
       "ActorKindSchema",
@@ -209,6 +209,7 @@ describe("runtime public API", () => {
       "actors",
       "appendAuditEvent",
       "auditEvents",
+      "buildCommandEnvelope",
       "candidateDocuments",
       "candidateHeads",
       "candidateResultDimensionAssessments",
@@ -399,6 +400,7 @@ describe("runtime public API", () => {
       "rubrics",
       "runImmediateTransaction",
       "runInputSnapshots",
+      "runUseCaseCommand",
       "runtimeMigrationSmoke",
       "scoreResults",
       "setCandidateHead",

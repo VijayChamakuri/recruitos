@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 8a64d1a |
+| origin/main | f9dd10b |
 | Migration lock held by | Cursor, for run and scheduler tables (`triage_run`, `triage_run_member`, `triage_run_seal`, then `triage_attempt`, `attempt_work_item`) |
 | Rubric v1 | DRAFT, not locked. Do not run `/plan-ceo-review` until a human answers the 10 practitioner questions in `docs/designs/rubric-lock-prep.md`. |
 
@@ -39,9 +39,9 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | draft PR #32 |
-| Claude Code | (none) | `packages/runtime/src/use-cases/contract.ts` in parallel. No schema, no drizzle. | building |
-| Antigravity | (none) | CLI and Web shells complete. Merged #29. Idle-complete. | idle-complete |
+| Cursor | cursor/triage-run-persistence-3840 | chain step 5: `triage_run` + member + seal | draft PR #32, rematched onto f9dd10b |
+| Claude Code | (none) | `use-cases/contract.ts` merged #30. Real use-cases wait on core text normalization (T9). | idle-complete |
+| Antigravity | (none) | createRuntime wiring + e2e/eval/bench harnesses. Merged #31. | idle-complete |
 
 ## Hard rules
 
@@ -78,5 +78,9 @@ your own rows plus the log.
 - 2026-09-07 Antigravity: started c/cli-web-shells for apps/cli and apps/web shells with stubbed composition interface.
 - 2026-09-07 Antigravity: apps/cli and apps/web complete. CLI parser, envelopes, exit codes, commands (triage, review, packet, status), Web 5 locked routes, safe-text, span-highlight, span-integrity-failure, instrument-band, Playwright and benchmark scaffolds. All 896 tests passing, 100 percent coverage on core/runtime, zero em dashes. Opened PR #29.
 - 2026-09-07 Antigravity: PR #29 merged to main at e8abc07. Branch deleted. Idle-complete.
+- 2026-09-07 Claude: PR #28 (composition root + ports) merged at ef9a1dc. Finding: runtime use-cases (T10) sit on core text normalization (T9), which is not built, so importCandidate and the resolution/proposal use-cases are blocked. Split agreed: Cursor takes the run + scheduler migration and the lock; Claude builds src/use-cases/contract.ts (envelope builder + executeCommand wrapper) on b/runtime-usecase-contract. pnpm check 923, test:coverage exit 0 / 100 percent, integration 21, no em dashes. Opening PR.
 - 2026-09-07 Cursor: taking the migration lock back for run and scheduler tables. Split: Cursor serial drizzle PRs (`triage_run` first, then `triage_attempt`). Claude builds `packages/runtime/src/use-cases/contract.ts` with no schema overlap.
 - 2026-09-07 Cursor: draft PR #32 opened for triage_run, triage_run_member, and triage_run_seal. Attempt-readiness waits for triage_attempt. Claude stays on use-cases/contract.ts.
+- 2026-09-07 Antigravity: started c/runtime-composition-wire-and-harnesses to wire createRuntime in apps/ and scaffold e2e, eval, and bench harnesses.
+- 2026-09-07 Antigravity: wired apps/ to createRuntime from #28 via RuntimeRecruitosComposition, added tests/e2e Playwright harness with 6 required workflow stubs (skipped), added tests/eval harness (Class 1 gate, Class 2 live IoU/bipartite matching, Class 3 synthetic bias audit demo), and bench/ suite (CLI, Web SSR, Matching). All 935 tests passing, 100 percent coverage on core/runtime, zero em dashes. Ready for review.
+- 2026-09-07 Cursor: merged origin/main f9dd10b into #32 after #30 (use-case contract) and #31 (createRuntime wiring + harnesses). Regenerating `public-api.test.ts` from `Object.keys(runtime).sort()`. Migration lock stays with Cursor.

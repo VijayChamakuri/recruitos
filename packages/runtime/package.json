@@ -103,6 +103,11 @@
       "types": "./dist/persistence/index.d.ts",
       "import": "./dist/persistence/index.js",
       "default": "./dist/persistence/index.js"
+    },
+    "./use-cases": {
+      "types": "./dist/use-cases/index.d.ts",
+      "import": "./dist/use-cases/index.js",
+      "default": "./dist/use-cases/index.js"
     }
   },
   "scripts": {

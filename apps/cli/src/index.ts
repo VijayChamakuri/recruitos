@@ -30,6 +30,9 @@ export {
   type SystemStatusSummary,
   type AuditEventSummary,
   createStubComposition,
-  StubRecruitosComposition
+  StubRecruitosComposition,
+  createCompositionFromRuntime,
+  createDefaultRuntimeComposition,
+  RuntimeRecruitosComposition
 } from "./composition/index.js";
 export { formatHelp, type CommandResult } from "./commands/index.js";

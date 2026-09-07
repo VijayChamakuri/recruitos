@@ -6,9 +6,5 @@
     "declarationMap": false,
     "noEmit": true
   },
-  "include": [
-    "integration/**/*.ts",
-    "e2e/**/*.ts",
-    "eval/**/*.ts"
-  ]
+  "include": ["**/*.ts"]
 }

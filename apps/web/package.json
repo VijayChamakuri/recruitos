@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@recruitos/cli": "workspace:*",
-    "@recruitos/core": "workspace:*"
+    "@recruitos/core": "workspace:*",
+    "@recruitos/runtime": "workspace:*"
   }
 }
