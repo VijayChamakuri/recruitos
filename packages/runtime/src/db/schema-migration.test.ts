@@ -15,6 +15,11 @@ import {
   corpusManifests,
   corpusMemberDocuments,
   corpusMembers,
+  dimensionAssessmentEvidenceSpans,
+  dimensionAssessments,
+  evidenceGaps,
+  evidenceSpans,
+  extractionRuns,
   requirements,
   roles,
   rubricDimensions,
@@ -231,7 +236,12 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["role", roles],
   ["requirement", requirements],
   ["rubric", rubrics],
-  ["rubric_dimension", rubricDimensions]
+  ["rubric_dimension", rubricDimensions],
+  ["extraction_run", extractionRuns],
+  ["evidence_span", evidenceSpans],
+  ["evidence_gap", evidenceGaps],
+  ["dimension_assessment", dimensionAssessments],
+  ["dimension_assessment_evidence_span", dimensionAssessmentEvidenceSpans]
 ];
 
 describe("Drizzle schema matches the committed migrations", () => {

@@ -436,3 +436,196 @@ export const rubricDimensions = sqliteTable(
     check("rubric_dimension_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
+
+export const extractionRuns = sqliteTable(
+  "extraction_run",
+  {
+    extractionRunId: text("extraction_run_id").primaryKey(),
+    spansReturned: integer("spans_returned").notNull(),
+    spansLocated: integer("spans_located").notNull(),
+    droppedQuotesJson: text("dropped_quotes_json").notNull(),
+    droppedQuotesHash: text("dropped_quotes_hash").notNull(),
+    modelId: text("model_id").notNull(),
+    fixtureKey: text("fixture_key"),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    check("extraction_run_spans_returned", sql`${table.spansReturned} >= 0`),
+    check(
+      "extraction_run_spans_located",
+      sql`${table.spansLocated} >= 0 AND ${table.spansLocated} <= ${table.spansReturned}`
+    ),
+    // An unlocated span is exactly a dropped quote, so the recorded quotes
+    // account for every span the extractor returned but could not locate.
+    // That keeps the confidence resolution term auditable from stored rows.
+    check(
+      "extraction_run_dropped_quotes_json",
+      sql`json_valid(${table.droppedQuotesJson})
+        AND json_type(${table.droppedQuotesJson}) = 'array'
+        AND json_array_length(${table.droppedQuotesJson}) = ${table.spansReturned} - ${table.spansLocated}`
+    ),
+    check(
+      "extraction_run_dropped_quotes_hash",
+      sql`length(${table.droppedQuotesHash}) = 64 AND ${table.droppedQuotesHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("extraction_run_model_id", sql`length(${table.modelId}) BETWEEN 1 AND 200`),
+    check(
+      "extraction_run_fixture_key",
+      sql`${table.fixtureKey} IS NULL OR (length(${table.fixtureKey}) = 64 AND ${table.fixtureKey} NOT GLOB '*[^0-9a-f]*')`
+    ),
+    check("extraction_run_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const evidenceSpans = sqliteTable(
+  "evidence_span",
+  {
+    evidenceSpanId: text("evidence_span_id").primaryKey(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => sourceDocuments.sourceDocumentId, { onDelete: "restrict" }),
+    start: integer("start").notNull(),
+    end: integer("end").notNull(),
+    quotedText: text("quoted_text").notNull(),
+    dimensionId: text("dimension_id").notNull(),
+    polarity: text("polarity", { enum: ["supporting", "contradicting"] }).notNull(),
+    source: text("source", { enum: ["extracted", "human"] }).notNull(),
+    matchQuality: text("match_quality", {
+      enum: ["exact", "normalized", "fuzzy"]
+    }).notNull(),
+    extractorVersion: text("extractor_version").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    index("evidence_span_document").on(table.documentId),
+    index("evidence_span_dimension").on(table.dimensionId),
+    // Offsets are non-null half-open intervals into normalized_text, so a
+    // stored span always addresses at least one code unit. There is no
+    // unresolved match quality: unlocated quotes live on extraction_run.
+    check("evidence_span_start", sql`${table.start} >= 0`),
+    check("evidence_span_end", sql`${table.end} > ${table.start}`),
+    check("evidence_span_quoted_text", sql`length(${table.quotedText}) BETWEEN 1 AND 240`),
+    check(
+      "evidence_span_dimension_id",
+      sql`length(${table.dimensionId}) BETWEEN 1 AND 128`
+    ),
+    check(
+      "evidence_span_polarity",
+      sql`${table.polarity} IN ('supporting', 'contradicting')`
+    ),
+    check("evidence_span_source", sql`${table.source} IN ('extracted', 'human')`),
+    check(
+      "evidence_span_match_quality",
+      sql`${table.matchQuality} IN ('exact', 'normalized', 'fuzzy')`
+    ),
+    check(
+      "evidence_span_extractor_version",
+      sql`length(${table.extractorVersion}) BETWEEN 1 AND 64`
+    ),
+    check("evidence_span_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const evidenceGaps = sqliteTable(
+  "evidence_gap",
+  {
+    evidenceGapId: text("evidence_gap_id").primaryKey(),
+    dimensionId: text("dimension_id").notNull(),
+    reasonCode: text("reason_code").notNull(),
+    documentsSearchedJson: text("documents_searched_json").notNull(),
+    documentsSearchedHash: text("documents_searched_hash").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    index("evidence_gap_dimension").on(table.dimensionId),
+    check("evidence_gap_dimension_id", sql`length(${table.dimensionId}) BETWEEN 1 AND 128`),
+    // The parameterized reason-code forms cannot be a SQL enum, so SQL bounds
+    // the shape and the store validates membership in the closed P5 set.
+    check(
+      "evidence_gap_reason_code",
+      sql`length(${table.reasonCode}) BETWEEN 1 AND 256
+        AND ${table.reasonCode} NOT GLOB '*[^!-~]*'`
+    ),
+    // A gap is only reviewable when it names what was searched, so the stored
+    // document list can never be empty.
+    check(
+      "evidence_gap_documents_searched_json",
+      sql`json_valid(${table.documentsSearchedJson})
+        AND json_type(${table.documentsSearchedJson}) = 'array'
+        AND json_array_length(${table.documentsSearchedJson}) >= 1`
+    ),
+    check(
+      "evidence_gap_documents_searched_hash",
+      sql`length(${table.documentsSearchedHash}) = 64 AND ${table.documentsSearchedHash} NOT GLOB '*[^0-9a-f]*'`
+    ),
+    check("evidence_gap_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const dimensionAssessments = sqliteTable(
+  "dimension_assessment",
+  {
+    dimensionAssessmentId: text("dimension_assessment_id").primaryKey(),
+    dimensionId: text("dimension_id").notNull(),
+    level: text("level", { enum: ["none", "weak", "partial", "strong"] }).notNull(),
+    source: text("source", { enum: ["extracted", "human"] }).notNull(),
+    actorId: text("actor_id").references(() => actors.actorId, { onDelete: "restrict" }),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    index("dimension_assessment_dimension").on(table.dimensionId),
+    check(
+      "dimension_assessment_dimension_id",
+      sql`length(${table.dimensionId}) BETWEEN 1 AND 128`
+    ),
+    check(
+      "dimension_assessment_level",
+      sql`${table.level} IN ('none', 'weak', 'partial', 'strong')`
+    ),
+    check("dimension_assessment_source", sql`${table.source} IN ('extracted', 'human')`),
+    // A human assessment names the human who made it; an extracted one never
+    // borrows an actor, so provenance stays unambiguous on the packet.
+    check(
+      "dimension_assessment_actor_presence",
+      sql`(${table.source} = 'human') = (${table.actorId} IS NOT NULL)`
+    ),
+    check("dimension_assessment_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const dimensionAssessmentEvidenceSpans = sqliteTable(
+  "dimension_assessment_evidence_span",
+  {
+    dimensionAssessmentEvidenceSpanId: text(
+      "dimension_assessment_evidence_span_id"
+    ).primaryKey(),
+    dimensionAssessmentId: text("dimension_assessment_id")
+      .notNull()
+      .references(() => dimensionAssessments.dimensionAssessmentId, {
+        onDelete: "restrict"
+      }),
+    evidenceSpanId: text("evidence_span_id")
+      .notNull()
+      .references(() => evidenceSpans.evidenceSpanId, { onDelete: "restrict" }),
+    spanOrdinal: integer("span_ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("dimension_assessment_evidence_span_ordinal_unique").on(
+      table.dimensionAssessmentId,
+      table.spanOrdinal
+    ),
+    uniqueIndex("dimension_assessment_evidence_span_unique").on(
+      table.dimensionAssessmentId,
+      table.evidenceSpanId
+    ),
+    check(
+      "dimension_assessment_evidence_span_ordinal",
+      sql`${table.spanOrdinal} >= 0`
+    ),
+    check(
+      "dimension_assessment_evidence_span_created_at",
+      sql`${table.createdAt} >= 0`
+    )
+  ]
+);

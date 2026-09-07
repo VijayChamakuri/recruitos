@@ -11,6 +11,11 @@ import {
   corpusManifests,
   corpusMemberDocuments,
   corpusMembers,
+  dimensionAssessmentEvidenceSpans,
+  dimensionAssessments,
+  evidenceGaps,
+  evidenceSpans,
+  extractionRuns,
   requirements,
   roles,
   rubricDimensions,
@@ -192,5 +197,76 @@ describe("runtime Drizzle schema", () => {
       "rubric_dimension_rubric_ordinal_unique"
     ]);
     expect(dimensionConfig.foreignKeys).toHaveLength(1);
+  });
+
+  it("exposes the immutable evidence and extraction constraints", () => {
+    const runConfig = getTableConfig(extractionRuns);
+    expect(runConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "extraction_run_created_at",
+      "extraction_run_dropped_quotes_hash",
+      "extraction_run_dropped_quotes_json",
+      "extraction_run_fixture_key",
+      "extraction_run_model_id",
+      "extraction_run_spans_located",
+      "extraction_run_spans_returned"
+    ]);
+    expect(runConfig.indexes).toEqual([]);
+    expect(runConfig.foreignKeys).toHaveLength(0);
+
+    const spanConfig = getTableConfig(evidenceSpans);
+    expect(spanConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "evidence_span_created_at",
+      "evidence_span_dimension_id",
+      "evidence_span_end",
+      "evidence_span_extractor_version",
+      "evidence_span_match_quality",
+      "evidence_span_polarity",
+      "evidence_span_quoted_text",
+      "evidence_span_source",
+      "evidence_span_start"
+    ]);
+    expect(spanConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "evidence_span_dimension",
+      "evidence_span_document"
+    ]);
+    expect(spanConfig.foreignKeys).toHaveLength(1);
+    expect(spanConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+
+    const gapConfig = getTableConfig(evidenceGaps);
+    expect(gapConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "evidence_gap_created_at",
+      "evidence_gap_dimension_id",
+      "evidence_gap_documents_searched_hash",
+      "evidence_gap_documents_searched_json",
+      "evidence_gap_reason_code"
+    ]);
+    expect(gapConfig.indexes.map((index) => index.config.name)).toEqual([
+      "evidence_gap_dimension"
+    ]);
+
+    const assessmentConfig = getTableConfig(dimensionAssessments);
+    expect(assessmentConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "dimension_assessment_actor_presence",
+      "dimension_assessment_created_at",
+      "dimension_assessment_dimension_id",
+      "dimension_assessment_level",
+      "dimension_assessment_source"
+    ]);
+    expect(assessmentConfig.foreignKeys).toHaveLength(1);
+    expect(assessmentConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+
+    const associationConfig = getTableConfig(dimensionAssessmentEvidenceSpans);
+    expect(associationConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "dimension_assessment_evidence_span_created_at",
+      "dimension_assessment_evidence_span_ordinal"
+    ]);
+    expect(associationConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "dimension_assessment_evidence_span_ordinal_unique",
+      "dimension_assessment_evidence_span_unique"
+    ]);
+    expect(associationConfig.foreignKeys).toHaveLength(2);
+    expect(
+      associationConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")
+    ).toBe(true);
   });
 });
