@@ -12,6 +12,7 @@ import {
   STRUCTURED_FACT_KINDS,
   StructuredFactKindSchema,
   StructuredFactPayloadSchema,
+  StructuredFactPayloadUnionSchema,
   WORK_AUTHORIZATION_CLASSIFICATIONS,
   WorkAuthorizationClassificationSchema,
   structuredFactSemanticKey
@@ -135,5 +136,14 @@ describe("structured fact payloads", () => {
         claimedMonths: MAXIMUM_CLAIMED_MONTHS + 1
       }).success
     ).toBe(false);
+    const invertedEmployment = {
+      kind: "employment_interval" as const,
+      employer: "Acme",
+      title: "Engineer",
+      startMonth: "2021-01",
+      endMonth: "2020-12"
+    };
+    expect(StructuredFactPayloadUnionSchema.safeParse(invertedEmployment).success).toBe(true);
+    expect(StructuredFactPayloadSchema.safeParse(invertedEmployment).success).toBe(false);
   });
 });

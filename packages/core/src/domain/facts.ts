@@ -142,15 +142,16 @@ export const ClaimedExperienceFactSchema = z
   .strict();
 export type ClaimedExperienceFact = z.infer<typeof ClaimedExperienceFactSchema>;
 
-export const StructuredFactPayloadSchema = z
-  .discriminatedUnion("kind", [
-    EmploymentIntervalFactSchema,
-    WorkAuthorizationStatementFactSchema,
-    CurrentTitleFactSchema,
-    EmployerHistoryEntryFactSchema,
-    ClaimedExperienceFactSchema
-  ])
-  .superRefine((payload, context) => {
+export const StructuredFactPayloadUnionSchema = z.discriminatedUnion("kind", [
+  EmploymentIntervalFactSchema,
+  WorkAuthorizationStatementFactSchema,
+  CurrentTitleFactSchema,
+  EmployerHistoryEntryFactSchema,
+  ClaimedExperienceFactSchema
+]);
+
+export const StructuredFactPayloadSchema = StructuredFactPayloadUnionSchema.superRefine(
+  (payload, context) => {
     if (
       (payload.kind === "employment_interval" || payload.kind === "employer_history_entry") &&
       !employmentRangeIsValid(payload)
@@ -160,7 +161,8 @@ export const StructuredFactPayloadSchema = z
         message: "Employment interval start must not be after the ending month"
       });
     }
-  });
+  }
+);
 export type StructuredFactPayload = z.infer<typeof StructuredFactPayloadSchema>;
 
 const SEMANTIC_KEY_SEPARATOR = "\u001f";
