@@ -14,8 +14,8 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | eb0dc3e |
-| Migration lock held by | Cursor, for extraction_run persistence schema request (T10.5 dependency). |
+| origin/main | 4db416c |
+| Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import (MERGED #54), scheduler (MERGED #57), start-run (MERGED #59), extraction bridge plus OQ-7 policy, finalize, correction. |
 
@@ -42,9 +42,9 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | `cursor/extraction-run-persistence-c42c` | persist `extraction_run`; add `attempt_work_item.extraction_run_id` FK | `ready` |
+| Cursor | main | PR #58 merged (schema request for extraction_run persistence). | idle / ready |
 | Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). Next T10 tasks: T10.3 (start triage run use-case, MERGED #59), T10.4 (extraction-to-pipeline bridge), T10.5 (finalize), T10.6 (correction). | paused |
-| Antigravity | main | T10.3 merged in PR #59 (`packages/runtime/src/use-cases/start-triage-run.ts`). All checks green, 100 percent test coverage. Ready for T10.4 or next assignment. | idle / ready |
+| Antigravity | `c/t10-extraction-bridge` | T10.4: Extraction-to-pipeline bridge and hard-requirement policy v1 (`packages/runtime/src/policy/hard-requirements-v1.ts` and `packages/runtime/src/results/derive-candidate-result.ts`). | building |
 
 ## Hard rules
 
@@ -137,3 +137,5 @@ your own rows plus the log.
 - 2026-09-08 Cursor: starting `cursor/extraction-run-persistence-c42c` from `b58ee7d` for the #56 schema request. Migration 0021 rebuilds `attempt_work_item` with nullable `extraction_run_id` FK `onDelete: "restrict"` and restores the 0017 work-item triggers. `prepareExtractionRun` / `insertExtractionRun` / `readExtractionRun` move to `packages/runtime/src/extraction/`. Optional `extractionRunId` on complete and fail persists in the same short transaction. Do not wire the T10.2 scheduler in this PR. Migration lock stays with Cursor.
 - 2026-09-08 Cursor: rebasing #58 onto origin/main `eb0dc3e` after PR #59 (T10.3). COORDINATION is a union of every agent row and log line. Scope unchanged: persist `extraction_run`, nullable `attempt_work_item.extraction_run_id`, optional `extractionRunId` on complete and fail. Do not wire the scheduler. Do not start T10.4 or T10.5. Migration lock stays with Cursor.
 - 2026-09-08 Cursor: #58 ready on eb0dc3e. pnpm check 1355 plus 25 integration exit 0, test:coverage 1200 exit 0 with All files 100 percent, standalone integration 25, diff-check clean, em-dash scan clean. Scope unchanged after rebase. Blocks T10.5. Migration lock stays with Cursor until merge.
+- 2026-09-08 Cursor: PR #58 squash-merged to main at 4db416c. Migration lock released.
+- 2026-09-08 Antigravity: starting T10.4 on c/t10-extraction-bridge off 4db416c. Implementing the declarative v1 hard-requirement policy carrying OQ-7 assumptions (packages/runtime/src/policy/hard-requirements-v1.ts) and the extraction-to-pipeline bridge (packages/runtime/src/results/derive-candidate-result.ts) to ground and assemble inputs for consolidateStructuredFacts, deriveDimensionAssessments, and resolveHardRequirements.
