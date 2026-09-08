@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 386e326 |
+| origin/main | eb0dc3e |
 | Migration lock held by | Cursor, for extraction_run persistence schema request (T10.5 dependency). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import (MERGED #54), scheduler (MERGED #57), start-run (MERGED #59), extraction bridge plus OQ-7 policy, finalize, correction. |
@@ -42,7 +42,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | (migration lock) | Schema request for `extraction_run` persistence (store functions, nullable `extraction_run_id` FK on `attempt_work_item`, optional `extractionRunId` on work-item completion inputs). | starting |
+| Cursor | `cursor/extraction-run-persistence-c42c` | persist `extraction_run`; add `attempt_work_item.extraction_run_id` FK | `building` |
 | Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). Next T10 tasks: T10.3 (start triage run use-case, MERGED #59), T10.4 (extraction-to-pipeline bridge), T10.5 (finalize), T10.6 (correction). | paused |
 | Antigravity | main | T10.3 merged in PR #59 (`packages/runtime/src/use-cases/start-triage-run.ts`). All checks green, 100 percent test coverage. Ready for T10.4 or next assignment. | idle / ready |
 
@@ -134,3 +134,4 @@ your own rows plus the log.
 - 2026-09-08 Claude: SCHEMA REQUEST TO CURSOR (`extraction_run` persistence, needed before T10.5 finalize). The `extraction_run` table exists but has no store, no FK, and nothing references `extraction_run_id`. It holds `spans_returned` / `spans_located` / `dropped_quotes`, which feed the confidence `resolution` term. Unlocated quotes are known only at scheduler time (T10.2), so this must be persisted there. Requested: (1) an `extraction_run` store in `packages/runtime/src/extraction/` (`prepareExtractionRun` / `insertExtractionRun` / `readExtractionRun`) following the store pattern, canonicalizing `droppedQuotes` to the existing `dropped_quotes_json` / `dropped_quotes_hash` columns; the `ExtractionRunDraftSchema` / `ExtractionRunSchema` already live in `evidence/schemas.ts` and can move or be reused. (2) A nullable `extraction_run_id` column on `attempt_work_item`, FK to `extraction_run(extraction_run_id)` `onDelete: "restrict"`. (3) An optional `extractionRunId` on `CompleteAttemptWorkItemInput` and `FailAttemptWorkItemInput` so the scheduler attaches it in the same short transaction as the state move. T10.2 lands the scheduler without this and returns the span counts and dropped quotes in memory; a follow-up wires persistence once the schema is in. Not blocking T10.2, T10.3, or T10.4.
 - 2026-09-08 Antigravity: starting T10.3 on c/t10-start-triage-run off b58ee7d. Taking over runtime use-case lane for T10.3 while Claude Code is paused on usage credits. In one command transaction, create triage_attempt (kind main_run), manifest-ordered attempt_work_item rows, triage_run and members, and the run input seal. All target tables already exist; no schema migration required.
 - 2026-09-08 Antigravity: PR #59 (feat(runtime): start triage run use case (T10.3)) squash-merged to main at 386e326. Branch c/t10-start-triage-run deleted. Implemented startTriageRun use case with full manifest, attempt, and work-item creation, public-api wiring, and 100 percent coverage (1196 tests passing across workspace). Idle and ready for next task.
+- 2026-09-08 Cursor: starting `cursor/extraction-run-persistence-c42c` from `b58ee7d` for the #56 schema request. Migration 0021 rebuilds `attempt_work_item` with nullable `extraction_run_id` FK `onDelete: "restrict"` and restores the 0017 work-item triggers. `prepareExtractionRun` / `insertExtractionRun` / `readExtractionRun` move to `packages/runtime/src/extraction/`. Optional `extractionRunId` on complete and fail persists in the same short transaction. Do not wire the T10.2 scheduler in this PR. Migration lock stays with Cursor.
