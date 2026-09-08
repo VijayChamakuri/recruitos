@@ -1,4 +1,5 @@
 import { escapeHtml } from "./safe-text.js";
+import { TEST_IDS } from "../testids.js";
 
 export type SpanIntegrityFailureProps = Readonly<{
   reason?: string | undefined;
@@ -16,5 +17,5 @@ export function renderSpanIntegrityFailure(props?: SpanIntegrityFailureProps): s
   const idAttr = props?.spanId ? ` id="refused-${escapeHtml(props.spanId)}"` : "";
   const titleAttr = props?.reason ? ` title="${escapeHtml(props.reason)}"` : ' title="Span integrity violation"';
 
-  return `<span class="span-refused"${idAttr}${reasonAttr}${titleAttr} role="status">span integrity failed, highlight refused</span>`;
+  return `<span class="span-refused"${idAttr}${reasonAttr}${titleAttr} role="status" data-testid="${TEST_IDS.SPAN_INTEGRITY_FAILURE}">span integrity failed, highlight refused</span>`;
 }

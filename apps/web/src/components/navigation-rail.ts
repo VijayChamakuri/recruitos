@@ -37,7 +37,7 @@ export function renderNavigationRail(props: NavigationRailProps): string {
     const isActive = props.activeDestination === d.id;
     const activeClass = isActive ? " active" : "";
     return [
-      `  <a href="${d.href}" class="item${activeClass}" style="text-decoration:none">`,
+      `  <a href="${d.href}" class="item${activeClass}" data-testid="nav-${d.id}" style="text-decoration:none">`,
       `    <span>${escapeHtml(d.label)}</span>`,
       `    ${d.count !== undefined ? `<span class="n">${d.count}</span>` : ""}`,
       `  </a>`

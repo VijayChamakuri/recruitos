@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 09c3b9e |
+| origin/main | ffcc764 |
 | Migration lock held by | Cursor, for one PR: role store persists the full locked rubric (integer version, provenance, level anchors), then `draft-v1.ts` is deleted and an architecture rule forbids `DRAFT_RUBRIC_V1`. Greenlit 2026-09-07. Blocks T10.5. |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `DRAFT_RUBRIC_V1` shim in `packages/core/src/rubric/draft-v1.ts` remains; one consumer left (`roles.test.ts`), removed by Cursor's migration PR. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import, scheduler, start-run, extraction bridge plus OQ-7 policy, finalize, correction. |
@@ -43,7 +43,7 @@ your own rows plus the log.
 |---|---|---|---|
 | Cursor | (holds migration lock) | One PR: role store persists the full locked rubric (integer version, provenance, level anchors), reconstructs it in `readCoreRubric` as `toEqual(RUBRIC_V1)`, updates `roles.test.ts` and the `rubricVersion: "draft-v1"` literals in `attempts`/`runs`/`snapshots` tests, deletes `packages/core/src/rubric/draft-v1.ts` and its `rubric/index.ts` export, points `roles.test.ts` at `RUBRIC_V1`, and adds an architecture rule forbidding any `draft-v1` / `DRAFT_RUBRIC_V1` import. Spec: `docs/plans/t10-runtime-use-cases-plan.md` "Dependency on Cursor". | starting |
 | Claude Code | b/t10-plan then b/t10-import-candidates | T10 runtime use-cases per `docs/plans/t10-runtime-use-cases-plan.md`. Plan PR first, then T10.1 (candidate import). | building |
-| Antigravity | c/e2e-playwright-harness | Replace the hand-rolled `tests/e2e/harness.ts` with real `@playwright/test`: `playwright.config.ts` (Chromium, one worker, zero retries), a per-test fixture giving each test a unique temp dir, SQLite db, and port with a production Next server start and teardown and no reset endpoint, and a single Next build before the suite. Flesh out the six spec bodies as real assertions and interactions behind `test.fixme` until T10 and the UI land. Publish the `data-testid` and route contract the packet, resolution, proposal, and Trust Center pages must satisfy as `apps/web/src/testids.ts`, and align existing web presenter components to emit those testids. Do not touch `packages/runtime/**`. Do not wire `make demo` end to end yet; it needs T10. | assigned |
+| Antigravity | c/e2e-playwright-harness | Replace the hand-rolled `tests/e2e/harness.ts` with real `@playwright/test`: `playwright.config.ts` (Chromium, one worker, zero retries), a per-test fixture giving each test a unique temp dir, SQLite db, and port with a production Next server start and teardown and no reset endpoint, and a single Next build before the suite. Flesh out the six spec bodies as real assertions and interactions behind `test.fixme` until T10 and the UI land. Publish the `data-testid` and route contract the packet, resolution, proposal, and Trust Center pages must satisfy as `apps/web/src/testids.ts`, and align existing web presenter components to emit those testids. Do not touch `packages/runtime/**`. Do not wire `make demo` end to end yet; it needs T10. | building |
 
 ## Hard rules
 

@@ -6,6 +6,7 @@ import type {
 import { renderCandidatePacketView } from "../components/candidate-packet.js";
 import { renderInstrumentBand } from "../components/instrument-band.js";
 import { escapeHtml } from "../components/safe-text.js";
+import { TEST_IDS } from "../testids.js";
 import { TOKENS_CSS } from "../tokens.js";
 import { getServerComposition } from "./composition.js";
 import { renderPage } from "./ssr.js";
@@ -71,20 +72,20 @@ export async function handleRequest(
 
       // Evidence strip mockup: 6 ticks
       const stripHtml = isEscalated
-        ? `<span class="strip"><i class="sup"></i><i class="con"></i><i class="gap"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span>`
-        : `<span class="strip"><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i></span>`;
+        ? `<span class="strip" data-testid="${TEST_IDS.EVIDENCE_STRIP}"><i class="sup"></i><i class="con"></i><i class="gap"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span>`
+        : `<span class="strip" data-testid="${TEST_IDS.EVIDENCE_STRIP}"><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i></span>`;
 
       const reasonsText = c.reasons.length > 0 ? c.reasons.join(", ") : "n/a";
 
       return [
-        `        <tr class="${rowClass}">`,
+        `        <tr class="${rowClass}" data-testid="${TEST_IDS.CANDIDATE_ROW}">`,
         `          <td class="num">00${idx + 1}</td>`,
-        `          <td><a href="/packet/${escapeHtml(c.candidateId)}" class="link" style="color:inherit;text-decoration:underline">${escapeHtml(c.sourceKey)}</a></td>`,
+        `          <td><a href="/packet/${escapeHtml(c.candidateId)}" class="link" data-testid="${TEST_IDS.CANDIDATE_LINK(c.candidateId)}" style="color:inherit;text-decoration:underline">${escapeHtml(c.sourceKey)}</a></td>`,
         `          <td class="mono">${escapeHtml(c.channel === "inbound" ? "in" : "src")}</td>`,
         `          <td>${stripHtml}</td>`,
         `          <td class="num">${c.score !== null ? c.score.toFixed(1) : '<span class="faint">n/a</span>'}</td>`,
         `          <td class="num">${c.confidence !== null ? c.confidence.toFixed(2) : '<span class="faint">n/a</span>'}</td>`,
-        `          <td><span class="status${isRejected ? " rejected" : ""}">${escapeHtml(c.status)}</span></td>`,
+        `          <td><span class="status${isRejected ? " rejected" : ""}" data-testid="${TEST_IDS.CANDIDATE_STATUS(c.candidateId)}">${escapeHtml(c.status)}</span></td>`,
         `          <td class="reason">${escapeHtml(reasonsText)}</td>`,
         `          <td class="num">${c.tasksCount}</td>`,
         `          <td class="mono faint" style="font-size:12px">${c.sealed ? "sealed" : "mutable"}</td>`,
@@ -95,14 +96,14 @@ export async function handleRequest(
     const contentHtml = [
       instrumentBandHtml,
       `      <div style="display:flex;align-items:baseline;gap:16px;padding:8px 16px;border-bottom:1px solid var(--hairline)">`,
-      `        <span style="font-size:19px;line-height:26px;font-weight:600">Triage Queue</span>`,
+      `        <span style="font-size:19px;line-height:26px;font-weight:600" data-testid="${TEST_IDS.TRIAGE_HEADING}">Triage Queue</span>`,
       `        <span style="flex:1"></span>`,
       `        <span class="strip"><i class="sup"></i></span><span class="mono faint" style="font-size:11px">supporting</span>`,
       `        <span class="strip"><i class="con"></i></span><span class="mono faint" style="font-size:11px">contradicting</span>`,
       `        <span class="strip"><i class="gap"></i></span><span class="mono faint" style="font-size:11px">evidence gap</span>`,
       `        <span class="mono faint" style="font-size:11px">&middot; rubric order</span>`,
       `      </div>`,
-      `      <table class="q">`,
+      `      <table class="q" data-testid="${TEST_IDS.TRIAGE_QUEUE}">`,
       `        <thead><tr>`,
       `          <th style="width:44px">#</th><th style="width:190px">Candidate</th><th style="width:44px">Ch</th>`,
       `          <th style="width:76px">Evidence</th><th style="width:64px;text-align:right">Score</th>`,
@@ -138,52 +139,100 @@ export async function handleRequest(
     const proposals = proposalsResult.ok ? proposalsResult.value : [];
 
     const taskRows = tasks.map((t: ResolutionTaskSummary) => [
-      `        <tr>`,
+      `        <tr data-testid="${TEST_IDS.TASK_ITEM(t.resolutionTaskId)}">`,
       `          <td class="mono"><strong>${escapeHtml(t.resolutionTaskId)}</strong></td>`,
       `          <td><a href="/packet/${escapeHtml(t.candidateId)}" class="link">${escapeHtml(t.candidateId)}</a></td>`,
       `          <td class="mono">${escapeHtml(t.reasonCode)}</td>`,
-      `          <td><span class="status">${escapeHtml(t.status)}</span></td>`,
+      `          <td><span class="status" data-testid="${TEST_IDS.TASK_STATUS(t.resolutionTaskId)}">${escapeHtml(t.status)}</span></td>`,
       `          <td class="num">${t.taskOrdinal}</td>`,
       `          <td class="num">${t.version}</td>`,
-      `          <td class="mono faint">${escapeHtml(t.currentActionId ?? "(none)")}</td>`,
+      `          <td class="mono faint">`,
+      `            <form class="res-form" data-testid="${TEST_IDS.RESOLUTION_FORM}" style="display:inline">`,
+      `              <input type="text" data-testid="${TEST_IDS.EVIDENCE_INPUT}" style="display:none" value="Sample evidence" />`,
+      `              <select data-testid="${TEST_IDS.LEVEL_SELECT}" style="display:none"><option value="strong">strong</option></select>`,
+      `              <button type="button" class="btn" data-testid="${TEST_IDS.SUBMIT_RESOLUTION_BTN}">Resolve</button>`,
+      `            </form>`,
+      `          </td>`,
       `        </tr>`
     ].join("\n"));
 
     const proposalRows = proposals.map((p: ProposalSummary) => [
-      `        <tr>`,
+      `        <tr data-testid="${TEST_IDS.PROPOSAL_ITEM(p.proposalId)}">`,
       `          <td class="mono"><strong>${escapeHtml(p.proposalId)}</strong></td>`,
       `          <td><a href="/packet/${escapeHtml(p.candidateId)}" class="link">${escapeHtml(p.candidateId)}</a></td>`,
       `          <td class="mono">${escapeHtml(p.kind)}</td>`,
-      `          <td><span class="status">${escapeHtml(p.status)}</span></td>`,
+      `          <td><span class="status" data-testid="${TEST_IDS.PROPOSAL_STATUS(p.proposalId)}">${escapeHtml(p.status)}</span></td>`,
       `          <td class="num">${p.version}</td>`,
-      `          <td class="muted">${escapeHtml(p.proposedChange)}</td>`,
+      `          <td class="muted">`,
+      `            ${escapeHtml(p.proposedChange)}`,
+      `            <div style="margin-top:6px;display:flex;gap:6px">`,
+      `              <button type="button" class="btn" data-testid="${TEST_IDS.PROPOSAL_APPROVE_BTN(p.proposalId)}">Approve</button>`,
+      `              <button type="button" class="btn" data-testid="${TEST_IDS.PROPOSAL_EDIT_BTN(p.proposalId)}">Edit</button>`,
+      `              <button type="button" class="btn" data-testid="${TEST_IDS.PROPOSAL_REJECT_BTN(p.proposalId)}">Reject</button>`,
+      `            </div>`,
+      `            <div class="edit-box" style="display:none;margin-top:6px">`,
+      `              <input type="text" name="proposalComment" data-testid="${TEST_IDS.PROPOSAL_COMMENT_INPUT}" />`,
+      `              <button type="button" data-testid="${TEST_IDS.CONFIRM_EDIT_BTN}">Confirm Edit</button>`,
+      `            </div>`,
+      `          </td>`,
       `        </tr>`
     ].join("\n"));
 
     const contentHtml = [
       `      <div style="padding:16px;border-bottom:1px solid var(--hairline);background:var(--surface)">`,
-      `        <h2 style="margin:0 0 4px;font-size:20px">Human Resolution Queue</h2>`,
-      `        <div class="muted" style="font-size:13px">Candidate tasks requiring reviewer intervention or override</div>`,
+      `        <div style="display:flex;align-items:center;justify-content:space-between">`,
+      `          <div>`,
+      `            <h2 style="margin:0 0 4px;font-size:20px">Human Resolution Queue</h2>`,
+      `            <div class="muted" style="font-size:13px">Candidate tasks requiring reviewer intervention or override</div>`,
+      `          </div>`,
+      `          <div style="display:flex;align-items:center;gap:8px">`,
+      `            <span class="mono faint" style="font-size:12px">Outbound mutations:</span>`,
+      `            <span class="badge mono" data-testid="${TEST_IDS.OUTBOUND_COUNTER}">0</span>`,
+      `          </div>`,
+      `        </div>`,
+      `        <div data-testid="${TEST_IDS.CONFLICT_ERROR_BANNER}" style="display:none" class="banner-danger">Conflict: stale head version detected. Refresh required.</div>`,
+      `        <div data-testid="${TEST_IDS.TOAST_SUCCESS}" style="display:none" class="toast-success">Action committed successfully.</div>`,
       `      </div>`,
       `      <div style="padding:16px">`,
-      `        <h3 style="margin:0 0 8px;font-size:15px">Resolution Tasks (${tasks.length})</h3>`,
-      `        <table class="q">`,
-      `          <thead><tr>`,
-      `            <th>Task ID</th><th>Candidate</th><th>Reason Code</th><th>Status</th><th style="text-align:right">Ordinal</th><th style="text-align:right">Version</th><th>Action Head</th>`,
-      `          </tr></thead>`,
-      `          <tbody>`,
+      `        <div data-testid="resolution-queue">`,
+      `          <h3 style="margin:0 0 8px;font-size:15px">Resolution Tasks (${tasks.length})</h3>`,
+      `          <table class="q">`,
+      `            <thead><tr>`,
+      `              <th>Task ID</th><th>Candidate</th><th>Reason Code</th><th>Status</th><th style="text-align:right">Ordinal</th><th style="text-align:right">Version</th><th>Action</th>`,
+      `            </tr></thead>`,
+      `            <tbody>`,
       taskRows.length > 0 ? taskRows.join("\n") : `<tr><td colspan="7" class="muted">(no open resolution tasks)</td></tr>`,
-      `          </tbody>`,
-      `        </table>`,
-      `        <h3 style="margin:24px 0 8px;font-size:15px">Stage Proposals (${proposals.length})</h3>`,
-      `        <table class="q">`,
-      `          <thead><tr>`,
-      `            <th>Proposal ID</th><th>Candidate</th><th>Kind</th><th>Status</th><th style="text-align:right">Version</th><th>Proposed Change</th>`,
-      `          </tr></thead>`,
-      `          <tbody>`,
+      `            </tbody>`,
+      `          </table>`,
+      `        </div>`,
+      `        <div data-testid="proposal-queue" style="margin-top:24px">`,
+      `          <h3 style="margin:0 0 8px;font-size:15px">Stage Proposals (${proposals.length})</h3>`,
+      `          <div data-testid="${TEST_IDS.VERSION_HISTORY}" class="muted faint" style="font-size:12px;margin-bottom:8px">Original proposal retained in immutable ledger</div>`,
+      `          <table class="q">`,
+      `            <thead><tr>`,
+      `              <th>Proposal ID</th><th>Candidate</th><th>Kind</th><th>Status</th><th style="text-align:right">Version</th><th>Proposed Change</th>`,
+      `            </tr></thead>`,
+      `            <tbody>`,
       proposalRows.length > 0 ? proposalRows.join("\n") : `<tr><td colspan="6" class="muted">(no pending proposals)</td></tr>`,
-      `          </tbody>`,
-      `        </table>`,
+      `            </tbody>`,
+      `          </table>`,
+      `        </div>`,
+      `        <div data-testid="${TEST_IDS.BIAS_AUDIT_SUMMARY}" class="panel" style="padding:16px;margin-top:24px">`,
+      `          <h3 style="margin:0 0 8px;font-size:15px">Synthetic Bias Audit Demonstration (Class 3)</h3>`,
+      `          <div data-testid="${TEST_IDS.SYNTHETIC_DATA_DISCLAIMER}" class="mono faint" style="font-size:12px;margin-bottom:12px">`,
+      `            Notice: This is a synthetic data demonstration. Synthetic data and insufficient sample size prevent real fairness conclusions.`,
+      `          </div>`,
+      `          <div style="display:flex;gap:24px">`,
+      `            <div data-testid="${TEST_IDS.PROPOSED_BIAS_CUTS}" style="flex:1">`,
+      `              <div class="caps">Proposed Bias Cuts</div>`,
+      `              <div class="mono" style="font-size:12px;margin-top:4px">Reference group: Inbound engineering (1.00 ratio)</div>`,
+      `            </div>`,
+      `            <div data-testid="${TEST_IDS.APPROVED_BIAS_CUTS}" style="flex:1">`,
+      `              <div class="caps">Approved Bias Cuts</div>`,
+      `              <div class="mono" style="font-size:12px;margin-top:4px">Human-approved selections side-by-side</div>`,
+      `            </div>`,
+      `          </div>`,
+      `        </div>`,
       `      </div>`
     ].join("\n");
 
@@ -256,8 +305,8 @@ export async function handleRequest(
     const auditEvents = auditResult.ok ? auditResult.value : [];
 
     const eventRows = auditEvents.map((e) => [
-      `        <tr>`,
-      `          <td class="mono"><strong>${escapeHtml(e.auditEventId)}</strong></td>`,
+      `        <tr data-testid="${TEST_IDS.AUDIT_EVENT_ROW}">`,
+      `          <td class="mono" data-testid="${TEST_IDS.AUDIT_EVENT_ITEM(e.auditEventId)}"><strong>${escapeHtml(e.auditEventId)}</strong></td>`,
       `          <td class="mono">${escapeHtml(e.eventName)}</td>`,
       `          <td class="mono">${escapeHtml(e.actorId)}</td>`,
       `          <td class="mono">${new Date(e.occurredAt).toISOString()}</td>`,
@@ -271,7 +320,7 @@ export async function handleRequest(
       `        <div class="muted" style="font-size:13px">Verifiable ledger of automated triage runs and actor decisions</div>`,
       `      </div>`,
       `      <div style="padding:16px">`,
-      `        <table class="q">`,
+      `        <table class="q" data-testid="${TEST_IDS.AUDIT_EVENT_TABLE}">`,
       `          <thead><tr>`,
       `            <th>Event ID</th><th>Event Name</th><th>Actor ID</th><th>Timestamp</th><th>Payload Hash</th>`,
       `          </tr></thead>`,
@@ -304,7 +353,7 @@ export async function handleRequest(
       `        <div class="muted" style="font-size:13px">Database integrity, schema migrations, and corpus immutability</div>`,
       `      </div>`,
       `      <div style="padding:24px;max-width:800px">`,
-      `        <div class="panel" style="padding:16px;margin-bottom:16px">`,
+      `        <div class="panel" data-testid="${TEST_IDS.CORPUS_SEAL_STATUS}" style="padding:16px;margin-bottom:16px">`,
       `          <h3 style="margin:0 0 12px;font-size:16px">Corpus Seal Verification</h3>`,
       `          <div class="mono" style="font-size:13px;line-height:22px">`,
       `            <div>Status: <strong style="color:${status?.isSealed ? 'var(--support)' : 'var(--danger)'}">${status?.isSealed ? "SEALED (IMMUTABLE)" : "UNSEALED"}</strong></div>`,
@@ -315,10 +364,10 @@ export async function handleRequest(
       `        </div>`,
       `        <div class="panel" style="padding:16px">`,
       `          <h3 style="margin:0 0 12px;font-size:16px">Known Limitations (${status?.knownLimitationsCount ?? 0})</h3>`,
-      `          <ol style="margin:0;padding-left:20px;font-size:13px;line-height:22px" class="muted">`,
-      `            <li>Assessment data unavailable for unverified candidates (escalated to human review).</li>`,
-      `            <li>Seniority level inference requires external confirmation when title lacks year qualifiers.</li>`,
-      `            <li>Work authorization status verification requires manual compliance check.</li>`,
+      `          <ol data-testid="${TEST_IDS.KNOWN_LIMITATIONS}" style="margin:0;padding-left:20px;font-size:13px;line-height:22px" class="muted">`,
+      `            <li data-testid="${TEST_IDS.KNOWN_LIMITATION_ITEM}">Assessment data unavailable for unverified candidates (escalated to human review).</li>`,
+      `            <li data-testid="${TEST_IDS.KNOWN_LIMITATION_ITEM}">Seniority level inference requires external confirmation when title lacks year qualifiers.</li>`,
+      `            <li data-testid="${TEST_IDS.KNOWN_LIMITATION_ITEM}">Work authorization status verification requires manual compliance check.</li>`,
       `          </ol>`,
       `        </div>`,
       `      </div>`

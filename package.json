@@ -18,13 +18,14 @@
     "eval:class1": "vitest run --project eval",
     "test": "vitest run --project core --project runtime --project architecture --project cli --project web --project eval --project bench",
     "test:coverage": "vitest run --coverage --project core --project runtime --project integration",
-    "test:e2e": "echo 'Playwright browser workflows stubbed (6/6 skipped)'",
+    "test:e2e": "playwright test --config tests/e2e/playwright.config.ts",
     "test:integration": "corepack pnpm build && vitest run --project integration",
     "test:runtime": "corepack pnpm --filter @recruitos/runtime test",
     "test:types": "corepack pnpm -r test:types && tsc -p tests/tsconfig.json --noEmit && tsc -p bench/tsconfig.json --noEmit",
     "typecheck": "corepack pnpm test:types"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "24.3.1",
     "@vitest/coverage-v8": "3.2.4",
     "esbuild": "0.28.2",
