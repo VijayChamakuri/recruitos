@@ -28,13 +28,16 @@ import {
 } from "../extraction/index.js";
 import { readCandidatePacket } from "../read-models/index.js";
 import { runExtractionAttempt } from "../scheduler/index.js";
+import type { CandidateDecisionOutput } from "../results/index.js";
 import { demoPrepare, registerDemoCorrectionFixtures, registerDemoFixtures } from "./demo-prepare.js";
 import { completeReExtraction, type CompleteReExtractionInput } from "./complete-re-extraction.js";
+import { loadCandidateDocuments, persistCandidateResult } from "./finalize-triage-run.js";
 import { requestReExtraction } from "./request-re-extraction.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 const temporaryDirectories: string[] = [];
 const HUMAN_ACTOR_ID = "human:operator";
+const ROUTE_3_SOURCE_KEY = "demo/route-3-escalated";
 
 function unwrap<T>(result: Result<T, RuntimeError>): T {
   if (!result.ok) {
@@ -66,7 +69,10 @@ async function demoRuntime(): Promise<RuntimeComposition> {
   );
 }
 
-function route4(runtime: RuntimeComposition): {
+function idsForSourceKey(
+  runtime: RuntimeComposition,
+  sourceKey: string
+): {
   candidateId: string;
   resultId: string;
   headVersion: number;
@@ -76,7 +82,7 @@ function route4(runtime: RuntimeComposition): {
   const db = nativeClient(runtime);
   const candidate = db
     .prepare("SELECT candidate_id AS candidateId FROM candidate WHERE source_key = ?")
-    .get(DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) as { candidateId: string };
+    .get(sourceKey) as { candidateId: string };
   const head = db
     .prepare(
       `SELECT current_result_id AS resultId, version AS headVersion
@@ -107,13 +113,16 @@ function count(runtime: RuntimeComposition, sql: string, ...params: unknown[]): 
   return row.n;
 }
 
-async function requestedCorrection(runtime: RuntimeComposition): Promise<{
-  ids: ReturnType<typeof route4>;
+async function requestedCorrection(
+  runtime: RuntimeComposition,
+  sourceKey: string = DEMO_REVIEWABLE_FAILURE_SOURCE_KEY
+): Promise<{
+  ids: ReturnType<typeof idsForSourceKey>;
   triageAttemptId: string;
   taskHeadVersion: number;
 }> {
   unwrap(await demoPrepare(runtime));
-  const ids = route4(runtime);
+  const ids = idsForSourceKey(runtime, sourceKey);
   const requested = unwrap(
     requestReExtraction(runtime, {
       actorId: HUMAN_ACTOR_ID,
@@ -206,6 +215,12 @@ afterEach(async () => {
 
 describe("completeReExtraction", () => {
   it("rejects invalid composition, input, humans, and non-v1 rubrics", () => {
+    expect(
+      completeReExtraction(null as unknown as RuntimeComposition, completeInput("a", 1, 1))
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Invalid runtime composition" }
+    });
     expect(completeReExtraction({} as RuntimeComposition, completeInput("a", 1, 1))).toMatchObject({
       ok: false,
       error: { message: "Invalid runtime composition" }
@@ -650,5 +665,184 @@ describe("completeReExtraction", () => {
       error: { message: /is claimed/ }
     });
     unwrap(runtime.close());
+  });
+
+  it("reuses origin spans on a complete initial result and leaves them readable", async () => {
+    const runtime = await demoRuntime();
+    const { ids, triageAttemptId, taskHeadVersion } = await requestedCorrection(
+      runtime,
+      ROUTE_3_SOURCE_KEY
+    );
+    const originalSpans = count(
+      runtime,
+      "SELECT count(*) AS n FROM evidence_span es JOIN candidate_document cd ON cd.source_document_id = es.document_id WHERE cd.candidate_id = ?",
+      ids.candidateId
+    );
+    expect(originalSpans).toBeGreaterThan(0);
+    unwrap(registerDemoFixtures(runtime, triageAttemptId));
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId }));
+    const completed = unwrap(
+      completeReExtraction(runtime, completeInput(triageAttemptId, taskHeadVersion, ids.headVersion))
+    );
+    expect(completed.result.baseResultId).toBe(ids.resultId);
+    expect(completed.result.derivedStatus).toBe("review_required");
+    const original = unwrap(
+      readCandidatePacket(runtime.connection.database, ids.candidateId, { resultId: ids.resultId })
+    );
+    expect(original.resultKind).toBe("initial");
+    expect(original.resultAvailability).toBe("complete");
+    expect(
+      count(
+        runtime,
+        "SELECT count(*) AS n FROM evidence_span es JOIN candidate_document cd ON cd.source_document_id = es.document_id WHERE cd.candidate_id = ?",
+        ids.candidateId
+      )
+    ).toBe(originalSpans);
+    unwrap(runtime.close());
+  });
+
+  it("rolls back when the candidate head no longer points at the base result", async () => {
+    const runtime = await demoRuntime();
+    const { ids, triageAttemptId, taskHeadVersion } = await requestedCorrection(runtime);
+    unwrap(registerDemoCorrectionFixtures(runtime, triageAttemptId));
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId }));
+    unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        persistCandidateResult({
+          context,
+          nextId: () => runtime.idGenerator.next(),
+          createdAt: runtime.clock.now(),
+          candidateId: ids.candidateId,
+          documents: loadCandidateDocuments(context, ids.candidateId),
+          artifacts: [],
+          extractorVersion: "test",
+          decision: {
+            dimensionDerivation: {
+              availability: "unavailable",
+              gaps: [],
+              unavailable: [{ dimensionId: "evaluation_and_measurement" }]
+            }
+          } as unknown as CandidateDecisionOutput,
+          resultId: runtime.idGenerator.next(),
+          kind: "correction",
+          supersedesResultId: ids.resultId,
+          expectedCandidateHeadVersion: ids.headVersion,
+          skipExistingSpans: true
+        })
+      )
+    );
+    const head = nativeClient(runtime)
+      .prepare("SELECT version AS headVersion FROM candidate_head WHERE candidate_id = ?")
+      .get(ids.candidateId) as { headVersion: number };
+    const resultsBefore = count(runtime, "SELECT count(*) AS n FROM candidate_triage_result");
+    expect(
+      completeReExtraction(runtime, completeInput(triageAttemptId, taskHeadVersion, head.headVersion))
+    ).toMatchObject({ ok: false, error: { code: "version_conflict" } });
+    expect(count(runtime, "SELECT count(*) AS n FROM candidate_triage_result")).toBe(resultsBefore);
+    unwrap(runtime.close());
+  });
+
+  it("refuses empty correction work, a missing origin, a missing candidate head, and a missing task head", async () => {
+    const emptyRuntime = await demoRuntime();
+    const empty = await requestedCorrection(emptyRuntime);
+    unwrap(registerDemoCorrectionFixtures(emptyRuntime, empty.triageAttemptId));
+    unwrap(await runExtractionAttempt(emptyRuntime, { triageAttemptId: empty.triageAttemptId }));
+    nativeClient(emptyRuntime).prepare("DROP TRIGGER IF EXISTS attempt_work_item_reject_delete").run();
+    nativeClient(emptyRuntime)
+      .prepare("DELETE FROM attempt_work_item WHERE triage_attempt_id = ?")
+      .run(empty.triageAttemptId);
+    expect(
+      completeReExtraction(
+        emptyRuntime,
+        completeInput(empty.triageAttemptId, empty.taskHeadVersion, empty.ids.headVersion)
+      )
+    ).toMatchObject({
+      ok: false,
+      error: { message: `Correction attempt "${empty.triageAttemptId}" has no work items` }
+    });
+    unwrap(emptyRuntime.close());
+
+    const originRuntime = await demoRuntime();
+    const origin = await requestedCorrection(originRuntime);
+    unwrap(registerDemoCorrectionFixtures(originRuntime, origin.triageAttemptId));
+    unwrap(await runExtractionAttempt(originRuntime, { triageAttemptId: origin.triageAttemptId }));
+    nativeClient(originRuntime)
+      .prepare("DROP TRIGGER IF EXISTS triage_run_member_reject_delete")
+      .run();
+    nativeClient(originRuntime)
+      .prepare("DELETE FROM triage_run_member WHERE initial_result_id = ?")
+      .run(origin.ids.resultId);
+    expect(
+      completeReExtraction(
+        originRuntime,
+        completeInput(origin.triageAttemptId, origin.taskHeadVersion, origin.ids.headVersion)
+      )
+    ).toMatchObject({
+      ok: false,
+      error: { message: "No official origin attempt exists for this correction" }
+    });
+    unwrap(originRuntime.close());
+
+    const headRuntime = await demoRuntime();
+    const missingHead = await requestedCorrection(headRuntime);
+    unwrap(registerDemoCorrectionFixtures(headRuntime, missingHead.triageAttemptId));
+    unwrap(
+      await runExtractionAttempt(headRuntime, { triageAttemptId: missingHead.triageAttemptId })
+    );
+    nativeClient(headRuntime)
+      .prepare("DROP TRIGGER IF EXISTS candidate_head_reject_delete")
+      .run();
+    nativeClient(headRuntime)
+      .prepare("DELETE FROM candidate_head WHERE candidate_id = ?")
+      .run(missingHead.ids.candidateId);
+    expect(
+      completeReExtraction(
+        headRuntime,
+        completeInput(
+          missingHead.triageAttemptId,
+          missingHead.taskHeadVersion,
+          missingHead.ids.headVersion
+        )
+      )
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "not_found",
+        message: `Candidate head for "${missingHead.ids.candidateId}" not found`
+      }
+    });
+    unwrap(headRuntime.close());
+
+    const taskHeadRuntime = await demoRuntime();
+    const missingTaskHead = await requestedCorrection(taskHeadRuntime);
+    unwrap(registerDemoCorrectionFixtures(taskHeadRuntime, missingTaskHead.triageAttemptId));
+    unwrap(
+      await runExtractionAttempt(taskHeadRuntime, {
+        triageAttemptId: missingTaskHead.triageAttemptId
+      })
+    );
+    nativeClient(taskHeadRuntime)
+      .prepare("DROP TRIGGER IF EXISTS resolution_task_head_reject_delete")
+      .run();
+    nativeClient(taskHeadRuntime)
+      .prepare("DELETE FROM resolution_task_head WHERE resolution_task_id = ?")
+      .run(missingTaskHead.ids.taskId);
+    expect(
+      completeReExtraction(
+        taskHeadRuntime,
+        completeInput(
+          missingTaskHead.triageAttemptId,
+          missingTaskHead.taskHeadVersion,
+          missingTaskHead.ids.headVersion
+        )
+      )
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "version_conflict",
+        details: { actualVersion: null, expectedVersion: missingTaskHead.taskHeadVersion }
+      }
+    });
+    unwrap(taskHeadRuntime.close());
   });
 });

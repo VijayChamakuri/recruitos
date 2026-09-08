@@ -31,6 +31,7 @@ import {
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 const temporaryDirectories: string[] = [];
 const HUMAN_ACTOR_ID = "human:operator";
+const ROUTE_5_SOURCE_KEY = "demo/route-5-missing-evidence";
 
 function unwrap<T>(result: Result<T, RuntimeError>): T {
   if (!result.ok) {
@@ -62,7 +63,10 @@ async function demoRuntime(): Promise<RuntimeComposition> {
   );
 }
 
-function route4(runtime: RuntimeComposition): {
+function idsForSourceKey(
+  runtime: RuntimeComposition,
+  sourceKey: string
+): {
   candidateId: string;
   resultId: string;
   headVersion: number;
@@ -72,7 +76,7 @@ function route4(runtime: RuntimeComposition): {
   const db = nativeClient(runtime);
   const candidate = db
     .prepare("SELECT candidate_id AS candidateId FROM candidate WHERE source_key = ?")
-    .get(DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) as { candidateId: string };
+    .get(sourceKey) as { candidateId: string };
   const head = db
     .prepare(
       `SELECT current_result_id AS resultId, version AS headVersion
@@ -96,6 +100,10 @@ function route4(runtime: RuntimeComposition): {
     taskId: task.taskId,
     taskVersion: task.taskVersion
   };
+}
+
+function route4(runtime: RuntimeComposition): ReturnType<typeof idsForSourceKey> {
+  return idsForSourceKey(runtime, DEMO_REVIEWABLE_FAILURE_SOURCE_KEY);
 }
 
 function count(runtime: RuntimeComposition, sql: string, ...params: unknown[]): number {
@@ -215,6 +223,13 @@ describe("selectCorrectionWorkItems", () => {
 
 describe("requestReExtraction", () => {
   it("rejects invalid composition and input", () => {
+    expect(
+      requestReExtraction(null as unknown as RuntimeComposition, requestInput({
+        taskId: "t",
+        taskVersion: 0,
+        headVersion: 1
+      }))
+    ).toMatchObject({ ok: false, error: { message: "Invalid runtime composition" } });
     expect(requestReExtraction({} as RuntimeComposition, requestInput({
       taskId: "t",
       taskVersion: 0,
@@ -420,6 +435,25 @@ describe("requestReExtraction", () => {
     unwrap(runtime.close());
   });
 
+  it("reports the stored task head version when a later request is stale", async () => {
+    const runtime = await demoRuntime();
+    unwrap(await demoPrepare(runtime));
+    const ids = route4(runtime);
+    unwrap(requestReExtraction(runtime, requestInput(ids)));
+    const stale = requestReExtraction(
+      runtime,
+      requestInput(ids, { expectedTaskHeadVersion: 0 })
+    );
+    expect(stale).toMatchObject({
+      ok: false,
+      error: {
+        code: "version_conflict",
+        details: { actualVersion: ids.taskVersion + 1, expectedVersion: 0 }
+      }
+    });
+    unwrap(runtime.close());
+  });
+
   it("rolls back a stale candidate head without writing an action or attempt", async () => {
     const runtime = await demoRuntime();
     unwrap(await demoPrepare(runtime));
@@ -571,6 +605,92 @@ describe("requestReExtraction", () => {
     expect(result).toMatchObject({
       ok: false,
       error: { message: "Correction scope produced no work items" }
+    });
+    unwrap(runtime.close());
+  });
+
+  it("reuses an existing human actor and refuses a missing origin run member", async () => {
+    const runtime = await demoRuntime();
+    unwrap(await demoPrepare(runtime));
+    const first = route4(runtime);
+    unwrap(requestReExtraction(runtime, requestInput(first)));
+    const second = idsForSourceKey(runtime, ROUTE_5_SOURCE_KEY);
+    const reused = unwrap(requestReExtraction(runtime, requestInput(second)));
+    expect(reused.result.derivedStatus).toBe("open");
+    expect(
+      count(runtime, "SELECT count(*) AS n FROM actor WHERE actor_id = ?", HUMAN_ACTOR_ID)
+    ).toBe(1);
+
+    const missingOriginRuntime = await demoRuntime();
+    unwrap(await demoPrepare(missingOriginRuntime));
+    const missing = route4(missingOriginRuntime);
+    nativeClient(missingOriginRuntime)
+      .prepare("DROP TRIGGER IF EXISTS triage_run_member_reject_delete")
+      .run();
+    nativeClient(missingOriginRuntime)
+      .prepare("DELETE FROM triage_run_member WHERE initial_result_id = ?")
+      .run(missing.resultId);
+    expect(requestReExtraction(missingOriginRuntime, requestInput(missing))).toMatchObject({
+      ok: false,
+      error: { message: "No official origin attempt exists for this resolution task" }
+    });
+    unwrap(missingOriginRuntime.close());
+    unwrap(runtime.close());
+  });
+
+  it("refuses a missing candidate head and a missing task result", async () => {
+    const runtime = await demoRuntime();
+    unwrap(await demoPrepare(runtime));
+    const missingHead = route4(runtime);
+    nativeClient(runtime).prepare("DROP TRIGGER IF EXISTS candidate_head_reject_delete").run();
+    nativeClient(runtime)
+      .prepare("DELETE FROM candidate_head WHERE candidate_id = ?")
+      .run(missingHead.candidateId);
+    expect(requestReExtraction(runtime, requestInput(missingHead))).toMatchObject({
+      ok: false,
+      error: {
+        code: "not_found",
+        message: `Candidate head for "${missingHead.candidateId}" not found`
+      }
+    });
+    unwrap(runtime.close());
+
+    const resultRuntime = await demoRuntime();
+    unwrap(await demoPrepare(resultRuntime));
+    const missingResult = route4(resultRuntime);
+    const db = nativeClient(resultRuntime);
+    db.prepare("PRAGMA foreign_keys = OFF").run();
+    db.prepare("DROP TRIGGER IF EXISTS candidate_triage_result_reject_delete").run();
+    db.prepare("DELETE FROM candidate_triage_result WHERE candidate_triage_result_id = ?").run(
+      missingResult.resultId
+    );
+    expect(requestReExtraction(resultRuntime, requestInput(missingResult))).toMatchObject({
+      ok: false,
+      error: {
+        code: "not_found",
+        message: `Candidate result "${missingResult.resultId}" not found`
+      }
+    });
+    unwrap(resultRuntime.close());
+  });
+
+  it("treats a missing task head as version 0", async () => {
+    const runtime = await demoRuntime();
+    unwrap(await demoPrepare(runtime));
+    const ids = route4(runtime);
+    nativeClient(runtime)
+      .prepare("DELETE FROM resolution_task_head WHERE resolution_task_id = ?")
+      .run(ids.taskId);
+    const conflict = requestReExtraction(
+      runtime,
+      requestInput(ids, { expectedTaskHeadVersion: 1 })
+    );
+    expect(conflict).toMatchObject({
+      ok: false,
+      error: {
+        code: "version_conflict",
+        details: { actualVersion: null, expectedVersion: 1 }
+      }
     });
     unwrap(runtime.close());
   });
