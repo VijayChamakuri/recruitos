@@ -21,10 +21,12 @@ import {
   insertRole,
   insertRubric,
   insertRubricDimension,
+  insertRubricProvenanceAssumption,
   prepareRequirement,
   prepareRole,
   prepareRubric,
-  prepareRubricDimension
+  prepareRubricDimension,
+  prepareRubricProvenanceAssumption
 } from "../../../packages/runtime/src/roles/index.js";
 import { unwrap } from "./results.js";
 
@@ -33,8 +35,9 @@ import { unwrap } from "./results.js";
  * runs through the real stores rather than raw SQL so the fixtures cannot drift
  * away from what the runtime actually writes.
  *
- * The rubric here is deliberately not a product rubric. Pre-rubric-lock code may
- * not depend on rubric v1, so the dimension is an obviously neutral placeholder.
+ * The rubric here is deliberately not the product locked snapshot. Integration
+ * trigger tests only need a persistable header, one provenance assumption, and
+ * one dimension with four level anchors.
  */
 
 const SEED_TIMESTAMP = 1_788_700_000_000;
@@ -127,7 +130,22 @@ export function seedRoleAndRubric(connection: RuntimeDatabaseConnection): void {
             prepareRubric({
               rubricId: "rubric-sample",
               roleId: "role-applied-ai-engineer",
-              version: "test-v1",
+              version: 1,
+              provenanceAuthorship: "product-authored",
+              createdAt: SEED_TIMESTAMP
+            })
+          )
+        )
+      );
+      unwrap(
+        insertRubricProvenanceAssumption(
+          context,
+          unwrap(
+            prepareRubricProvenanceAssumption({
+              rubricProvenanceAssumptionId: "rubric-provenance-assumption-sample",
+              rubricId: "rubric-sample",
+              workflowAssumptionId: "WA-05",
+              ordinal: 0,
               createdAt: SEED_TIMESTAMP
             })
           )
@@ -145,6 +163,12 @@ export function seedRoleAndRubric(connection: RuntimeDatabaseConnection): void {
               required: true,
               definition: "A sample dimension definition.",
               jobRelatedJustification: "It is job related for the sample role.",
+              levelAnchors: {
+                none: "None anchor for the sample dimension.",
+                weak: "Weak anchor for the sample dimension.",
+                partial: "Partial anchor for the sample dimension.",
+                strong: "Strong anchor for the sample dimension."
+              },
               ordinal: 0,
               createdAt: SEED_TIMESTAMP
             })

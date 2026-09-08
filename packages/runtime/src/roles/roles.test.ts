@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DRAFT_RUBRIC_V1, err, ok, type Result } from "@recruitos/core";
+import { RUBRIC_V1, err, ok, type Result } from "@recruitos/core";
 import type BetterSqlite3 from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -15,15 +15,18 @@ import {
   insertRole,
   insertRubric,
   insertRubricDimension,
+  insertRubricProvenanceAssumption,
   prepareRequirement,
   prepareRole,
   prepareRubric,
   prepareRubricDimension,
+  prepareRubricProvenanceAssumption,
   readCoreRubric,
   readRequirement,
   readRole,
   readRubric,
-  readRubricDimension
+  readRubricDimension,
+  readRubricProvenanceAssumption
 } from "./index.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
@@ -93,11 +96,21 @@ function requirementDraft(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function sampleLevelAnchors(subject: string) {
+  return {
+    none: `None anchor for ${subject}.`,
+    weak: `Weak anchor for ${subject}.`,
+    partial: `Partial anchor for ${subject}.`,
+    strong: `Strong anchor for ${subject}.`
+  };
+}
+
 function rubricDraft(overrides: Record<string, unknown> = {}) {
   return {
     rubricId: "rubric-sample",
     roleId: "role-applied-ai-engineer",
-    version: "test-v1",
+    version: 1,
+    provenanceAuthorship: "product-authored",
     createdAt: 1_788_700_000_000,
     ...overrides
   };
@@ -112,6 +125,18 @@ function dimensionDraft(overrides: Record<string, unknown> = {}) {
     required: true,
     definition: "A sample dimension definition.",
     jobRelatedJustification: "It is job related for the sample role.",
+    levelAnchors: sampleLevelAnchors("the sample dimension"),
+    ordinal: 0,
+    createdAt: 1_788_700_000_000,
+    ...overrides
+  };
+}
+
+function assumptionDraft(overrides: Record<string, unknown> = {}) {
+  return {
+    rubricProvenanceAssumptionId: "rubric-provenance-assumption-sample",
+    rubricId: "rubric-sample",
+    workflowAssumptionId: "WA-05",
     ordinal: 0,
     createdAt: 1_788_700_000_000,
     ...overrides
@@ -125,6 +150,12 @@ function seedRole(context: ImmediateTransactionContext): void {
 function seedRoleAndRubric(context: ImmediateTransactionContext): void {
   seedRole(context);
   unwrap(insertRubric(context, unwrap(prepareRubric(rubricDraft()))));
+  unwrap(
+    insertRubricProvenanceAssumption(
+      context,
+      unwrap(prepareRubricProvenanceAssumption(assumptionDraft()))
+    )
+  );
 }
 
 afterEach(async () => {
@@ -157,13 +188,25 @@ describe("role and rubric preparation", () => {
       ok: false,
       error: expect.objectContaining({ message: "Invalid requirement input" })
     });
-    expect(prepareRubric(rubricDraft({ version: "   " }))).toEqual({
+    expect(prepareRubric(rubricDraft({ version: 0 }))).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid rubric input" })
+    });
+    expect(prepareRubric(rubricDraft({ provenanceAuthorship: "agent-authored" }))).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Invalid rubric input" })
     });
     expect(prepareRubricDimension(dimensionDraft({ weight: 0 }))).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Invalid rubric dimension input" })
+    });
+    expect(
+      prepareRubricProvenanceAssumption(assumptionDraft({ workflowAssumptionId: "WA-5" }))
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Invalid rubric provenance assumption input"
+      })
     });
   });
 
@@ -172,12 +215,19 @@ describe("role and rubric preparation", () => {
       prepareRubricDimension(
         dimensionDraft({
           definition: "  Padded definition.  ",
-          jobRelatedJustification: "  Padded justification.  "
+          jobRelatedJustification: "  Padded justification.  ",
+          levelAnchors: {
+            none: "  None anchor for padded anchors.  ",
+            weak: "  Weak anchor for padded anchors.  ",
+            partial: "  Partial anchor for padded anchors.  ",
+            strong: "  Strong anchor for padded anchors.  "
+          }
         })
       )
     );
     expect(trimmed.definition).toBe("Padded definition.");
     expect(trimmed.jobRelatedJustification).toBe("Padded justification.");
+    expect(trimmed.levelAnchors.none).toBe("None anchor for padded anchors.");
     expect(Object.isFrozen(trimmed)).toBe(true);
 
     expect(prepareRubricDimension(dimensionDraft({ definition: "   " }))).toEqual({
@@ -186,6 +236,21 @@ describe("role and rubric preparation", () => {
     });
     expect(
       prepareRubricDimension(dimensionDraft({ jobRelatedJustification: "a".repeat(2001) }))
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid rubric dimension input" })
+    });
+    expect(
+      prepareRubricDimension(
+        dimensionDraft({
+          levelAnchors: {
+            none: "   ",
+            weak: "Weak.",
+            partial: "Partial.",
+            strong: "Strong."
+          }
+        })
+      )
     ).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Invalid rubric dimension input" })
@@ -223,26 +288,44 @@ describe("role and rubric persistence", () => {
             unwrap(
               prepareRubric(
                 rubricDraft({
-                  rubricId: DRAFT_RUBRIC_V1.rubricId,
-                  version: DRAFT_RUBRIC_V1.version
+                  rubricId: RUBRIC_V1.rubricId,
+                  version: RUBRIC_V1.version,
+                  provenanceAuthorship: RUBRIC_V1.provenance.authorship
                 })
               )
             )
           )
         );
-        for (const [ordinal, dimension] of DRAFT_RUBRIC_V1.dimensions.entries()) {
+        for (const [ordinal, assumptionId] of RUBRIC_V1.provenance.restsOn.entries()) {
+          unwrap(
+            insertRubricProvenanceAssumption(
+              context,
+              unwrap(
+                prepareRubricProvenanceAssumption({
+                  rubricProvenanceAssumptionId: `rubric-provenance-assumption-${ordinal}`,
+                  rubricId: RUBRIC_V1.rubricId,
+                  workflowAssumptionId: assumptionId,
+                  ordinal,
+                  createdAt: 1_788_700_000_000
+                })
+              )
+            )
+          );
+        }
+        for (const [ordinal, dimension] of RUBRIC_V1.dimensions.entries()) {
           unwrap(
             insertRubricDimension(
               context,
               unwrap(
                 prepareRubricDimension({
-                  rubricDimensionId: `rubric-dimension-draft-${ordinal}`,
-                  rubricId: DRAFT_RUBRIC_V1.rubricId,
+                  rubricDimensionId: `rubric-dimension-locked-${ordinal}`,
+                  rubricId: RUBRIC_V1.rubricId,
                   dimensionId: dimension.dimensionId,
                   weight: dimension.weight,
                   required: dimension.required,
                   definition: dimension.definition,
                   jobRelatedJustification: dimension.jobRelatedJustification,
+                  levelAnchors: dimension.levelAnchors,
                   ordinal,
                   createdAt: 1_788_700_000_000
                 })
@@ -263,14 +346,22 @@ describe("role and rubric persistence", () => {
           "Applied AI Engineer"
         );
         expect(unwrap(readRequirement(context, stored.hard.requirementId))).toEqual(stored.hard);
-        expect(unwrap(readRubric(context, DRAFT_RUBRIC_V1.rubricId))?.version).toBe("draft-v1");
-        expect(unwrap(readCoreRubric(context, DRAFT_RUBRIC_V1.rubricId))).toEqual(DRAFT_RUBRIC_V1);
+        expect(unwrap(readRubric(context, RUBRIC_V1.rubricId))?.version).toBe(1);
+        expect(unwrap(readRubric(context, RUBRIC_V1.rubricId))?.provenanceAuthorship).toBe(
+          "product-authored"
+        );
+        expect(unwrap(readCoreRubric(context, RUBRIC_V1.rubricId))).toEqual(RUBRIC_V1);
         expect(
-          unwrap(readRubricDimension(context, "rubric-dimension-draft-0"))?.required
+          unwrap(readRubricDimension(context, "rubric-dimension-locked-0"))?.required
         ).toBe(true);
         expect(
-          unwrap(readRubricDimension(context, "rubric-dimension-draft-3"))?.required
+          unwrap(readRubricDimension(context, "rubric-dimension-locked-3"))?.required
         ).toBe(false);
+        expect(
+          unwrap(
+            readRubricProvenanceAssumption(context, "rubric-provenance-assumption-0")
+          )?.workflowAssumptionId
+        ).toBe("WA-05");
         return ok(undefined);
       })
     );
@@ -295,14 +386,19 @@ describe("role and rubric persistence", () => {
       runImmediateTransaction(connection, (context) => {
         expect(unwrap(readCoreRubric(context, "rubric-sample"))).toEqual({
           rubricId: "rubric-sample",
-          version: "test-v1",
+          version: 1,
+          provenance: {
+            authorship: "product-authored",
+            restsOn: ["WA-05"]
+          },
           dimensions: [
             {
               dimensionId: "sample_dimension",
               weight: 2,
               required: true,
               definition: "A sample dimension definition.",
-              jobRelatedJustification: "It is job related for the sample role."
+              jobRelatedJustification: "It is job related for the sample role.",
+              levelAnchors: sampleLevelAnchors("the sample dimension")
             }
           ]
         });
@@ -322,6 +418,9 @@ describe("role and rubric persistence", () => {
         expect(unwrap(readRequirement(context, "missing-requirement"))).toBeUndefined();
         expect(unwrap(readRubric(context, "missing-rubric"))).toBeUndefined();
         expect(unwrap(readRubricDimension(context, "missing-dimension"))).toBeUndefined();
+        expect(
+          unwrap(readRubricProvenanceAssumption(context, "missing-assumption"))
+        ).toBeUndefined();
         expect(unwrap(readCoreRubric(context, "missing-rubric"))).toBeUndefined();
         return ok(undefined);
       })
@@ -350,6 +449,12 @@ describe("role and rubric persistence", () => {
         expect(readRubricDimension(context, null)).toEqual({
           ok: false,
           error: expect.objectContaining({ message: "Invalid rubric dimension ID" })
+        });
+        expect(readRubricProvenanceAssumption(context, "")).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Invalid rubric provenance assumption ID"
+          })
         });
         expect(readCoreRubric(context, "has space")).toEqual({
           ok: false,
@@ -386,13 +491,18 @@ describe("role and rubric persistence", () => {
       [insertRole, unwrap(prepareRole(roleDraft()))],
       [insertRequirement, unwrap(prepareRequirement(requirementDraft()))],
       [insertRubric, unwrap(prepareRubric(rubricDraft()))],
-      [insertRubricDimension, unwrap(prepareRubricDimension(dimensionDraft()))]
+      [insertRubricDimension, unwrap(prepareRubricDimension(dimensionDraft()))],
+      [
+        insertRubricProvenanceAssumption,
+        unwrap(prepareRubricProvenanceAssumption(assumptionDraft()))
+      ]
     ] as const;
     const reads = [
       readRole,
       readRequirement,
       readRubric,
       readRubricDimension,
+      readRubricProvenanceAssumption,
       readCoreRubric
     ];
 
@@ -423,6 +533,7 @@ describe("role and rubric persistence", () => {
         const requirement = unwrap(prepareRequirement(requirementDraft()));
         const rubric = unwrap(prepareRubric(rubricDraft()));
         const dimension = unwrap(prepareRubricDimension(dimensionDraft()));
+        const assumption = unwrap(prepareRubricProvenanceAssumption(assumptionDraft()));
 
         expect(insertRole(context, { ...role })).toEqual({
           ok: false,
@@ -456,6 +567,18 @@ describe("role and rubric persistence", () => {
           ok: false,
           error: expect.objectContaining({ message: "Invalid prepared rubric dimension" })
         });
+        expect(insertRubricProvenanceAssumption(context, { ...assumption })).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Invalid prepared rubric provenance assumption"
+          })
+        });
+        expect(insertRubricProvenanceAssumption(context, rubric)).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Invalid prepared rubric provenance assumption"
+          })
+        });
         return ok(undefined);
       })
     );
@@ -480,7 +603,13 @@ describe("role and rubric persistence", () => {
       error: expect.objectContaining({ code: "command_conflict" })
     });
 
-    for (const table of ["role", "requirement", "rubric", "rubric_dimension"]) {
+    for (const table of [
+      "role",
+      "requirement",
+      "rubric",
+      "rubric_dimension",
+      "rubric_provenance_assumption"
+    ]) {
       expect(
         nativeDatabase(connection).prepare(`SELECT count(*) AS total FROM ${table}`).get()
       ).toEqual({ total: 0 });
@@ -514,7 +643,7 @@ describe("role and rubric database constraints", () => {
       runImmediateTransaction(connection, (context) =>
         insertRubric(
           context,
-          unwrap(prepareRubric(rubricDraft({ rubricId: "rubric-other", version: "test-v1" })))
+          unwrap(prepareRubric(rubricDraft({ rubricId: "rubric-other", version: 1 })))
         )
       )
     ).toEqual({
@@ -553,6 +682,20 @@ describe("role and rubric database constraints", () => {
     ).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Rubric dimension insert failed" })
+    });
+
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        insertRubricProvenanceAssumption(
+          context,
+          unwrap(prepareRubricProvenanceAssumption(assumptionDraft()))
+        )
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Rubric provenance assumption insert failed"
+      })
     });
 
     expect(connection.close().ok).toBe(true);
@@ -607,6 +750,27 @@ describe("role and rubric database constraints", () => {
       error: expect.objectContaining({ message: "Rubric dimension insert failed" })
     });
 
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        insertRubricProvenanceAssumption(
+          context,
+          unwrap(
+            prepareRubricProvenanceAssumption(
+              assumptionDraft({
+                rubricProvenanceAssumptionId: "rubric-provenance-assumption-other",
+                workflowAssumptionId: "WA-09"
+              })
+            )
+          )
+        )
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Rubric provenance assumption insert failed"
+      })
+    });
+
     expect(connection.close().ok).toBe(true);
   });
 });
@@ -615,7 +779,13 @@ describe("role and rubric table declarations", () => {
   it("declares every role and rubric table STRICT", async () => {
     const connection = await openMigratedDatabase();
 
-    for (const table of ["role", "requirement", "rubric", "rubric_dimension"]) {
+    for (const table of [
+      "role",
+      "requirement",
+      "rubric",
+      "rubric_dimension",
+      "rubric_provenance_assumption"
+    ]) {
       expect(
         nativeDatabase(connection)
           .prepare("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?")
@@ -649,6 +819,16 @@ describe("role and rubric boundary failures", () => {
       ok: false,
       error: expect.objectContaining({ message: "Rubric dimension preparation failed" })
     });
+    expect(
+      prepareRubricProvenanceAssumption(
+        withThrowingGetter(assumptionDraft(), "workflowAssumptionId")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Rubric provenance assumption preparation failed"
+      })
+    });
   });
 
   it("converts a failing database read into a typed error", () => {
@@ -677,6 +857,12 @@ describe("role and rubric boundary failures", () => {
       ok: false,
       error: expect.objectContaining({ message: "Rubric dimension read failed" })
     });
+    expect(readRubricProvenanceAssumption(failingContext, "rubric-provenance-assumption-sample")).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Rubric provenance assumption read failed"
+      })
+    });
     expect(readCoreRubric(failingContext, "rubric-sample")).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Rubric read failed" })
@@ -696,7 +882,8 @@ describe("role and rubric boundary failures", () => {
               return {
                 rubricId: "rubric-sample",
                 roleId: "role-applied-ai-engineer",
-                version: "test-v1",
+                version: 1,
+                provenanceAuthorship: "product-authored",
                 createdAt: 1_788_700_000_000
               };
             }
@@ -710,11 +897,128 @@ describe("role and rubric boundary failures", () => {
       error: expect.objectContaining({ message: "Rubric read failed" })
     });
   });
+
+  it("converts a failing provenance query into a typed core-rubric read error", () => {
+    const failingContext = {
+      nativeDatabase: {
+        inTransaction: true,
+        prepare(sql: string) {
+          if (sql.includes("FROM rubric_provenance_assumption")) {
+            throw new Error("disk I/O error");
+          }
+          if (sql.includes("FROM rubric_dimension")) {
+            return {
+              all() {
+                return [
+                  {
+                    rubricDimensionId: "rubric-dimension-sample",
+                    rubricId: "rubric-sample",
+                    dimensionId: "sample_dimension",
+                    weight: 2,
+                    required: 1,
+                    definition: "A sample dimension definition.",
+                    jobRelatedJustification: "It is job related for the sample role.",
+                    levelAnchorNone: "None.",
+                    levelAnchorWeak: "Weak.",
+                    levelAnchorPartial: "Partial.",
+                    levelAnchorStrong: "Strong.",
+                    ordinal: 0,
+                    createdAt: 1_788_700_000_000
+                  }
+                ];
+              }
+            };
+          }
+          return {
+            get() {
+              return {
+                rubricId: "rubric-sample",
+                roleId: "role-applied-ai-engineer",
+                version: 1,
+                provenanceAuthorship: "product-authored",
+                createdAt: 1_788_700_000_000
+              };
+            }
+          };
+        }
+      }
+    };
+
+    expect(readCoreRubric(failingContext, "rubric-sample")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Rubric read failed" })
+    });
+  });
+
+  it("converts invalid stored provenance rows into a typed core-rubric read error", () => {
+    const failingContext = {
+      nativeDatabase: {
+        inTransaction: true,
+        prepare(sql: string) {
+          if (sql.includes("FROM rubric_provenance_assumption")) {
+            return {
+              all() {
+                return [
+                  {
+                    rubricProvenanceAssumptionId: "rubric-provenance-assumption-sample",
+                    rubricId: "rubric-sample",
+                    workflowAssumptionId: "not-an-assumption",
+                    ordinal: 0,
+                    createdAt: 1_788_700_000_000
+                  }
+                ];
+              }
+            };
+          }
+          if (sql.includes("FROM rubric_dimension")) {
+            return {
+              all() {
+                return [
+                  {
+                    rubricDimensionId: "rubric-dimension-sample",
+                    rubricId: "rubric-sample",
+                    dimensionId: "sample_dimension",
+                    weight: 2,
+                    required: 1,
+                    definition: "A sample dimension definition.",
+                    jobRelatedJustification: "It is job related for the sample role.",
+                    levelAnchorNone: "None.",
+                    levelAnchorWeak: "Weak.",
+                    levelAnchorPartial: "Partial.",
+                    levelAnchorStrong: "Strong.",
+                    ordinal: 0,
+                    createdAt: 1_788_700_000_000
+                  }
+                ];
+              }
+            };
+          }
+          return {
+            get() {
+              return {
+                rubricId: "rubric-sample",
+                roleId: "role-applied-ai-engineer",
+                version: 1,
+                provenanceAuthorship: "product-authored",
+                createdAt: 1_788_700_000_000
+              };
+            }
+          };
+        }
+      }
+    };
+
+    expect(readCoreRubric(failingContext, "rubric-sample")).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Stored rubric provenance assumption is invalid"
+      })
+    });
+  });
 });
 
 describe("stored role and rubric validation", () => {
   const astralOverTitle = "\u{1F600}".repeat(150);
-  const astralOverVersion = "\u{1F600}".repeat(40);
   const astralOverProse = "\u{1F600}".repeat(1500);
 
   it("rejects a stored role whose title is out of domain range", async () => {
@@ -775,30 +1079,104 @@ describe("stored role and rubric validation", () => {
     expect(connection.close().ok).toBe(true);
   });
 
-  it("rejects a stored rubric whose version is out of domain range", async () => {
+  it("rejects a stored dimension whose level anchors are out of domain range", async () => {
     const connection = await openMigratedDatabase();
     const database = nativeDatabase(connection);
 
     unwrap(
       runImmediateTransaction(connection, (context) => {
         seedRoleAndRubric(context);
+        unwrap(
+          insertRubricDimension(context, unwrap(prepareRubricDimension(dimensionDraft())))
+        );
         return ok(undefined);
       })
     );
 
-    database.exec("DROP TRIGGER rubric_reject_update");
+    database.exec("DROP TRIGGER rubric_dimension_reject_update");
     database
-      .prepare("UPDATE rubric SET version = ? WHERE rubric_id = ?")
-      .run(astralOverVersion, "rubric-sample");
+      .prepare(
+        "UPDATE rubric_dimension SET level_anchor_none = ? WHERE rubric_dimension_id = ?"
+      )
+      .run(astralOverProse, "rubric-dimension-sample");
 
     expect(
-      runImmediateTransaction(connection, (context) => readRubric(context, "rubric-sample"))
+      runImmediateTransaction(connection, (context) =>
+        readRubricDimension(context, "rubric-dimension-sample")
+      )
     ).toEqual({
       ok: false,
-      error: expect.objectContaining({ message: "Stored rubric is invalid" })
+      error: expect.objectContaining({ message: "Stored rubric dimension is invalid" })
     });
 
     expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a stored rubric whose authorship is not a known value", () => {
+    const failingContext = {
+      nativeDatabase: {
+        inTransaction: true,
+        prepare() {
+          return {
+            get() {
+              return {
+                rubricId: "rubric-sample",
+                roleId: "role-applied-ai-engineer",
+                version: 1,
+                provenanceAuthorship: "unknown",
+                createdAt: 1_788_700_000_000
+              };
+            }
+          };
+        }
+      }
+    };
+
+    expect(readRubric(failingContext, "rubric-sample")).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Stored rubric is invalid" })
+    });
+  });
+
+  it("rejects a stored provenance assumption that is out of domain", () => {
+    const failingContext = {
+      nativeDatabase: {
+        inTransaction: true,
+        prepare() {
+          return {
+            get() {
+              return {
+                rubricProvenanceAssumptionId: "rubric-provenance-assumption-sample",
+                rubricId: "rubric-sample",
+                workflowAssumptionId: "not-an-assumption",
+                ordinal: 0,
+                createdAt: 1_788_700_000_000
+              };
+            },
+            all() {
+              return [
+                {
+                  rubricProvenanceAssumptionId: "rubric-provenance-assumption-sample",
+                  rubricId: "rubric-sample",
+                  workflowAssumptionId: "not-an-assumption",
+                  ordinal: 0,
+                  createdAt: 1_788_700_000_000
+                }
+              ];
+            }
+          };
+        }
+      }
+    };
+
+    expect(
+      readRubricProvenanceAssumption(failingContext, "rubric-provenance-assumption-sample")
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Stored rubric provenance assumption is invalid"
+      })
+    });
   });
 
   it("rejects a stored dimension whose definition is out of domain range", async () => {
@@ -947,8 +1325,11 @@ describe("stored role and rubric validation", () => {
       .prepare(
         `INSERT INTO rubric_dimension (
           rubric_dimension_id, rubric_id, dimension_id, weight, required,
-          definition, job_related_justification, ordinal, created_at
-        ) VALUES (?, ?, ?, 1, 0, 'Other definition.', 'Other justification.', 1, ?)`
+          definition, job_related_justification,
+          level_anchor_none, level_anchor_weak, level_anchor_partial, level_anchor_strong,
+          ordinal, created_at
+        ) VALUES (?, ?, ?, 1, 0, 'Other definition.', 'Other justification.',
+          'None.', 'Weak.', 'Partial.', 'Strong.', 1, ?)`
       )
       .run(
         "rubric-dimension-duplicate",
@@ -964,6 +1345,109 @@ describe("stored role and rubric validation", () => {
     ).toEqual({
       ok: false,
       error: expect.objectContaining({ message: "Stored rubric is invalid" })
+    });
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a stored rubric with no provenance assumptions", async () => {
+    const connection = await openMigratedDatabase();
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedRole(context);
+        unwrap(insertRubric(context, unwrap(prepareRubric(rubricDraft()))));
+        unwrap(
+          insertRubricDimension(context, unwrap(prepareRubricDimension(dimensionDraft())))
+        );
+        return ok(undefined);
+      })
+    );
+
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readCoreRubric(context, "rubric-sample")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Stored rubric has no provenance assumptions"
+      })
+    });
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects provenance assumption ordinals that do not start at 0", async () => {
+    const connection = await openMigratedDatabase();
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedRole(context);
+        unwrap(insertRubric(context, unwrap(prepareRubric(rubricDraft()))));
+        unwrap(
+          insertRubricDimension(context, unwrap(prepareRubricDimension(dimensionDraft())))
+        );
+        unwrap(
+          insertRubricProvenanceAssumption(
+            context,
+            unwrap(prepareRubricProvenanceAssumption(assumptionDraft({ ordinal: 1 })))
+          )
+        );
+        return ok(undefined);
+      })
+    );
+
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readCoreRubric(context, "rubric-sample")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Rubric provenance assumption ordinals must start at 0"
+      })
+    });
+
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects provenance assumption ordinals that are not contiguous", async () => {
+    const connection = await openMigratedDatabase();
+
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedRoleAndRubric(context);
+        unwrap(
+          insertRubricDimension(context, unwrap(prepareRubricDimension(dimensionDraft())))
+        );
+        unwrap(
+          insertRubricProvenanceAssumption(
+            context,
+            unwrap(
+              prepareRubricProvenanceAssumption(
+                assumptionDraft({
+                  rubricProvenanceAssumptionId: "rubric-provenance-assumption-gap",
+                  workflowAssumptionId: "WA-09",
+                  ordinal: 2
+                })
+              )
+            )
+          )
+        );
+        return ok(undefined);
+      })
+    );
+
+    expect(
+      runImmediateTransaction(connection, (context) =>
+        readCoreRubric(context, "rubric-sample")
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        message: "Rubric provenance assumption ordinals must be contiguous"
+      })
     });
 
     expect(connection.close().ok).toBe(true);

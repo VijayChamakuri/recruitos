@@ -115,18 +115,30 @@ describe("committed migrations against a real database file", () => {
         `SELECT COUNT(*) AS total
          FROM sqlite_schema
          WHERE type = 'table'
-           AND name IN ('role', 'requirement', 'rubric', 'rubric_dimension')`
+           AND name IN (
+             'role',
+             'requirement',
+             'rubric',
+             'rubric_dimension',
+             'rubric_provenance_assumption'
+           )`
       )
-    ).toBe(4);
+    ).toBe(5);
     expect(
       countRow(
         database,
         `SELECT COUNT(*) AS total
          FROM sqlite_schema
          WHERE type = 'trigger'
-           AND tbl_name IN ('role', 'requirement', 'rubric', 'rubric_dimension')`
+           AND tbl_name IN (
+             'role',
+             'requirement',
+             'rubric',
+             'rubric_dimension',
+             'rubric_provenance_assumption'
+           )`
       )
-    ).toBe(12);
+    ).toBe(15);
 
     expect(connection.close().ok).toBe(true);
   });

@@ -1,9 +1,10 @@
 import {
+  LockedRubricDimensionSchema,
   RequirementIdSchema,
   RoleIdSchema,
   RubricDimensionIdSchema,
-  RubricDimensionSchema,
   RubricIdSchema,
+  RubricProvenanceAssumptionIdSchema,
   RubricSchema,
   err,
   ok,
@@ -20,18 +21,22 @@ import {
   RoleSchema,
   RubricDimensionDraftSchema,
   RubricDraftSchema,
+  RubricProvenanceAssumptionDraftSchema,
   StoredRubricDimensionSchema,
+  StoredRubricProvenanceAssumptionSchema,
   StoredRubricSchema,
   type Requirement,
   type Role,
   type StoredRubric,
-  type StoredRubricDimension
+  type StoredRubricDimension,
+  type StoredRubricProvenanceAssumption
 } from "./schemas.js";
 
 const preparedRoles = new WeakSet<object>();
 const preparedRequirements = new WeakSet<object>();
 const preparedRubrics = new WeakSet<object>();
 const preparedRubricDimensions = new WeakSet<object>();
+const preparedRubricProvenanceAssumptions = new WeakSet<object>();
 
 function persistenceFailure(message: string): RuntimeError {
   return createRuntimeError("persistence_failed", message, false);
@@ -88,9 +93,45 @@ function coreDimensionFromStored(dimension: StoredRubricDimension) {
     weight: dimension.weight,
     required: dimension.required,
     definition: dimension.definition,
-    jobRelatedJustification: dimension.jobRelatedJustification
+    jobRelatedJustification: dimension.jobRelatedJustification,
+    levelAnchors: dimension.levelAnchors
   };
 }
+
+function dimensionFromRow(
+  row: Record<string, unknown>
+): Result<StoredRubricDimension, RuntimeError> {
+  const dimension = StoredRubricDimensionSchema.safeParse({
+    ...row,
+    required: row["required"] === 1,
+    levelAnchors: {
+      none: row["levelAnchorNone"],
+      weak: row["levelAnchorWeak"],
+      partial: row["levelAnchorPartial"],
+      strong: row["levelAnchorStrong"]
+    }
+  });
+  if (!dimension.success) {
+    return err(persistenceFailure("Stored rubric dimension is invalid"));
+  }
+  return ok(dimension.data);
+}
+
+const rubricDimensionSelect = `SELECT
+          rubric_dimension_id AS rubricDimensionId,
+          rubric_id AS rubricId,
+          dimension_id AS dimensionId,
+          weight,
+          required,
+          definition,
+          job_related_justification AS jobRelatedJustification,
+          level_anchor_none AS levelAnchorNone,
+          level_anchor_weak AS levelAnchorWeak,
+          level_anchor_partial AS levelAnchorPartial,
+          level_anchor_strong AS levelAnchorStrong,
+          ordinal,
+          created_at AS createdAt
+        FROM rubric_dimension`;
 
 export function prepareRole(draftInput: unknown): Result<Role, RuntimeError> {
   try {
@@ -133,8 +174,9 @@ export function prepareRubric(
 }
 
 /**
- * Validates dimension fields against the core RubricDimension model before the
- * writer lock is taken, so a later assembled rubric can round-trip.
+ * Validates dimension fields against the locked RubricDimension model before
+ * the writer lock is taken, so a later assembled rubric can round-trip
+ * including the four level anchors.
  */
 export function prepareRubricDimension(
   draftInput: unknown
@@ -144,7 +186,7 @@ export function prepareRubricDimension(
     if (!draft.success) {
       return err(persistenceFailure("Invalid rubric dimension input"));
     }
-    const coreDimension = RubricDimensionSchema.safeParse(
+    const coreDimension = LockedRubricDimensionSchema.safeParse(
       coreDimensionFromStored(draft.data)
     );
     if (!coreDimension.success) {
@@ -158,12 +200,27 @@ export function prepareRubricDimension(
       required: coreDimension.data.required,
       definition: coreDimension.data.definition,
       jobRelatedJustification: coreDimension.data.jobRelatedJustification,
+      levelAnchors: coreDimension.data.levelAnchors,
       ordinal: draft.data.ordinal,
       createdAt: draft.data.createdAt
     };
     return ok(register(preparedRubricDimensions, stored));
   } catch {
     return err(persistenceFailure("Rubric dimension preparation failed"));
+  }
+}
+
+export function prepareRubricProvenanceAssumption(
+  draftInput: unknown
+): Result<StoredRubricProvenanceAssumption, RuntimeError> {
+  try {
+    const draft = RubricProvenanceAssumptionDraftSchema.safeParse(draftInput);
+    if (!draft.success) {
+      return err(persistenceFailure("Invalid rubric provenance assumption input"));
+    }
+    return ok(register(preparedRubricProvenanceAssumptions, draft.data));
+  } catch {
+    return err(persistenceFailure("Rubric provenance assumption preparation failed"));
   }
 }
 
@@ -270,10 +327,17 @@ export function insertRubric(
           rubric_id,
           role_id,
           version,
+          provenance_authorship,
           created_at
-        ) VALUES (?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?)`
       )
-      .run(rubric.rubricId, rubric.roleId, rubric.version, rubric.createdAt);
+      .run(
+        rubric.rubricId,
+        rubric.roleId,
+        rubric.version,
+        rubric.provenanceAuthorship,
+        rubric.createdAt
+      );
 
     return ok(rubric);
   } catch {
@@ -310,9 +374,13 @@ export function insertRubricDimension(
           required,
           definition,
           job_related_justification,
+          level_anchor_none,
+          level_anchor_weak,
+          level_anchor_partial,
+          level_anchor_strong,
           ordinal,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         dimension.rubricDimensionId,
@@ -322,6 +390,10 @@ export function insertRubricDimension(
         dimension.required ? 1 : 0,
         dimension.definition,
         dimension.jobRelatedJustification,
+        dimension.levelAnchors.none,
+        dimension.levelAnchors.weak,
+        dimension.levelAnchors.partial,
+        dimension.levelAnchors.strong,
         dimension.ordinal,
         dimension.createdAt
       );
@@ -329,6 +401,49 @@ export function insertRubricDimension(
     return ok(dimension);
   } catch {
     return err(persistenceFailure("Rubric dimension insert failed"));
+  }
+}
+
+export function insertRubricProvenanceAssumption(
+  contextInput: unknown,
+  preparedInput: unknown
+): Result<StoredRubricProvenanceAssumption, RuntimeError> {
+  try {
+    const context = validateContext(contextInput);
+    if (!context.ok) {
+      return context;
+    }
+    const prepared = requirePrepared<StoredRubricProvenanceAssumption>(
+      preparedRubricProvenanceAssumptions,
+      preparedInput,
+      "Invalid prepared rubric provenance assumption"
+    );
+    if (!prepared.ok) {
+      return prepared;
+    }
+    const assumption = prepared.value;
+
+    context.value.nativeDatabase
+      .prepare(
+        `INSERT INTO rubric_provenance_assumption (
+          rubric_provenance_assumption_id,
+          rubric_id,
+          workflow_assumption_id,
+          ordinal,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(
+        assumption.rubricProvenanceAssumptionId,
+        assumption.rubricId,
+        assumption.workflowAssumptionId,
+        assumption.ordinal,
+        assumption.createdAt
+      );
+
+    return ok(assumption);
+  } catch {
+    return err(persistenceFailure("Rubric provenance assumption insert failed"));
   }
 }
 
@@ -425,6 +540,7 @@ export function readRubric(
           rubric_id AS rubricId,
           role_id AS roleId,
           version,
+          provenance_authorship AS provenanceAuthorship,
           created_at AS createdAt
         FROM rubric
         WHERE rubric_id = ?`
@@ -459,34 +575,59 @@ export function readRubricDimension(
       return err(persistenceFailure("Invalid rubric dimension ID"));
     }
     const row = context.value.nativeDatabase
-      .prepare(
-        `SELECT
-          rubric_dimension_id AS rubricDimensionId,
-          rubric_id AS rubricId,
-          dimension_id AS dimensionId,
-          weight,
-          required,
-          definition,
-          job_related_justification AS jobRelatedJustification,
-          ordinal,
-          created_at AS createdAt
-        FROM rubric_dimension
-        WHERE rubric_dimension_id = ?`
-      )
+      .prepare(`${rubricDimensionSelect}
+        WHERE rubric_dimension_id = ?`)
       .get(rubricDimensionId.data) as Record<string, unknown> | undefined;
     if (row === undefined) {
       return ok(undefined);
     }
-    const dimension = StoredRubricDimensionSchema.safeParse({
-      ...row,
-      required: row["required"] === 1
-    });
-    if (!dimension.success) {
-      return err(persistenceFailure("Stored rubric dimension is invalid"));
+    const dimension = dimensionFromRow(row);
+    if (!dimension.ok) {
+      return dimension;
     }
-    return ok(Object.freeze(dimension.data));
+    return ok(Object.freeze(dimension.value));
   } catch {
     return err(persistenceFailure("Rubric dimension read failed"));
+  }
+}
+
+export function readRubricProvenanceAssumption(
+  contextInput: unknown,
+  assumptionIdInput: unknown
+): Result<StoredRubricProvenanceAssumption | undefined, RuntimeError> {
+  try {
+    const context = validateContext(contextInput);
+    if (!context.ok) {
+      return context;
+    }
+    const assumptionId = RubricProvenanceAssumptionIdSchema.safeParse(
+      assumptionIdInput
+    );
+    if (!assumptionId.success) {
+      return err(persistenceFailure("Invalid rubric provenance assumption ID"));
+    }
+    const row = context.value.nativeDatabase
+      .prepare(
+        `SELECT
+          rubric_provenance_assumption_id AS rubricProvenanceAssumptionId,
+          rubric_id AS rubricId,
+          workflow_assumption_id AS workflowAssumptionId,
+          ordinal,
+          created_at AS createdAt
+        FROM rubric_provenance_assumption
+        WHERE rubric_provenance_assumption_id = ?`
+      )
+      .get(assumptionId.data);
+    if (row === undefined) {
+      return ok(undefined);
+    }
+    const assumption = StoredRubricProvenanceAssumptionSchema.safeParse(row);
+    if (!assumption.success) {
+      return err(persistenceFailure("Stored rubric provenance assumption is invalid"));
+    }
+    return ok(Object.freeze(assumption.data));
+  } catch {
+    return err(persistenceFailure("Rubric provenance assumption read failed"));
   }
 }
 
@@ -496,17 +637,7 @@ function readStoredDimensions(
 ): Result<readonly StoredRubricDimension[], RuntimeError> {
   const rows = context.nativeDatabase
     .prepare(
-      `SELECT
-        rubric_dimension_id AS rubricDimensionId,
-        rubric_id AS rubricId,
-        dimension_id AS dimensionId,
-        weight,
-        required,
-        definition,
-        job_related_justification AS jobRelatedJustification,
-        ordinal,
-        created_at AS createdAt
-      FROM rubric_dimension
+      `${rubricDimensionSelect}
       WHERE rubric_id = ?
       ORDER BY ordinal ASC`
     )
@@ -514,25 +645,51 @@ function readStoredDimensions(
 
   const dimensions: StoredRubricDimension[] = [];
   for (const row of rows) {
-    const dimension = StoredRubricDimensionSchema.safeParse({
-      ...row,
-      required: row["required"] === 1
-    });
-    if (!dimension.success) {
-      return err(persistenceFailure("Stored rubric dimension is invalid"));
+    const dimension = dimensionFromRow(row);
+    if (!dimension.ok) {
+      return dimension;
     }
-    dimensions.push(dimension.data);
+    dimensions.push(dimension.value);
   }
   return ok(dimensions);
 }
 
-function validateDimensionOrdinals(
-  dimensions: readonly StoredRubricDimension[]
-): Result<void, RuntimeError> {
-  if (dimensions.length === 0) {
-    return err(persistenceFailure("Stored rubric has no dimensions"));
+function readStoredAssumptions(
+  context: ImmediateTransactionContext,
+  rubricId: string
+): Result<readonly StoredRubricProvenanceAssumption[], RuntimeError> {
+  const rows = context.nativeDatabase
+    .prepare(
+      `SELECT
+        rubric_provenance_assumption_id AS rubricProvenanceAssumptionId,
+        rubric_id AS rubricId,
+        workflow_assumption_id AS workflowAssumptionId,
+        ordinal,
+        created_at AS createdAt
+      FROM rubric_provenance_assumption
+      WHERE rubric_id = ?
+      ORDER BY ordinal ASC`
+    )
+    .all(rubricId);
+
+  const assumptions: StoredRubricProvenanceAssumption[] = [];
+  for (const row of rows) {
+    const assumption = StoredRubricProvenanceAssumptionSchema.safeParse(row);
+    if (!assumption.success) {
+      return err(persistenceFailure("Stored rubric provenance assumption is invalid"));
+    }
+    assumptions.push(assumption.data);
   }
-  const ordinals = dimensions.map((dimension) => dimension.ordinal);
+  return ok(assumptions);
+}
+
+function validateContiguousOrdinals(
+  ordinals: readonly number[],
+  emptyMessage: string
+): Result<void, RuntimeError> {
+  if (ordinals.length === 0) {
+    return err(persistenceFailure(emptyMessage));
+  }
   if (ordinals[0] !== 0) {
     return err(persistenceFailure("Rubric dimension ordinals must start at 0"));
   }
@@ -544,10 +701,42 @@ function validateDimensionOrdinals(
   return ok(undefined);
 }
 
+function validateDimensionOrdinals(
+  dimensions: readonly StoredRubricDimension[]
+): Result<void, RuntimeError> {
+  return validateContiguousOrdinals(
+    dimensions.map((dimension) => dimension.ordinal),
+    "Stored rubric has no dimensions"
+  );
+}
+
+function validateAssumptionOrdinals(
+  assumptions: readonly StoredRubricProvenanceAssumption[]
+): Result<void, RuntimeError> {
+  const ordinals = assumptions.map((assumption) => assumption.ordinal);
+  if (ordinals.length === 0) {
+    return err(persistenceFailure("Stored rubric has no provenance assumptions"));
+  }
+  if (ordinals[0] !== 0) {
+    return err(
+      persistenceFailure("Rubric provenance assumption ordinals must start at 0")
+    );
+  }
+  for (let index = 0; index < ordinals.length; index += 1) {
+    if (ordinals[index] !== index) {
+      return err(
+        persistenceFailure("Rubric provenance assumption ordinals must be contiguous")
+      );
+    }
+  }
+  return ok(undefined);
+}
+
 /**
- * Reconstructs a core Rubric from stored header and dimension rows. Callers
- * insert dimensions separately; this is the round-trip proof that the stored
- * rows still satisfy RubricSchema.
+ * Reconstructs a core Rubric from stored header, provenance assumption, and
+ * dimension rows. Callers insert children separately; this is the round-trip
+ * proof that the stored rows still satisfy RubricSchema, including provenance
+ * and level anchors.
  */
 export function readCoreRubric(
   contextInput: unknown,
@@ -578,9 +767,27 @@ export function readCoreRubric(
       return ordinals;
     }
 
+    const storedAssumptions = readStoredAssumptions(
+      context.value,
+      header.value.rubricId
+    );
+    if (!storedAssumptions.ok) {
+      return storedAssumptions;
+    }
+    const assumptionOrdinals = validateAssumptionOrdinals(storedAssumptions.value);
+    if (!assumptionOrdinals.ok) {
+      return assumptionOrdinals;
+    }
+
     const rubric = RubricSchema.safeParse({
       rubricId: header.value.rubricId,
       version: header.value.version,
+      provenance: {
+        authorship: header.value.provenanceAuthorship,
+        restsOn: storedAssumptions.value.map(
+          (assumption) => assumption.workflowAssumptionId
+        )
+      },
       dimensions: storedDimensions.value.map(coreDimensionFromStored)
     });
     if (!rubric.success) {

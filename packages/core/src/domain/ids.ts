@@ -165,6 +165,12 @@ export type RubricDimensionId = z.infer<typeof RubricDimensionIdSchema>;
 export const RubricIdSchema = printableAsciiId.brand<"RubricId">();
 export type RubricId = z.infer<typeof RubricIdSchema>;
 
+export const RubricProvenanceAssumptionIdSchema =
+  printableAsciiId.brand<"RubricProvenanceAssumptionId">();
+export type RubricProvenanceAssumptionId = z.infer<
+  typeof RubricProvenanceAssumptionIdSchema
+>;
+
 export const ScoreResultIdSchema = printableAsciiId.brand<"ScoreResultId">();
 export type ScoreResultId = z.infer<typeof ScoreResultIdSchema>;
 
