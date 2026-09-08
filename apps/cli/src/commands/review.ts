@@ -43,12 +43,60 @@ export async function runReviewCommand(
         };
       }
 
+      if (args.options.action === "reextraction_completed") {
+        const durationMs = Date.now() - startTime;
+        const msg = "reextraction_completed is a system-only action";
+        if (args.flags.json) {
+          return {
+            exitCode: EXIT_USAGE_ERROR,
+            stderr: formatEnvelopeJson(
+              createErrorEnvelope("review", "command_conflict", msg, EXIT_USAGE_ERROR, durationMs)
+            )
+          };
+        }
+        return {
+          exitCode: EXIT_USAGE_ERROR,
+          stderr: `Usage error: ${msg}`
+        };
+      }
+
+      if (args.options.action === "request_re_extraction") {
+        if (
+          args.options.candidateVersion === undefined ||
+          Number.isNaN(args.options.candidateVersion)
+        ) {
+          const durationMs = Date.now() - startTime;
+          const msg = "--candidate-version is required when requesting re-extraction";
+          if (args.flags.json) {
+            return {
+              exitCode: EXIT_USAGE_ERROR,
+              stderr: formatEnvelopeJson(
+                createErrorEnvelope(
+                  "review",
+                  "missing_candidate_version",
+                  msg,
+                  EXIT_USAGE_ERROR,
+                  durationMs
+                )
+              )
+            };
+          }
+          return {
+            exitCode: EXIT_USAGE_ERROR,
+            stderr: `Usage error: ${msg}`
+          };
+        }
+      }
+
       const actionResult = await composition.recordResolutionAction({
         taskId,
         actionKind: args.options.action,
         actorId: args.options.actor ?? "human:operator",
         rationale: args.options.rationale ?? "Resolution applied via CLI",
-        expectedVersion: args.options.versionNum
+        expectedVersion: args.options.versionNum,
+        ...(args.options.candidateVersion === undefined
+          ? {}
+          : { expectedCandidateHeadVersion: args.options.candidateVersion })
       });
 
       const durationMs = Date.now() - startTime;
@@ -90,7 +138,10 @@ export async function runReviewCommand(
           `Resolution action recorded for task: ${taskId}`,
           `Action ID:      ${res.actionId}`,
           `New Version:    ${res.newVersion}`,
-          `Derived Status: ${res.derivedStatus}`
+          `Derived Status: ${res.derivedStatus}`,
+          ...(res.triageAttemptId === undefined
+            ? []
+            : [`Attempt ID:     ${res.triageAttemptId}`])
         ].join("\n")
       };
     }

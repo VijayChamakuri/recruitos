@@ -257,6 +257,24 @@ export async function runRuntimeCommand(
         startTime
       );
     }
+    if (args.flags.demoFixtures) {
+      if (!composition.registerExtractionFixtures) {
+        return runtimeError(
+          args.command,
+          {
+            code: "persistence_failed",
+            message: "The active composition does not support fixture registration",
+            retryable: false
+          },
+          args,
+          startTime
+        );
+      }
+      const registered = composition.registerExtractionFixtures(attemptId, {
+        overlay: args.flags.correctionOverlay
+      });
+      if (!registered.ok) return runtimeError(args.command, registered.error, args, startTime);
+    }
     const result = await composition.extractTriage(attemptId);
     if (!result.ok) return runtimeError(args.command, result.error, args, startTime);
     return success(
@@ -271,6 +289,66 @@ export async function runRuntimeCommand(
         `Blocked failures:   ${result.value.blockedFailures}`,
         `Spans located:      ${result.value.spansLocated}/${result.value.spansReturned}`,
         `Dropped quotes:     ${result.value.droppedQuoteCount}`
+      ],
+      args,
+      startTime
+    );
+  }
+
+  if (args.command === "triage:complete-correction") {
+    const attemptId = args.options.attempt ?? args.positionals[0];
+    if (!attemptId) {
+      return usageError(args.command, "--attempt <id> is required", args, startTime);
+    }
+    if (args.options.versionNum === undefined || Number.isNaN(args.options.versionNum)) {
+      return usageError(
+        args.command,
+        "--version-num <n> is required (resolution task head version)",
+        args,
+        startTime
+      );
+    }
+    if (
+      args.options.candidateVersion === undefined ||
+      Number.isNaN(args.options.candidateVersion)
+    ) {
+      return usageError(
+        args.command,
+        "--candidate-version <n> is required",
+        args,
+        startTime
+      );
+    }
+    if (!composition.completeReExtraction) {
+      return runtimeError(
+        args.command,
+        {
+          code: "persistence_failed",
+          message: "The active composition does not support correction completion",
+          retryable: false
+        },
+        args,
+        startTime
+      );
+    }
+    const result = await composition.completeReExtraction({
+      actorId: DEFAULT_ACTOR_ID,
+      triageAttemptId: attemptId,
+      expectedTaskHeadVersion: args.options.versionNum,
+      expectedCandidateHeadVersion: args.options.candidateVersion
+    });
+    if (!result.ok) return runtimeError(args.command, result.error, args, startTime);
+    return success(
+      args.command,
+      result.value,
+      [
+        "RecruitOS Correction Completed",
+        `Command ID:              ${result.value.commandId}`,
+        `Attempt ID:              ${result.value.triageAttemptId}`,
+        `Result ID:               ${result.value.resultId}`,
+        `Supersedes:              ${result.value.baseResultId}`,
+        `Candidate head version:  ${result.value.candidateHeadVersion}`,
+        `Task status:             ${result.value.derivedStatus}`
       ],
       args,
       startTime

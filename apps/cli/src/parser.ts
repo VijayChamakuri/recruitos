@@ -7,6 +7,8 @@ export type ParsedArgs = Readonly<{
     version: boolean;
     detailed: boolean;
     dryRun: boolean;
+    demoFixtures: boolean;
+    correctionOverlay: boolean;
   }>;
   options: Readonly<{
     role?: string;
@@ -28,6 +30,8 @@ export type ParsedArgs = Readonly<{
     corpusTag?: string;
     kind?: string;
     candidateId?: string;
+    candidateVersion?: number;
+    result?: string;
   }>;
   unknownOptions: readonly string[];
 }>;
@@ -42,7 +46,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     help: false,
     version: false,
     detailed: false,
-    dryRun: false
+    dryRun: false,
+    demoFixtures: false,
+    correctionOverlay: false
   };
 
   const options: {
@@ -65,6 +71,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     corpusTag?: string;
     kind?: string;
     candidateId?: string;
+    candidateVersion?: number;
+    result?: string;
   } = {};
 
   let index = 0;
@@ -89,6 +97,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       index += 1;
     } else if (arg === "--dry-run") {
       flags.dryRun = true;
+      index += 1;
+    } else if (arg === "--demo-fixtures") {
+      flags.demoFixtures = true;
+      index += 1;
+    } else if (arg === "--correction-overlay") {
+      flags.correctionOverlay = true;
       index += 1;
     } else if (arg.startsWith("--")) {
       const eqIdx = arg.indexOf("=");
@@ -158,6 +172,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         case "candidate-id":
           options.candidateId = value;
+          break;
+        case "candidate-version":
+          options.candidateVersion = Number.parseInt(value, 10);
+          break;
+        case "result":
+          options.result = value;
           break;
         default:
           unknownOptions.push(arg);
