@@ -274,11 +274,12 @@ export function deriveCandidateTriageInputs(
         }
       }
 
-      // Parsed proposals come from a deterministic producer that reads one
-      // document. Confirm each grounding quote is present in that document, but
-      // do not pin a span: the producer plus the cited document is the
-      // grounding. A proposal whose only grounding was quotes, none locatable,
-      // is dropped like an unlocatable model claim.
+      // Parsed non-work-authorization proposals must be grounded: at least one
+      // quote relocates against the cited document, or a valid pre-located
+      // evidence span is supplied. Relocated quotes are confirmed, not pinned.
+      // A proposal with neither is dropped, including the case of omitted
+      // quotes and empty spans. Parsed work-authorization from application
+      // answers is assembled above and does not enter this loop.
       if (rawProposal.provenance === "parsed") {
         let locatedQuoteCount = 0;
         for (const quote of rawProposal.groundingQuotes ?? []) {
@@ -294,8 +295,7 @@ export function deriveCandidateTriageInputs(
             );
           }
         }
-        const quoteCount = rawProposal.groundingQuotes?.length ?? 0;
-        if (quoteCount > 0 && locatedQuoteCount === 0 && evidenceSpanIds.length === 0) {
+        if (locatedQuoteCount === 0 && evidenceSpanIds.length === 0) {
           continue;
         }
         structuredFactProposals.push({

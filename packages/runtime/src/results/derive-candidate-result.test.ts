@@ -437,7 +437,7 @@ describe("deriveCandidateTriageInputs", () => {
     expect(result.value.droppedQuotes).toHaveLength(1);
   });
 
-  it("emits a parsed raw fact proposal that carries no grounding quotes or spans", () => {
+  it("drops a parsed raw fact proposal that carries no grounding quotes or spans", () => {
     const result = deriveCandidateTriageInputs({
       candidateId: "cand_1",
       documents: [SAMPLE_DOC],
@@ -454,12 +454,9 @@ describe("deriveCandidateTriageInputs", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.structuredFactProposals).toHaveLength(1);
-    expect(result.value.structuredFactProposals[0]).toMatchObject({
-      provenance: "parsed",
-      evidenceSpanIds: []
-    });
+    expect(result.value.structuredFactProposals).toHaveLength(0);
     expect(result.value.locatedSpans).toHaveLength(0);
+    expect(result.value.droppedQuotes).toHaveLength(0);
   });
 
   it("returns a typed failure when a raw fact proposal cites an invalid span id", () => {
