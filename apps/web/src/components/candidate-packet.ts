@@ -7,6 +7,7 @@ import type {
 import { renderAnnotatedDocument } from "./span-highlight.js";
 import { renderEvidenceGapCard } from "./evidence-gap-card.js";
 import { escapeHtml } from "./safe-text.js";
+import { TEST_IDS } from "../testids.js";
 
 export type CandidatePacketViewProps = Readonly<{
   packet: CandidatePacket;
@@ -30,7 +31,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     const isFocused = term.dimensionId === focusedDim;
     const onClass = isFocused ? " on" : "";
     return [
-      `      <tr class="${onClass}" data-term-dim="${escapeHtml(term.dimensionId)}">`,
+      `      <tr class="${onClass}" data-term-dim="${escapeHtml(term.dimensionId)}" data-testid="${TEST_IDS.ARITHMETIC_TERM(term.dimensionId)}">`,
       `        <td>${escapeHtml(term.dimensionName)}</td>`,
       `        <td class="n">${term.weight}%</td>`,
       `        <td>${escapeHtml(term.level)}</td>`,
@@ -48,11 +49,11 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     `        <span>Score Decomposition (5-Col)</span>`,
     `        <span class="mono">${p.sealed ? "sealed" : "mutable"}</span>`,
     `      </header>`,
-    `      <div class="arithbox">`,
+    `      <div class="arithbox" data-testid="${TEST_IDS.SCORE_CARD}">`,
     `        <div class="caps">Overall Score</div>`,
     `        <div class="big">${p.score !== null ? p.score.toFixed(1) : totalScore.toFixed(1)} <span class="mono faint" style="font-size:14px">/ 100</span></div>`,
     `        <div class="mono muted" style="font-size:12px;margin:4px 0 12px">Confidence: ${p.confidence !== null ? `${Math.round(p.confidence * 100)}%` : "N/A"}</div>`,
-    `        <table class="terms">`,
+    `        <table class="terms" data-testid="${TEST_IDS.ARITHMETIC_TABLE}">`,
     `          <thead><tr>`,
     `            <th>Dimension</th><th style="text-align:right">Wt</th><th>Level</th><th style="text-align:right">Pts</th><th style="text-align:right">Score</th>`,
     `          </tr></thead>`,
@@ -78,7 +79,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
       const bracketClass = span.polarity === "supporting" ? "sup" : "con";
       const focusedClass = isFocused ? " focused" : "";
       return [
-        `        <div class="card bracket ${bracketClass}${focusedClass}" id="card-${escapeHtml(span.evidenceSpanId)}" data-span-id="${escapeHtml(span.evidenceSpanId)}">`,
+        `        <div class="card bracket ${bracketClass}${focusedClass}" id="card-${escapeHtml(span.evidenceSpanId)}" data-span-id="${escapeHtml(span.evidenceSpanId)}" data-testid="${TEST_IDS.EVIDENCE_SPAN_CARD(span.evidenceSpanId)}">`,
         `          <q class="serif">&ldquo;${escapeHtml(span.quotedText)}&rdquo;</q>`,
         `          <div class="meta">${span.polarity} &middot; quality: ${span.matchQuality} &middot; doc: ${escapeHtml(span.documentId)}</div>`,
         `        </div>`
@@ -88,7 +89,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     const gapCards = gaps.map((gap: EvidenceGap) => renderEvidenceGapCard(gap));
 
     return [
-      `      <div class="dimblock" id="dim-${escapeHtml(term.dimensionId)}">`,
+      `      <div class="dimblock" id="dim-${escapeHtml(term.dimensionId)}" data-testid="${TEST_IDS.DIMENSION_BLOCK(term.dimensionId)}">`,
       `        <div class="dimhead">`,
       `          <span class="idx">0${idx + 1}</span>`,
       `          <span class="nm">${escapeHtml(term.dimensionName)}</span>`,
@@ -126,8 +127,11 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     `        <span class="mono">${escapeHtml(primaryDoc.documentKind)}</span>`,
     `      </header>`,
     renderAnnotatedDocument(primaryDoc.text, p.evidenceSpans, props.focusedSpanId),
+    `      <div class="raw-source-text" data-testid="${TEST_IDS.RAW_SOURCE_TEXT}" style="display:none">${escapeHtml(primaryDoc.text)}</div>`,
     `    </section>`
   ].join("\n");
+
+  const taskReasons = Array.from(new Set(p.tasks.map((t) => t.reasonCode)));
 
   return [
     `  <div style="padding:10px 16px 8px;border-bottom:1px solid var(--hairline-strong);background:var(--surface)">`,
@@ -140,6 +144,16 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     `    </div>`,
     `    <div class="mono faint" style="font-size:12px;margin-top:4px">`,
     `      channel: ${escapeHtml(p.channel)} &middot; status: <strong style="color:var(--text)">${escapeHtml(p.status)}</strong> &middot; content hash: ${escapeHtml(p.contentHash.slice(0, 16))}... &middot; sealed: ${p.sealed ? "yes" : "no"}`,
+    `    </div>`,
+    `    <div style="display:flex;align-items:center;gap:12px;margin-top:6px" data-testid="${TEST_IDS.VERSION_HISTORY}">`,
+    `      <span class="badge" data-testid="${TEST_IDS.SUPERSEDING_BADGE}">${p.sealed ? "Sealed Version" : "Active Head"}</span>`,
+    `      <a href="#history" class="mono link faint" style="font-size:12px" data-testid="${TEST_IDS.PRIOR_VERSION_LINK}">Prior versions</a>`,
+    `      <span class="sep">&#124;</span>`,
+    `      <div data-testid="${TEST_IDS.ROUTING_REASONS}" style="display:inline-flex;gap:6px">`,
+    taskReasons.length > 0
+      ? taskReasons.map((r) => `<span class="tag reason-tag" data-testid="${TEST_IDS.ROUTING_REASON_TAG(r)}">${escapeHtml(r)}</span>`).join("")
+      : `<span class="mono faint" style="font-size:12px">no escalation reasons</span>`,
+    `      </div>`,
     `    </div>`,
     `  </div>`,
     `  <div class="packet-b" data-testid="candidate-packet-view">`,

@@ -25,3 +25,4 @@ export {
 } from "./server/composition.js";
 export { createWebServer } from "./server/server.js";
 export { TOKENS_CSS } from "./tokens.js";
+export { ROUTES, TEST_IDS } from "./testids.js";
