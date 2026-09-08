@@ -44,12 +44,13 @@ recorded as immutable history.
 
 ### Dependency on Cursor (one migration, in parallel)
 
-T10.5 (finalize) writes a `CandidateTriageResult` whose seal must reference the real
-locked rubric: `RUBRIC_V1_HASH`, integer `version`, `provenance` (`product-authored`,
-`restsOn` list), and the twenty-four level anchors. The runtime role store currently
-persists only `{ rubricId, version, dimensions[dimensionId, weight, required, definition,
-jobRelatedJustification] }` and forces `version: "draft-v1"`. Cursor takes the migration
-lock for one PR to:
+Cursor takes the migration lock for one PR covering two additions.
+
+**1. Persist the full locked rubric.** T10.5 (finalize) writes a `CandidateTriageResult`
+whose seal must reference the real locked rubric: `RUBRIC_V1_HASH`, integer `version`,
+`provenance` (`product-authored`, `restsOn` list), and the twenty-four level anchors. The
+runtime role store currently persists only `{ rubricId, version, dimensions[dimensionId,
+weight, required, definition, jobRelatedJustification] }` and forces `version: "draft-v1"`.
 
 - add `provenance_authorship` and a `rubric_provenance_assumption` child table (or a
   canonical JSON column) to the `rubric` header, and `level_anchor_none` / `_weak` /
@@ -65,7 +66,25 @@ lock for one PR to:
   point `roles.test.ts` at `RUBRIC_V1`, and add an architecture rule forbidding any
   `draft-v1` or `DRAFT_RUBRIC_V1` import.
 
-T10.1 through T10.4 do not depend on this. It must land before T10.5 merges.
+**2. A `candidate_application_answer` table.** OQ-7 makes work authorization a hard
+requirement resolved only from a structured application answer, never document text. The
+candidate-source adapter yields that answer (`CandidateApplicationAnswers.workAuthorization`,
+a `StructuredApplicationAnswer` with `ApplicationAnswerProvenance`), but nothing persists
+it. Without the table the work-auth predicate resolves `unknown` for every candidate.
+
+- one row per candidate per answered question:
+  `candidate_application_answer_id`, `candidate_id` (FK, `onDelete: "restrict"`),
+  `question_key`, `selected_option_key`, `free_text` (nullable), `collected_by`,
+  `form_id`, `question_id`, `collected_at`, `created_at`,
+- unique on `(candidate_id, question_key)`, index on `candidate_id`,
+- a store module `packages/runtime/src/application-answers/` with `prepare` / `insert` /
+  `read` following the entities store pattern, plus core ids
+  (`CandidateApplicationAnswerIdSchema`),
+- no association to a run or attempt; the answer is candidate-scoped and set at import.
+
+T10.1 imports candidates and documents and can merge before this lands; the answer write
+in T10.1 is a small follow-up gated on the table. T10.4 reads the table. It must land
+before T10.4 and T10.5 merge.
 
 ### PR sequence (all on `b/` branches, one coherent change each)
 
@@ -79,12 +98,20 @@ changes in any T10 PR; if one is needed it is filed to Cursor.
 `packages/runtime/src/use-cases/import-candidates.ts`.
 Pull pages from `composition.candidateSource.listCandidates`. Per record: normalize each
 document with `normalizeSourceText` (policy version 1), then in one command transaction
-insert the candidate entity, its source documents, the `candidate_head` at version 0, the
-structured `workAuthorization` answer with its `ApplicationAnswerProvenance`, and
-`candidate_demographics` when the source carries them. Idempotent by `sourceKey`:
-re-running imports nothing new and returns the existing ids. Returns imported and skipped
-counts and the candidate id list. Integration test against the synthetic adapter for a
-fixed page.
+(`expectedVersion: 0`, `readVersion` returns 0) insert the candidate entity, its source
+documents (reuse an existing `source_document` by `raw_hash` rather than colliding on the
+unique index; add `readSourceDocumentByRawHash` to the entities store), the
+`candidate_document` links, and `candidate_demographics` when the source carries them.
+`candidate_head` is not written here: it is `NOT NULL` on `current_result_id` and is born
+at finalize (T10.5). Idempotent per record: a candidate whose `(source_system, source_key)`
+already exists is skipped, not reinserted. Returns imported and skipped counts and the
+candidate id list. `corpusTag` (`main` / `variant`) and the `channel` mapping to
+`inbound` / `sourced` are use-case parameters. Integration test against the synthetic
+adapter for a fixed page.
+
+The `workAuthorization` answer write is a small follow-up gated on Cursor's
+`candidate_application_answer` table: when the record carries an answer, insert one row
+with its `ApplicationAnswerProvenance`.
 
 **T10.2  Extraction scheduler**
 `packages/runtime/src/scheduler/`.
@@ -118,8 +145,9 @@ with `relocateQuote`), and the per-dimension evidence for `deriveDimensionAssess
 The policy file is the OQ-7 decision from the signed RubricAssumptionRecord, as declarative
 predicate data:
 
-- `work_authorization`: `work_authorization_in` over the structured application answer
-  only, never document text. No structured answer resolves `unknown` and never fails.
+- `work_authorization`: `work_authorization_in` over the `candidate_application_answer`
+  row for the work-auth `question_key` only, never document text. No stored answer
+  resolves `unknown` and never fails.
 - `years_of_experience`: `minimum_experience_months` with a floor of 24, over
   `deriveTenureMonths` on employment ranges. Absence or ambiguity is `unknown`, only a
   conclusive grounded shortfall is `fail`.
