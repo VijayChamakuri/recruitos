@@ -47,8 +47,8 @@ function parseStoredConfidenceInput(
   let decoded: unknown;
   try {
     decoded = JSON.parse(contentJson);
+    /* v8 ignore next 4 -- score_result CHECK requires json_valid content. */
   } catch {
-    /* v8 ignore next 3 -- score_result CHECK requires json_valid content. */
     return err(packetFailure("Stored score result content is not valid JSON"));
   }
   /* v8 ignore next 3 -- score_result CHECK requires a JSON object. */

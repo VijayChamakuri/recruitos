@@ -156,6 +156,18 @@ describe("consolidateStructuredFacts input validation", () => {
     );
   });
 
+  it("rejects a document-grounded proposal with no document id", () => {
+    expect(
+      consolidateStructuredFacts([
+        {
+          provenance: "extracted",
+          payload: ACME_2020,
+          evidenceSpanIds: ["span_1"]
+        }
+      ]).ok
+    ).toBe(false);
+  });
+
   it("accepts a parsed work-authorization statement grounded only in the application answer", () => {
     const result = consolidated([applicationAnswerProposal(AUTHORIZED)]);
     expect(result.facts).toHaveLength(1);

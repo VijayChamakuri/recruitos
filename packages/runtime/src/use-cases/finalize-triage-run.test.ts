@@ -888,6 +888,30 @@ describe("finalizeTriageRun", () => {
     });
   });
 
+  it("refuses finalize when the sealed audit envelope cannot be prepared", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    let calls = 0;
+    const guarded = {
+      ...runtime,
+      clock: {
+        now: () => {
+          calls += 1;
+          return calls <= 2 ? CREATED_AT : -1;
+        }
+      }
+    };
+    const result = finalizeTriageRun(guarded, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: "Audit clock returned an invalid timestamp"
+      })
+    });
+  });
+
   it("refuses finalize when a trusted extraction span id is not a valid identifier", async () => {
     const { runtime, adapter } = await createTestRuntime();
     seedCandidates(runtime, ["cand-1"]);
@@ -1006,6 +1030,25 @@ describe("finalizeTriageRun", () => {
       error: expect.objectContaining({
         code: "persistence_failed",
         message: "Evidence span end must exceed its start"
+      })
+    });
+  });
+
+  it("refuses finalize when a candidate has no documents", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    db.exec("DROP TRIGGER IF EXISTS candidate_document_reject_delete");
+    db.pragma("foreign_keys = OFF");
+    db.prepare("DELETE FROM candidate_document WHERE candidate_id = ?").run("cand-1");
+    db.pragma("foreign_keys = ON");
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: 'Candidate "cand-1" has no documents'
       })
     });
   });

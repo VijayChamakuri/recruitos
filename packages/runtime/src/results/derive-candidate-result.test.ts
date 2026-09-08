@@ -387,6 +387,65 @@ describe("deriveCandidateTriageInputs", () => {
     ]);
   });
 
+  it("returns a typed failure when a raw fact proposal cites an invalid span id", () => {
+    const rawProposal = {
+      documentId: "cdoc_1",
+      provenance: "parsed" as const,
+      payload: {
+        kind: "current_title" as const,
+        title: "Senior Machine Learning Engineer"
+      },
+      evidenceSpanIds: ["span with spaces"]
+    };
+
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      rawFactProposals: [rawProposal],
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("persistence_failed");
+    expect(result.error.message).toContain("Invalid evidence span id");
+  });
+
+  it("returns a typed failure when a relocated raw-fact span id is not a valid identifier", () => {
+    const longCandidateId = `cand_${"x".repeat(120)}`;
+    const rawProposal = {
+      documentId: "cdoc_1",
+      provenance: "extracted" as const,
+      payload: {
+        kind: "employment_interval" as const,
+        employer: "TechCorp",
+        title: "Senior Machine Learning Engineer",
+        startMonth: IsoYearMonthSchema.parse("2023-01"),
+        endMonth: "present" as const
+      },
+      groundingQuotes: [
+        {
+          quotedText: "TechCorp (2023-01 to Present)",
+          polarity: "supporting" as const
+        }
+      ]
+    };
+
+    const result = deriveCandidateTriageInputs({
+      candidateId: longCandidateId,
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      rawFactProposals: [rawProposal],
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("persistence_failed");
+    expect(result.error.message).toContain("Invalid evidence span id");
+  });
+
   it("ignores raw fact proposals targeting missing document ids", () => {
     const rawProposal = {
       documentId: "non_existent_doc",
