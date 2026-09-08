@@ -12,6 +12,7 @@ import {
   CandidateResultStructuredFactIdSchema,
   CandidateTriageResultIdSchema,
   CandidateTriageStatusSchema,
+  ConfidenceInputSchema,
   DecisionAvailabilitySchema,
   DimensionAssessmentIdSchema,
   DimensionLevelSchema,
@@ -215,17 +216,7 @@ export const ScoreContributionSchema = z
   .strict();
 export type ScoreContribution = z.infer<typeof ScoreContributionSchema>;
 
-export const ScoreConfidenceInputSchema = z
-  .object({
-    contradictionCount: NonnegativeIntegerSchema,
-    dimensionsWithLocatedSpan: NonnegativeIntegerSchema,
-    requiredFieldsMissing: NonnegativeIntegerSchema,
-    spansLocated: NonnegativeIntegerSchema,
-    spansReturned: NonnegativeIntegerSchema,
-    totalDimensions: PositiveIntegerSchema,
-    totalRequiredFields: PositiveIntegerSchema
-  })
-  .strict();
+export const ScoreConfidenceInputSchema = ConfidenceInputSchema;
 export type ScoreConfidenceInput = z.infer<typeof ScoreConfidenceInputSchema>;
 
 export const ScoreResultContentSchema = z

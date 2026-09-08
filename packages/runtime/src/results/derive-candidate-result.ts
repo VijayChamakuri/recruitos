@@ -9,6 +9,7 @@ import {
   deriveDimensionAssessments,
   deriveShortlistProposals,
   EvidenceSpanIdSchema,
+  NonnegativeIntegerSchema,
   PositiveIntegerSchema,
   relocateQuote,
   REQUIRED_FIELD_IDS,
@@ -17,6 +18,7 @@ import {
   RubricDimensionIdSchema,
   type CandidateRouting,
   type CandidateTriageStatus,
+  type ConfidenceInput,
   type DimensionAssessmentDerivation,
   type DimensionEvidence,
   type DimensionLevel,
@@ -53,8 +55,10 @@ import type { ExtractionArtifact, ExtractionFailure } from "../extraction/index.
  * Translates candidate documents, extraction scheduler artifacts, failures,
  * and candidate application answers into inputs consumed by pure core pipeline
  * functions:
- * 1. Structured fact proposals for consolidateStructuredFacts, with quotes
- *    relocated against stored normalized text via core relocateQuote.
+ * 1. Structured fact proposals for consolidateStructuredFacts. Work
+ *    authorization is parsed from the structured application answer and is
+ *    never relocated against resume text. Other fact quotes are relocated
+ *    against stored normalized text via core relocateQuote.
  * 2. Per-dimension evidence for deriveDimensionAssessments across all rubric dimensions.
  * 3. End-to-end execution through scoring, confidence, routing, and proposals.
  */
@@ -136,12 +140,21 @@ export type CandidateDecisionOutput = Readonly<{
   hardRequirements: HardRequirementResolution;
   score: ScoreComputation | null;
   confidence: Rational | null;
+  confidenceInput: ConfidenceInput | null;
   routing: CandidateRouting;
   proposals: ProposalDerivation;
 }>;
 
 function bridgeFailure(message: string): RuntimeError {
   return createRuntimeError("persistence_failed", message, false);
+}
+
+function parseEvidenceSpanId(rawSpanId: string): Result<EvidenceSpanId, RuntimeError> {
+  const parsed = EvidenceSpanIdSchema.safeParse(rawSpanId);
+  if (!parsed.success) {
+    return { ok: false, error: bridgeFailure(`Invalid evidence span id "${rawSpanId}"`) };
+  }
+  return { ok: true, value: parsed.data };
 }
 
 /**
@@ -211,30 +224,23 @@ export function deriveCandidateTriageInputs(
   const locatedSpans: LocatedBridgeSpan[] = [];
   const droppedQuotes: DroppedQuote[] = [];
 
-  // 1. Process candidate application answers (OQ-7: work_authorization only)
+  // 1. Process candidate application answers (OQ-7: work_authorization only).
+  // The structured answer is the fact. It is never relocated into a resume.
   const workAuthAnswer = input.applicationAnswers?.workAuthorization;
-  if (
-    workAuthAnswer !== undefined &&
-    workAuthAnswer.questionKey === "work_authorization" &&
-    input.documents.length > 0
-  ) {
+  if (workAuthAnswer !== undefined && workAuthAnswer.questionKey === "work_authorization") {
     const classification = mapWorkAuthorizationOptionKey(workAuthAnswer.selectedOptionKey);
     const statementText =
-      workAuthAnswer.freeText ?? `Application answer: ${workAuthAnswer.selectedOptionKey}`;
-    const primaryDocId = CandidateDocumentIdSchema.parse(input.documents[0]!.candidateDocumentId);
-    const spanId = EvidenceSpanIdSchema.parse(
-      `span_app_ans_${workAuthAnswer.candidateApplicationAnswerId}`
-    );
-
+      workAuthAnswer.freeText !== null && workAuthAnswer.freeText.trim().length > 0
+        ? workAuthAnswer.freeText
+        : `Application answer: ${workAuthAnswer.selectedOptionKey}`;
     structuredFactProposals.push({
-      documentId: primaryDocId,
       provenance: "parsed",
       payload: {
         kind: "work_authorization_statement" as const,
         classification,
         statementText
       },
-      evidenceSpanIds: [spanId]
+      evidenceSpanIds: []
     });
   }
 
@@ -250,7 +256,11 @@ export function deriveCandidateTriageInputs(
       const evidenceSpanIds: EvidenceSpanId[] = [];
       if (Array.isArray(rawProposal.evidenceSpanIds)) {
         for (const id of rawProposal.evidenceSpanIds) {
-          evidenceSpanIds.push(EvidenceSpanIdSchema.parse(id));
+          const parsedSpanId = parseEvidenceSpanId(id);
+          if (!parsedSpanId.ok) {
+            return parsedSpanId;
+          }
+          evidenceSpanIds.push(parsedSpanId.value);
         }
       }
 
@@ -259,12 +269,15 @@ export function deriveCandidateTriageInputs(
           quoteOrdinal += 1;
           const relocation = relocateQuote(doc.normalizedText, quote.quotedText);
           if (relocation.ok) {
-            const rawSpanId = `span_fact_${doc.candidateDocumentId}_${quoteOrdinal}`;
-            const spanId = EvidenceSpanIdSchema.parse(rawSpanId);
-            evidenceSpanIds.push(spanId);
+            const rawSpanId = `span_fact_${input.candidateId}_${doc.candidateDocumentId}_${quoteOrdinal}`;
+            const parsedSpanId = parseEvidenceSpanId(rawSpanId);
+            if (!parsedSpanId.ok) {
+              return parsedSpanId;
+            }
+            evidenceSpanIds.push(parsedSpanId.value);
             locatedSpans.push(
               Object.freeze({
-                evidenceSpanId: spanId,
+                evidenceSpanId: parsedSpanId.value,
                 documentId: doc.candidateDocumentId,
                 start: relocation.value.start,
                 end: relocation.value.end,
@@ -323,15 +336,19 @@ export function deriveCandidateTriageInputs(
           level: artifact.acceptedOutput.proposedLevel
         });
 
-        artifact.acceptedOutput.spans.forEach((span, spanIdx) => {
-          const rawSpanId = `span_${artifact.extractionArtifactId}_${spanIdx}`;
+        for (const [spanIdx, span] of artifact.acceptedOutput.spans.entries()) {
+          const rawSpanId = `span_${input.candidateId}_${artifact.extractionArtifactId}_${spanIdx}`;
+          const parsedSpanId = parseEvidenceSpanId(rawSpanId);
+          if (!parsedSpanId.ok) {
+            return parsedSpanId;
+          }
           spans.push({
-            evidenceSpanId: EvidenceSpanIdSchema.parse(rawSpanId),
+            evidenceSpanId: parsedSpanId.value,
             documentId: docId,
             polarity: span.polarity,
             source: "extracted" as const
           });
-        });
+        }
       } else if (
         ext !== undefined &&
         (ext.failure !== undefined || ext.reviewableFailure === true)
@@ -423,6 +440,7 @@ export function deriveCandidateDecision(
   // 4. Scoring and confidence computation
   let score: ScoreComputation | null = null;
   let confidence: Rational | null = null;
+  let confidenceInput: ConfidenceInput | null = null;
 
   if (dimensionDerivation.availability === "complete") {
     const levelAssessments = dimensionDerivation.assessments.map((a) => ({
@@ -445,18 +463,19 @@ export function deriveCandidateDecision(
       spansLocated += a.supportingSpanIds.length + a.contradictingSpanIds.length;
     }
 
-    const confidenceResult = computeConfidence({
-      dimensionsWithLocatedSpan,
-      totalDimensions: input.rubric.dimensions.length,
-      spansLocated,
-      spansReturned: spansLocated,
-      contradictionCount: dimensionDerivation.assessments.reduce(
-        (sum, a) => sum + a.contradictingSpanIds.length,
-        0
+    confidenceInput = {
+      dimensionsWithLocatedSpan: NonnegativeIntegerSchema.parse(dimensionsWithLocatedSpan),
+      totalDimensions: PositiveIntegerSchema.parse(input.rubric.dimensions.length),
+      spansLocated: NonnegativeIntegerSchema.parse(spansLocated),
+      spansReturned: NonnegativeIntegerSchema.parse(spansLocated),
+      contradictionCount: NonnegativeIntegerSchema.parse(
+        dimensionDerivation.assessments.reduce((sum, a) => sum + a.contradictingSpanIds.length, 0)
       ),
-      requiredFieldsMissing: hardRequirements.unknownCount,
-      totalRequiredFields: REQUIRED_FIELD_IDS.length
-    });
+      requiredFieldsMissing: NonnegativeIntegerSchema.parse(hardRequirements.unknownCount),
+      totalRequiredFields: PositiveIntegerSchema.parse(REQUIRED_FIELD_IDS.length)
+    };
+
+    const confidenceResult = computeConfidence(confidenceInput);
 
     /* v8 ignore next 3 */
     if (!confidenceResult.ok) {
@@ -532,6 +551,7 @@ export function deriveCandidateDecision(
       hardRequirements,
       score,
       confidence,
+      confidenceInput,
       routing,
       proposals
     })

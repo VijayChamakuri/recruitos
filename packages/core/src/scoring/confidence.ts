@@ -13,7 +13,7 @@ import { err, ok, type Result } from "../errors/result.js";
 import { CONFIDENCE_WEIGHTS } from "./constants.js";
 import { mustRational, RATIONAL_ONE, RATIONAL_ZERO } from "./exact.js";
 
-const ConfidenceInputSchema = z
+export const ConfidenceInputSchema = z
   .object({
     dimensionsWithLocatedSpan: NonnegativeIntegerSchema,
     totalDimensions: PositiveIntegerSchema,

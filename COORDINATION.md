@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | d7b0958 |
+| origin/main | b7e949d |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import (MERGED #54), scheduler (MERGED #57), start-run (MERGED #59), extraction bridge plus OQ-7 policy, finalize, correction. |
@@ -42,9 +42,9 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | main | PR #58 merged (schema request for extraction_run persistence). | idle / ready |
-| Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). Next T10 tasks: T10.3 (start triage run use-case, MERGED #59), T10.4 (extraction-to-pipeline bridge), T10.5 (finalize), T10.6 (correction). | paused |
-| Antigravity | main | PR #60 merged (T10.4: Extraction-to-pipeline bridge and hard-requirements policy v1). | idle / ready for T10.5 |
+| Cursor | cursor/finalize-triage-run-c42c | T10.5 finalize triage run use-case (PR #61). Writer-lock follow-up: `planFinalize` uses deferred snapshot reads, `deriveCandidateDecision` runs outside any transaction, short `BEGIN IMMEDIATE` commit rechecks attempt/work-item/corpus/version races. Gates green. | ready |
+| Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). T10.3 MERGED #59. T10.4 MERGED #60. T10.5 in progress on Cursor. T10.6 (correction) still queued. | paused |
+| Antigravity | main | PR #60 merged (T10.4: Extraction-to-pipeline bridge and hard-requirements policy v1). Idle after T10.4. Cursor picked up T10.5. | idle / ready |
 
 ## Hard rules
 
@@ -140,3 +140,6 @@ your own rows plus the log.
 - 2026-09-08 Cursor: PR #58 squash-merged to main at 4db416c. Migration lock released.
 - 2026-09-08 Antigravity: starting T10.4 on c/t10-extraction-bridge off 4db416c. Implementing the declarative v1 hard-requirement policy carrying OQ-7 assumptions (packages/runtime/src/policy/hard-requirements-v1.ts) and the extraction-to-pipeline bridge (packages/runtime/src/results/derive-candidate-result.ts) to ground and assemble inputs for consolidateStructuredFacts, deriveDimensionAssessments, and resolveHardRequirements.
 - 2026-09-08 Antigravity: PR #60 (feat(runtime): extraction-to-pipeline bridge and hard-requirements policy v1 (T10.4)) squash-merged to main at d7b0958. Branch c/t10-extraction-bridge deleted. Implemented declarative v1 hard-requirement policy carrying OQ-7 assumptions (packages/runtime/src/policy/hard-requirements-v1.ts) and extraction-to-pipeline bridge (packages/runtime/src/results/derive-candidate-result.ts) executing pure core functions end-to-end. 100 percent test coverage (1229 tests, 25 integration), test:types, test:integration, check passing, zero em dashes. Idle, ready for T10.5.
+- 2026-09-08 Cursor: picking up T10.5 on cursor/finalize-triage-run-c42c from origin/main b7e949d after Antigravity left T10.4 merged and idle. No c/t10-finalize branch existed. Implementing finalizeTriageRun plus packet score, confidence, and reason fields. No T10.6. No migration.
+- 2026-09-08 Cursor: T10.5 trust-boundary follow-up on PR #61. Audit envelopes prepared outside the writer lock. Packet confidence parsed through ConfidenceInputSchema. Trusted extraction span persistence fails closed. Work authorization stays a parsed application-answer fact with no resume relocation. Remaining finalize v8 ignores are schema or race-fence comments. `pnpm check` 1420 tests plus 25 integration, `test:coverage` 1265 tests All files 100 percent, diff-check clean, no em dashes. Ready for review. No merge.
+- 2026-09-08 Cursor: T10.5 writer-lock follow-up on PR #61. `planFinalize` no longer uses `BEGIN IMMEDIATE`. Snapshot reads are deferred, `deriveCandidateDecision` runs with `inTransaction === false`, and the command transaction rechecks attempt readiness, work-item identities, corpus membership, and attempt version. Concurrent writers are blocked only during the short commit. `pnpm check` 1429 tests plus 25 integration, `test:coverage` 1274 tests All files 100 percent, diff-check clean, no em dashes, product-scope scan clean. SAFE_TO_MERGE. No merge from this agent.

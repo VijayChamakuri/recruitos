@@ -22,7 +22,7 @@ import {
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
 import { executeCommand } from "./executor.js";
 import { CommandEnvelopeSchema, CommandReceiptSchema } from "./schemas.js";
-import { runImmediateTransaction } from "./transaction.js";
+import { runDeferredTransaction, runImmediateTransaction } from "./transaction.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 
@@ -448,6 +448,88 @@ describe("command protocol", () => {
     expect(connection.close().ok).toBe(true);
   });
 
+  it("runs deferred snapshot work without blocking a concurrent immediate writer", async () => {
+    const filename = await createDatabaseFilename();
+    const first = await openMigratedDatabase(filename);
+    const second = await openMigratedDatabase(filename);
+    nativeDatabase(second.connection).pragma("busy_timeout = 1");
+
+    const result = runDeferredTransaction(first.connection, (context) => {
+      expect(context.nativeDatabase.inTransaction).toBe(true);
+      context.nativeDatabase.prepare("SELECT 1 AS one").get();
+      const write = runImmediateTransaction(second.connection, (writeContext) => {
+        writeContext.nativeDatabase.exec(
+          "CREATE TABLE deferred_lock_probe (id INTEGER PRIMARY KEY NOT NULL) STRICT"
+        );
+        writeContext.nativeDatabase.prepare("INSERT INTO deferred_lock_probe (id) VALUES (1)").run();
+        return ok("wrote");
+      });
+      expect(write).toEqual({ ok: true, value: "wrote" });
+      return ok("read");
+    });
+
+    expect(result).toEqual({ ok: true, value: "read" });
+    expect(nativeDatabase(first.connection).inTransaction).toBe(false);
+    expect(
+      nativeDatabase(second.connection)
+        .prepare("SELECT COUNT(*) AS count FROM deferred_lock_probe")
+        .get()
+    ).toEqual({ count: 1 });
+    expect(first.connection.close().ok).toBe(true);
+    expect(second.connection.close().ok).toBe(true);
+  });
+
+  it("propagates typed failures and thrown errors from a deferred transaction", async () => {
+    const { connection } = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+    const failure = createRuntimeError("persistence_failed", "Deferred snapshot failed", false);
+
+    expect(
+      runDeferredTransaction(connection, () => {
+        expect(database.inTransaction).toBe(true);
+        return err(failure);
+      })
+    ).toEqual({ ok: false, error: failure });
+    expect(database.inTransaction).toBe(false);
+
+    expect(
+      runDeferredTransaction(connection, () => {
+        throw new Error("test-only deferred failure");
+      })
+    ).toEqual({
+      ok: false,
+      error: {
+        code: "persistence_failed",
+        message: "Runtime database transaction failed",
+        retryable: false
+      }
+    });
+    expect(database.inTransaction).toBe(false);
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("refuses a deferred transaction while another transaction is active", async () => {
+    const { connection } = await openMigratedDatabase();
+    const database = nativeDatabase(connection);
+    database.exec("BEGIN IMMEDIATE");
+    const work = vi.fn(() => ok("not-run"));
+
+    const result = runDeferredTransaction(connection, work);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "persistence_failed",
+        message: "Cannot start a deferred transaction while another transaction is active",
+        retryable: false
+      }
+    });
+    expect(work).not.toHaveBeenCalled();
+    expect(database.inTransaction).toBe(true);
+    database.exec("ROLLBACK");
+    expect(connection.close().ok).toBe(true);
+  });
+
   it("applies a transforming result schema exactly once on execution and replay", async () => {
     const { connection } = await openMigratedDatabase();
     createTestAggregate(connection);
@@ -654,6 +736,10 @@ describe("command protocol", () => {
         ok: false,
         error: { message: "Invalid runtime database transaction input" }
       });
+      expect(runDeferredTransaction(invalidConnection as never, work)).toMatchObject({
+        ok: false,
+        error: { message: "Invalid runtime database transaction input" }
+      });
     }
 
     const { connection } = await openMigratedDatabase();
@@ -661,8 +747,16 @@ describe("command protocol", () => {
       ok: false,
       error: { message: "Invalid runtime database transaction input" }
     });
+    expect(runDeferredTransaction(connection, null as never)).toMatchObject({
+      ok: false,
+      error: { message: "Invalid runtime database transaction input" }
+    });
     expect(connection.close().ok).toBe(true);
     expect(runImmediateTransaction(connection, work)).toMatchObject({
+      ok: false,
+      error: { message: "Cannot start a transaction on a closed runtime database" }
+    });
+    expect(runDeferredTransaction(connection, work)).toMatchObject({
       ok: false,
       error: { message: "Cannot start a transaction on a closed runtime database" }
     });

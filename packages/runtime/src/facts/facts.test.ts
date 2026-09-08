@@ -539,6 +539,52 @@ describe("structured fact preparation", () => {
       ok: false,
       error: expect.objectContaining({ message: "Invalid structured fact content" })
     });
+    expect(prepareStructuredFact(factDraft({ evidenceSpans: [] }))).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid structured fact input" })
+    });
+    const parsedWorkAuth = unwrap(
+      prepareStructuredFact(
+        factDraft({
+          payload: {
+            kind: "work_authorization_statement",
+            classification: "authorized",
+            statementText: "Authorized to work without sponsorship."
+          },
+          evidenceSpans: [],
+          provenances: [
+            {
+              structuredFactProvenanceId: "structured-fact-provenance-1",
+              source: "parsed",
+              actorId: null
+            }
+          ]
+        })
+      )
+    );
+    expect(parsedWorkAuth.evidenceSpans).toEqual([]);
+    expect(parsedWorkAuth.provenances[0]?.source).toBe("parsed");
+    expect(
+      prepareStructuredFact(
+        factDraft({
+          payload: {
+            kind: "work_authorization_statement",
+            classification: "authorized",
+            statementText: "Authorized to work without sponsorship."
+          },
+          provenances: [
+            {
+              structuredFactProvenanceId: "structured-fact-provenance-1",
+              source: "parsed",
+              actorId: null
+            }
+          ]
+        })
+      )
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({ message: "Invalid structured fact input" })
+    });
   });
 });
 
@@ -556,6 +602,38 @@ describe("structured fact persistence", () => {
         expect(
           unwrap(readStructuredFactByContentHash(context, sha256Hex("missing-fact")))
         ).toBeUndefined();
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("round-trips a parsed work-authorization fact with no document spans", async () => {
+    const connection = await openMigratedDatabase();
+    const fact = unwrap(
+      prepareStructuredFact(
+        factDraft({
+          payload: {
+            kind: "work_authorization_statement",
+            classification: "authorized",
+            statementText: "Authorized to work without sponsorship."
+          },
+          evidenceSpans: [],
+          provenances: [
+            {
+              structuredFactProvenanceId: "structured-fact-provenance-1",
+              source: "parsed",
+              actorId: null
+            }
+          ]
+        })
+      )
+    );
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
+        unwrap(insertStructuredFact(context, fact));
+        expect(unwrap(readStructuredFact(context, fact.structuredFactId))).toEqual(fact);
         return ok(undefined);
       })
     );

@@ -33,9 +33,12 @@ function persistenceFailure(error: unknown): RuntimeError {
   );
 }
 
-export function runImmediateTransaction<TResult>(
+type SqliteTransactionKind = "immediate" | "deferred";
+
+function runSqliteTransaction<TResult>(
   connection: RuntimeDatabaseConnection,
-  work: (context: ImmediateTransactionContext) => Result<TResult, RuntimeError>
+  work: (context: ImmediateTransactionContext) => Result<TResult, RuntimeError>,
+  kind: SqliteTransactionKind
 ): Result<TResult, RuntimeError> {
   if (
     typeof connection !== "object" ||
@@ -74,7 +77,9 @@ export function runImmediateTransaction<TResult>(
     return err(
       createRuntimeError(
         "persistence_failed",
-        "Cannot start an immediate transaction while another transaction is active",
+        kind === "immediate"
+          ? "Cannot start an immediate transaction while another transaction is active"
+          : "Cannot start a deferred transaction while another transaction is active",
         false
       )
     );
@@ -94,11 +99,25 @@ export function runImmediateTransaction<TResult>(
       }
       return result.value;
     });
-    return ok(transaction.immediate());
+    return ok(kind === "immediate" ? transaction.immediate() : transaction.deferred());
   } catch (error) {
     if (error instanceof TransactionResultError) {
       return err(error.runtimeError);
     }
     return err(persistenceFailure(error));
   }
+}
+
+export function runImmediateTransaction<TResult>(
+  connection: RuntimeDatabaseConnection,
+  work: (context: ImmediateTransactionContext) => Result<TResult, RuntimeError>
+): Result<TResult, RuntimeError> {
+  return runSqliteTransaction(connection, work, "immediate");
+}
+
+export function runDeferredTransaction<TResult>(
+  connection: RuntimeDatabaseConnection,
+  work: (context: ImmediateTransactionContext) => Result<TResult, RuntimeError>
+): Result<TResult, RuntimeError> {
+  return runSqliteTransaction(connection, work, "deferred");
 }

@@ -12,7 +12,7 @@ import {
 } from "./consolidate-facts.js";
 
 type ProposalInput = Readonly<{
-  documentId: string;
+  documentId?: string;
   provenance: string;
   payload: StructuredFactPayload;
   evidenceSpanIds: readonly string[];
@@ -64,6 +64,18 @@ const EMPLOYER_HISTORY = fact({
   startMonth: "2020-01",
   endMonth: "2022-06"
 });
+
+function applicationAnswerProposal(
+  payload: StructuredFactPayload,
+  overrides: Partial<ProposalInput> = {}
+): ProposalInput {
+  return {
+    provenance: "parsed",
+    payload,
+    evidenceSpanIds: [],
+    ...overrides
+  };
+}
 
 function proposal(
   payload: StructuredFactPayload,
@@ -138,10 +150,49 @@ describe("consolidateStructuredFacts input validation", () => {
     expect(consolidateStructuredFacts([]).ok).toBe(false);
   });
 
-  it("rejects a proposal with no grounding evidence", () => {
+  it("rejects a document-grounded proposal with no grounding evidence", () => {
     expect(consolidateStructuredFacts([proposal(ACME_2020, { evidenceSpanIds: [] })]).ok).toBe(
       false
     );
+  });
+
+  it("rejects a document-grounded proposal with no document id", () => {
+    expect(
+      consolidateStructuredFacts([
+        {
+          provenance: "extracted",
+          payload: ACME_2020,
+          evidenceSpanIds: ["span_1"]
+        }
+      ]).ok
+    ).toBe(false);
+  });
+
+  it("accepts a parsed work-authorization statement grounded only in the application answer", () => {
+    const result = consolidated([applicationAnswerProposal(AUTHORIZED)]);
+    expect(result.facts).toHaveLength(1);
+    expect(result.facts[0]).toMatchObject({
+      payload: AUTHORIZED,
+      provenance: ["parsed"],
+      documentIds: [],
+      evidenceSpanIds: []
+    });
+  });
+
+  it("rejects a parsed work-authorization statement that cites a document", () => {
+    expect(
+      consolidateStructuredFacts([
+        applicationAnswerProposal(AUTHORIZED, { documentId: "document_resume" })
+      ]).ok
+    ).toBe(false);
+  });
+
+  it("rejects a parsed work-authorization statement that cites document spans", () => {
+    expect(
+      consolidateStructuredFacts([
+        applicationAnswerProposal(AUTHORIZED, { evidenceSpanIds: ["span_1"] })
+      ]).ok
+    ).toBe(false);
   });
 
   it("rejects unknown fields and unknown provenance", () => {
@@ -247,7 +298,7 @@ describe("consolidateStructuredFacts conflicts", () => {
 
   it("names a conflict for two different work authorization classifications", () => {
     const result = consolidated([
-      proposal(AUTHORIZED, { provenance: "parsed" }),
+      applicationAnswerProposal(AUTHORIZED),
       proposal(NEEDS_SPONSORSHIP)
     ]);
     expect(result.conflicts).toMatchObject([{ kind: "work_authorization_statement" }]);
@@ -311,13 +362,17 @@ describe("consolidateStructuredFacts invariants", () => {
         ),
         fc.nat(1000),
         (rows, rotation) => {
-          const proposals = rows.map((row) =>
-            proposal(PAYLOADS[row.payloadIndex]!, {
+          const proposals = rows.map((row) => {
+            const payload = PAYLOADS[row.payloadIndex]!;
+            if (row.provenance === "parsed" && payload.kind === "work_authorization_statement") {
+              return applicationAnswerProposal(payload);
+            }
+            return proposal(payload, {
               documentId: `document_${row.documentIndex}`,
               provenance: row.provenance,
               evidenceSpanIds: [`span_${row.spanIndex}`]
-            })
-          );
+            });
+          });
           const shift = rotation % proposals.length;
           const rotated = [...proposals.slice(shift), ...proposals.slice(0, shift)];
 

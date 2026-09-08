@@ -156,9 +156,84 @@ describe("deriveCandidateTriageInputs", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("bridges application answer into work_authorization_statement proposal", () => {
+  it("bridges application answer into work_authorization_statement proposal without resume relocation", () => {
     const appAnswer: CandidateApplicationAnswer = {
       candidateApplicationAnswerId: "ans_1" as any,
+      candidateId: "cand_1" as any,
+      questionKey: "work_authorization",
+      selectedOptionKey: "authorized_no_sponsorship",
+      freeText: "Alice Smith",
+      collectedBy: "greenhouse",
+      formId: "form_1",
+      questionId: "q_1",
+      collectedAt: NonnegativeIntegerSchema.parse(1000),
+      createdAt: NonnegativeIntegerSchema.parse(1000)
+    };
+
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      applicationAnswers: { workAuthorization: appAnswer },
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.structuredFactProposals).toHaveLength(1);
+    const prop = result.value.structuredFactProposals[0]!;
+    expect(prop.payload).toEqual({
+      kind: "work_authorization_statement",
+      classification: "authorized",
+      statementText: "Alice Smith"
+    });
+    expect(prop.provenance).toBe("parsed");
+    expect(prop.documentId).toBeUndefined();
+    expect(prop.evidenceSpanIds).toEqual([]);
+    expect(result.value.locatedSpans).toEqual([]);
+    expect(result.value.droppedQuotes).toEqual([]);
+  });
+
+  it("uses the selected option key when work authorization free text is absent", () => {
+    const appAnswer: CandidateApplicationAnswer = {
+      candidateApplicationAnswerId: "ans_fallback" as any,
+      candidateId: "cand_1" as any,
+      questionKey: "work_authorization",
+      selectedOptionKey: "authorized_no_sponsorship",
+      freeText: null,
+      collectedBy: "greenhouse",
+      formId: "form_1",
+      questionId: "q_1",
+      collectedAt: NonnegativeIntegerSchema.parse(1000),
+      createdAt: NonnegativeIntegerSchema.parse(1000)
+    };
+
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      applicationAnswers: { workAuthorization: appAnswer },
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.structuredFactProposals).toHaveLength(1);
+    expect(result.value.structuredFactProposals[0]).toMatchObject({
+      provenance: "parsed",
+      evidenceSpanIds: [],
+      payload: {
+        kind: "work_authorization_statement",
+        classification: "authorized",
+        statementText: "Application answer: authorized_no_sponsorship"
+      }
+    });
+    expect(result.value.droppedQuotes).toEqual([]);
+  });
+
+  it("preserves a work_authorization answer that is not duplicated in resume text", () => {
+    const appAnswer: CandidateApplicationAnswer = {
+      candidateApplicationAnswerId: "ans_unlocated" as any,
       candidateId: "cand_1" as any,
       questionKey: "work_authorization",
       selectedOptionKey: "authorized_no_sponsorship",
@@ -182,12 +257,36 @@ describe("deriveCandidateTriageInputs", () => {
     if (!result.ok) return;
     expect(result.value.structuredFactProposals).toHaveLength(1);
     const prop = result.value.structuredFactProposals[0]!;
+    expect(prop.provenance).toBe("parsed");
+    expect(prop.documentId).toBeUndefined();
+    expect(prop.evidenceSpanIds).toEqual([]);
     expect(prop.payload).toEqual({
       kind: "work_authorization_statement",
       classification: "authorized",
       statementText: "Citizen"
     });
-    expect(prop.evidenceSpanIds).toEqual(["span_app_ans_ans_1"]);
+    expect(result.value.locatedSpans).toHaveLength(0);
+    expect(result.value.droppedQuotes).toEqual([]);
+  });
+
+  it("returns a typed failure when an extraction span id is not a valid identifier", () => {
+    const longCandidateId = `cand_${"x".repeat(120)}`;
+    const result = deriveCandidateTriageInputs({
+      candidateId: longCandidateId,
+      documents: [SAMPLE_DOC],
+      extractions: [
+        {
+          candidateDocumentId: "cdoc_1",
+          dimensionId: RUBRIC_V1.dimensions[0]!.dimensionId,
+          artifact: createFakeArtifact(RUBRIC_V1.dimensions[0]!.dimensionId)
+        }
+      ],
+      rubric: RUBRIC_V1
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("persistence_failed");
+    expect(result.error.message).toContain("Invalid evidence span id");
   });
 
   it("bridges raw fact proposals with quote relocation", () => {
@@ -288,6 +387,65 @@ describe("deriveCandidateTriageInputs", () => {
     ]);
   });
 
+  it("returns a typed failure when a raw fact proposal cites an invalid span id", () => {
+    const rawProposal = {
+      documentId: "cdoc_1",
+      provenance: "parsed" as const,
+      payload: {
+        kind: "current_title" as const,
+        title: "Senior Machine Learning Engineer"
+      },
+      evidenceSpanIds: ["span with spaces"]
+    };
+
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      rawFactProposals: [rawProposal],
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("persistence_failed");
+    expect(result.error.message).toContain("Invalid evidence span id");
+  });
+
+  it("returns a typed failure when a relocated raw-fact span id is not a valid identifier", () => {
+    const longCandidateId = `cand_${"x".repeat(120)}`;
+    const rawProposal = {
+      documentId: "cdoc_1",
+      provenance: "extracted" as const,
+      payload: {
+        kind: "employment_interval" as const,
+        employer: "TechCorp",
+        title: "Senior Machine Learning Engineer",
+        startMonth: IsoYearMonthSchema.parse("2023-01"),
+        endMonth: "present" as const
+      },
+      groundingQuotes: [
+        {
+          quotedText: "TechCorp (2023-01 to Present)",
+          polarity: "supporting" as const
+        }
+      ]
+    };
+
+    const result = deriveCandidateTriageInputs({
+      candidateId: longCandidateId,
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      rawFactProposals: [rawProposal],
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("persistence_failed");
+    expect(result.error.message).toContain("Invalid evidence span id");
+  });
+
   it("ignores raw fact proposals targeting missing document ids", () => {
     const rawProposal = {
       documentId: "non_existent_doc",
@@ -381,7 +539,7 @@ describe("deriveCandidateDecision end-to-end", () => {
       candidateId: "cand_1" as any,
       questionKey: "work_authorization",
       selectedOptionKey: "authorized_no_sponsorship",
-      freeText: null,
+      freeText: "Alice Smith",
       collectedBy: "greenhouse",
       formId: "form_1",
       questionId: "q_1",
@@ -454,6 +612,8 @@ describe("deriveCandidateDecision end-to-end", () => {
     expect(decision.score).toBeDefined();
     expect(decision.score?.aggregate).toBeDefined();
     expect(decision.confidence).toBeDefined();
+    expect(decision.confidenceInput?.totalDimensions).toBe(6);
+    expect(decision.confidenceInput?.spansLocated).toBeGreaterThan(0);
     expect(decision.routing.status).toBe("scored");
     expect(decision.proposals.proposals.length).toBeGreaterThanOrEqual(1);
     expect(decision.proposals.proposals[0]?.payload.kind).toBe("shortlist_inclusion");
@@ -506,7 +666,7 @@ describe("deriveCandidateDecision end-to-end", () => {
       candidateId: "cand_unauth" as any,
       questionKey: "work_authorization",
       selectedOptionKey: "not_authorized",
-      freeText: null,
+      freeText: "Not authorized to work and this sentence is not in the resume",
       collectedBy: "greenhouse",
       formId: "form_1",
       questionId: "q_1",
@@ -556,6 +716,7 @@ describe("deriveCandidateDecision end-to-end", () => {
     expect(decision.dimensionDerivation.availability).toBe("unavailable");
     expect(decision.score).toBeNull();
     expect(decision.confidence).toBeNull();
+    expect(decision.confidenceInput).toBeNull();
     expect(decision.routing.status).toBe("escalated");
     expect(decision.routing.reasons).toContainEqual(
       expect.objectContaining({ kind: "assessment_unavailable" })
