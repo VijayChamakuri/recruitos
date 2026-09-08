@@ -162,7 +162,7 @@ describe("deriveCandidateTriageInputs", () => {
       candidateId: "cand_1" as any,
       questionKey: "work_authorization",
       selectedOptionKey: "authorized_no_sponsorship",
-      freeText: "Citizen",
+      freeText: "Alice Smith",
       collectedBy: "greenhouse",
       formId: "form_1",
       questionId: "q_1",
@@ -185,9 +185,51 @@ describe("deriveCandidateTriageInputs", () => {
     expect(prop.payload).toEqual({
       kind: "work_authorization_statement",
       classification: "authorized",
-      statementText: "Citizen"
+      statementText: "Alice Smith"
     });
-    expect(prop.evidenceSpanIds).toEqual(["span_app_ans_ans_1"]);
+    expect(prop.evidenceSpanIds).toEqual(["span_app_ans_cand_1_ans_1"]);
+    expect(result.value.locatedSpans).toEqual([
+      expect.objectContaining({
+        evidenceSpanId: "span_app_ans_cand_1_ans_1",
+        documentId: "cdoc_1",
+        quotedText: "Alice Smith",
+        polarity: "supporting"
+      })
+    ]);
+  });
+
+  it("drops an unlocated work_authorization quote instead of emitting a fact", () => {
+    const appAnswer: CandidateApplicationAnswer = {
+      candidateApplicationAnswerId: "ans_unlocated" as any,
+      candidateId: "cand_1" as any,
+      questionKey: "work_authorization",
+      selectedOptionKey: "authorized_no_sponsorship",
+      freeText: "Citizen",
+      collectedBy: "greenhouse",
+      formId: "form_1",
+      questionId: "q_1",
+      collectedAt: NonnegativeIntegerSchema.parse(1000),
+      createdAt: NonnegativeIntegerSchema.parse(1000)
+    };
+
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      applicationAnswers: { workAuthorization: appAnswer },
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.structuredFactProposals).toHaveLength(0);
+    expect(result.value.locatedSpans).toHaveLength(0);
+    expect(result.value.droppedQuotes).toEqual([
+      expect.objectContaining({
+        quotedText: "Citizen",
+        reason: "unlocated"
+      })
+    ]);
   });
 
   it("bridges raw fact proposals with quote relocation", () => {
@@ -381,7 +423,7 @@ describe("deriveCandidateDecision end-to-end", () => {
       candidateId: "cand_1" as any,
       questionKey: "work_authorization",
       selectedOptionKey: "authorized_no_sponsorship",
-      freeText: null,
+      freeText: "Alice Smith",
       collectedBy: "greenhouse",
       formId: "form_1",
       questionId: "q_1",
@@ -454,6 +496,8 @@ describe("deriveCandidateDecision end-to-end", () => {
     expect(decision.score).toBeDefined();
     expect(decision.score?.aggregate).toBeDefined();
     expect(decision.confidence).toBeDefined();
+    expect(decision.confidenceInput?.totalDimensions).toBe(6);
+    expect(decision.confidenceInput?.spansLocated).toBeGreaterThan(0);
     expect(decision.routing.status).toBe("scored");
     expect(decision.proposals.proposals.length).toBeGreaterThanOrEqual(1);
     expect(decision.proposals.proposals[0]?.payload.kind).toBe("shortlist_inclusion");
@@ -506,7 +550,7 @@ describe("deriveCandidateDecision end-to-end", () => {
       candidateId: "cand_unauth" as any,
       questionKey: "work_authorization",
       selectedOptionKey: "not_authorized",
-      freeText: null,
+      freeText: "Alice Smith",
       collectedBy: "greenhouse",
       formId: "form_1",
       questionId: "q_1",
@@ -556,6 +600,7 @@ describe("deriveCandidateDecision end-to-end", () => {
     expect(decision.dimensionDerivation.availability).toBe("unavailable");
     expect(decision.score).toBeNull();
     expect(decision.confidence).toBeNull();
+    expect(decision.confidenceInput).toBeNull();
     expect(decision.routing.status).toBe("escalated");
     expect(decision.routing.reasons).toContainEqual(
       expect.objectContaining({ kind: "assessment_unavailable" })

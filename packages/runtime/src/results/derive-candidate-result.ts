@@ -17,6 +17,7 @@ import {
   RubricDimensionIdSchema,
   type CandidateRouting,
   type CandidateTriageStatus,
+  type ConfidenceInput,
   type DimensionAssessmentDerivation,
   type DimensionEvidence,
   type DimensionLevel,
@@ -136,6 +137,7 @@ export type CandidateDecisionOutput = Readonly<{
   hardRequirements: HardRequirementResolution;
   score: ScoreComputation | null;
   confidence: Rational | null;
+  confidenceInput: ConfidenceInput | null;
   routing: CandidateRouting;
   proposals: ProposalDerivation;
 }>;
@@ -221,21 +223,43 @@ export function deriveCandidateTriageInputs(
     const classification = mapWorkAuthorizationOptionKey(workAuthAnswer.selectedOptionKey);
     const statementText =
       workAuthAnswer.freeText ?? `Application answer: ${workAuthAnswer.selectedOptionKey}`;
-    const primaryDocId = CandidateDocumentIdSchema.parse(input.documents[0]!.candidateDocumentId);
-    const spanId = EvidenceSpanIdSchema.parse(
-      `span_app_ans_${workAuthAnswer.candidateApplicationAnswerId}`
-    );
-
-    structuredFactProposals.push({
-      documentId: primaryDocId,
-      provenance: "parsed",
-      payload: {
-        kind: "work_authorization_statement" as const,
-        classification,
-        statementText
-      },
-      evidenceSpanIds: [spanId]
-    });
+    const primaryDoc = input.documents[0]!;
+    const relocation = relocateQuote(primaryDoc.normalizedText, statementText);
+    if (relocation.ok) {
+      const primaryDocId = CandidateDocumentIdSchema.parse(primaryDoc.candidateDocumentId);
+      const spanId = EvidenceSpanIdSchema.parse(
+        `span_app_ans_${input.candidateId}_${workAuthAnswer.candidateApplicationAnswerId}`
+      );
+      locatedSpans.push(
+        Object.freeze({
+          evidenceSpanId: spanId,
+          documentId: primaryDoc.candidateDocumentId,
+          start: relocation.value.start,
+          end: relocation.value.end,
+          quotedText: relocation.value.quotedText,
+          polarity: "supporting" as const,
+          matchQuality: relocation.value.matchQuality
+        })
+      );
+      structuredFactProposals.push({
+        documentId: primaryDocId,
+        provenance: "parsed",
+        payload: {
+          kind: "work_authorization_statement" as const,
+          classification,
+          statementText
+        },
+        evidenceSpanIds: [spanId]
+      });
+    } else {
+      droppedQuotes.push(
+        Object.freeze({
+          quotedText: statementText,
+          dimensionId: input.rubric.dimensions[0]!.dimensionId,
+          reason: "unlocated"
+        })
+      );
+    }
   }
 
   // 2. Process raw fact proposals and relocate grounding quotes
@@ -259,7 +283,7 @@ export function deriveCandidateTriageInputs(
           quoteOrdinal += 1;
           const relocation = relocateQuote(doc.normalizedText, quote.quotedText);
           if (relocation.ok) {
-            const rawSpanId = `span_fact_${doc.candidateDocumentId}_${quoteOrdinal}`;
+            const rawSpanId = `span_fact_${input.candidateId}_${doc.candidateDocumentId}_${quoteOrdinal}`;
             const spanId = EvidenceSpanIdSchema.parse(rawSpanId);
             evidenceSpanIds.push(spanId);
             locatedSpans.push(
@@ -324,7 +348,7 @@ export function deriveCandidateTriageInputs(
         });
 
         artifact.acceptedOutput.spans.forEach((span, spanIdx) => {
-          const rawSpanId = `span_${artifact.extractionArtifactId}_${spanIdx}`;
+          const rawSpanId = `span_${input.candidateId}_${artifact.extractionArtifactId}_${spanIdx}`;
           spans.push({
             evidenceSpanId: EvidenceSpanIdSchema.parse(rawSpanId),
             documentId: docId,
@@ -423,6 +447,7 @@ export function deriveCandidateDecision(
   // 4. Scoring and confidence computation
   let score: ScoreComputation | null = null;
   let confidence: Rational | null = null;
+  let confidenceInput: ConfidenceInput | null = null;
 
   if (dimensionDerivation.availability === "complete") {
     const levelAssessments = dimensionDerivation.assessments.map((a) => ({
@@ -445,7 +470,7 @@ export function deriveCandidateDecision(
       spansLocated += a.supportingSpanIds.length + a.contradictingSpanIds.length;
     }
 
-    const confidenceResult = computeConfidence({
+    confidenceInput = {
       dimensionsWithLocatedSpan,
       totalDimensions: input.rubric.dimensions.length,
       spansLocated,
@@ -456,7 +481,9 @@ export function deriveCandidateDecision(
       ),
       requiredFieldsMissing: hardRequirements.unknownCount,
       totalRequiredFields: REQUIRED_FIELD_IDS.length
-    });
+    };
+
+    const confidenceResult = computeConfidence(confidenceInput);
 
     /* v8 ignore next 3 */
     if (!confidenceResult.ok) {
@@ -532,6 +559,7 @@ export function deriveCandidateDecision(
       hardRequirements,
       score,
       confidence,
+      confidenceInput,
       routing,
       proposals
     })
