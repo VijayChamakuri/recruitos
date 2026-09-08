@@ -32,6 +32,7 @@ export type ParsedArgs = Readonly<{
     candidateId?: string;
     candidateVersion?: number;
     result?: string;
+    commandId?: string;
   }>;
   unknownOptions: readonly string[];
 }>;
@@ -73,6 +74,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     candidateId?: string;
     candidateVersion?: number;
     result?: string;
+    commandId?: string;
   } = {};
 
   let index = 0;
@@ -178,6 +180,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         case "result":
           options.result = value;
+          break;
+        case "command-id":
+          options.commandId = value;
           break;
         default:
           unknownOptions.push(arg);

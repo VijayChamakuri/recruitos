@@ -416,9 +416,10 @@ export class StubRecruitosComposition implements RecruitosComposition {
     triageAttemptId: string;
     expectedTaskHeadVersion: number;
     expectedCandidateHeadVersion: number;
+    commandId?: string;
   }): Promise<Result<import("./types.js").CompleteReExtractionSummary, RuntimeError>> {
     return ok({
-      commandId: "command-stub-complete-correction",
+      commandId: input.commandId ?? "command-stub-complete-correction",
       triageAttemptId: input.triageAttemptId,
       resolutionTaskId: "task-stub-correction",
       resolutionActionId: "action-stub-correction",
@@ -541,6 +542,7 @@ export class StubRecruitosComposition implements RecruitosComposition {
         newVersion: number;
         derivedStatus: ResolutionTaskStatus;
         triageAttemptId?: string;
+        commandId: string;
       },
       RuntimeError
     >
@@ -577,7 +579,12 @@ export class StubRecruitosComposition implements RecruitosComposition {
 
     this.tasks.set(input.taskId, updatedTask);
 
-    return ok({ actionId, newVersion, derivedStatus });
+    return ok({
+      actionId,
+      newVersion,
+      derivedStatus,
+      commandId: input.commandId ?? "command-stub-review"
+    });
   }
 
   async listProposals(

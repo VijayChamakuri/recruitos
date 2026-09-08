@@ -58,6 +58,7 @@ export function formatHelp(targetCommand?: string): string {
         "  --actor <id>          Actor ID recording the action (default: human:operator)",
         "  --version-num <n>     Expected task head version for optimistic concurrency",
         "  --candidate-version <n>  Expected candidate head version (request_re_extraction)",
+        "  --command-id <id>     Durable command id so a lost receipt can be replayed",
         "  --status <status>     Filter tasks or proposals by status",
         "  --json                Emit output in structured JSON envelope",
         "  -h, --help            Show this help message",
@@ -67,6 +68,7 @@ export function formatHelp(targetCommand?: string): string {
         "  recruitos review --task task-1",
         "  recruitos review --task task-1 --action resolve --rationale \"Verified by recruiter\" --version-num 0",
         "  recruitos review --task task-1 --action request_re_extraction --version-num 0 --candidate-version 1",
+        "  recruitos review --task task-1 --action request_re_extraction --version-num 0 --candidate-version 1 --command-id request-1",
         "  recruitos review --proposal proposal-1 --decision approve --version-num 0"
       ].join("\n");
 
@@ -107,7 +109,7 @@ export function formatHelp(targetCommand?: string): string {
         "recruitos triage:complete-correction - Seal a completed correction attempt",
         "",
         "Usage:",
-        "  recruitos triage:complete-correction --attempt <id> --version-num <n> --candidate-version <n> [--db <path>] [--json]",
+        "  recruitos triage:complete-correction --attempt <id> --version-num <n> --candidate-version <n> [--command-id <id>] [--db <path>] [--json]",
         "",
         "Writes a system-only reextraction_completed action and a superseding",
         "correction result. The original packet stays inspectable. The task moves",
@@ -116,9 +118,9 @@ export function formatHelp(targetCommand?: string): string {
         "Fixture-only sequence after demo:prepare --db <path>:",
         "  packet <candidate> --db <path>",
         "  review --candidate <candidate> --db <path>",
-        "  review --task <task> --action request_re_extraction --version-num 0 --candidate-version 1 --actor human:operator --db <path>",
+        "  review --task <task> --action request_re_extraction --version-num 0 --candidate-version 1 --actor human:operator --db <path> [--command-id req-1]",
         "  triage:extract --attempt <attempt> --demo-fixtures --correction-overlay --db <path>",
-        "  triage:complete-correction --attempt <attempt> --version-num 1 --candidate-version 1 --db <path>",
+        "  triage:complete-correction --attempt <attempt> --version-num 1 --candidate-version 1 --db <path> [--command-id complete-1]",
         "  packet <candidate> --db <path>",
         "  packet <candidate> --result <original-result> --db <path>"
       ].join("\n");

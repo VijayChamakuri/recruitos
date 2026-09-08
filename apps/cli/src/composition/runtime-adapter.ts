@@ -355,8 +355,15 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
     triageAttemptId: string;
     expectedTaskHeadVersion: number;
     expectedCandidateHeadVersion: number;
+    commandId?: string;
   }): Promise<Result<import("./types.js").CompleteReExtractionSummary, RuntimeError>> {
-    const result = completeReExtraction(this.runtime, input);
+    const result = completeReExtraction(this.runtime, {
+      actorId: input.actorId,
+      triageAttemptId: input.triageAttemptId,
+      expectedTaskHeadVersion: input.expectedTaskHeadVersion,
+      expectedCandidateHeadVersion: input.expectedCandidateHeadVersion,
+      ...(input.commandId === undefined ? {} : { commandId: input.commandId })
+    });
     if (!result.ok) return result;
     return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
   }
@@ -658,7 +665,13 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
     input: RecordResolutionActionInput
   ): Promise<
     Result<
-      { actionId: string; newVersion: number; derivedStatus: ResolutionTaskDetail["status"] },
+      {
+        actionId: string;
+        newVersion: number;
+        derivedStatus: ResolutionTaskDetail["status"];
+        triageAttemptId?: string;
+        commandId: string;
+      },
       RuntimeError
     >
   > {
@@ -681,7 +694,8 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
         actorId: input.actorId,
         resolutionTaskId: input.taskId,
         expectedTaskHeadVersion: input.expectedVersion,
-        expectedCandidateHeadVersion: input.expectedCandidateHeadVersion
+        expectedCandidateHeadVersion: input.expectedCandidateHeadVersion,
+        ...(input.commandId === undefined ? {} : { commandId: input.commandId })
       });
       if (!result.ok) {
         return err({
@@ -695,7 +709,8 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
         actionId: result.value.result.resolutionActionId,
         newVersion: result.value.result.taskHeadVersion,
         derivedStatus: result.value.result.derivedStatus,
-        triageAttemptId: result.value.result.triageAttemptId
+        triageAttemptId: result.value.result.triageAttemptId,
+        commandId: result.value.metadata.commandId
       });
     }
     return this.fallback.recordResolutionAction(input);

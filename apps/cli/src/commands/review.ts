@@ -96,7 +96,8 @@ export async function runReviewCommand(
         expectedVersion: args.options.versionNum,
         ...(args.options.candidateVersion === undefined
           ? {}
-          : { expectedCandidateHeadVersion: args.options.candidateVersion })
+          : { expectedCandidateHeadVersion: args.options.candidateVersion }),
+        ...(args.options.commandId === undefined ? {} : { commandId: args.options.commandId })
       });
 
       const durationMs = Date.now() - startTime;
@@ -137,6 +138,7 @@ export async function runReviewCommand(
         stdout: [
           `Resolution action recorded for task: ${taskId}`,
           `Action ID:      ${res.actionId}`,
+          `Command ID:     ${res.commandId}`,
           `New Version:    ${res.newVersion}`,
           `Derived Status: ${res.derivedStatus}`,
           ...(res.triageAttemptId === undefined

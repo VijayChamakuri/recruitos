@@ -87,12 +87,15 @@ describe("CLI Parser", () => {
       "--candidate-version",
       "1",
       "--result",
-      "result-original"
+      "result-original",
+      "--command-id",
+      "durable-request-1"
     ]);
     expect(p5.flags.demoFixtures).toBe(true);
     expect(p5.flags.correctionOverlay).toBe(true);
     expect(p5.options.candidateVersion).toBe(1);
     expect(p5.options.result).toBe("result-original");
+    expect(p5.options.commandId).toBe("durable-request-1");
   });
 
   it("records unknown options", () => {
@@ -145,6 +148,7 @@ describe("CLI Commands Execution", () => {
       const reviewHelp = await runCli(["help", "review"]);
       expect(reviewHelp.stdout).toContain("request_re_extraction");
       expect(reviewHelp.stdout).toContain("--candidate-version");
+      expect(reviewHelp.stdout).toContain("--command-id");
 
       const extractHelp = await runCli(["help", "triage:extract"]);
       expect(extractHelp.stdout).toContain("--demo-fixtures");
@@ -153,6 +157,7 @@ describe("CLI Commands Execution", () => {
       const completeHelp = await runCli(["help", "triage:complete-correction"]);
       expect(completeHelp.stdout).toContain("reextraction_completed");
       expect(completeHelp.stdout).toContain("review_required");
+      expect(completeHelp.stdout).toContain("--command-id");
     });
 
     it("emits help as structured JSON when requested", async () => {
@@ -451,6 +456,147 @@ describe("CLI Commands Execution", () => {
           ])
         );
         expect(after.status).toBe("review_required");
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it("replays request and complete mutations with a durable command id", async () => {
+      const directory = mkdtempSync(join(tmpdir(), "recruitos-cli-command-id-"));
+      const database = join(directory, "runtime.db");
+      try {
+        const prepared = parseEnvelopeData<{ candidateIds: string[] }>(
+          await runCli(["demo:prepare", "--db", database, "--json"])
+        );
+
+        let candidateId: string | undefined;
+        let candidateVersion: number | undefined;
+        for (const id of prepared.candidateIds) {
+          const packet = parseEnvelopeData<{
+            sourceKey: string;
+            headVersion?: number;
+          }>(await runCli(["packet", id, "--db", database, "--json"]));
+          if (packet.sourceKey !== DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) continue;
+          candidateId = id;
+          candidateVersion = packet.headVersion;
+          break;
+        }
+        expect(candidateId).toMatch(/\S/);
+        expect(candidateVersion).toBe(1);
+
+        const listed = parseEnvelopeData<{
+          tasks: Array<{ resolutionTaskId: string; version: number }>;
+        }>(
+          await runCli([
+            "review",
+            "--candidate",
+            candidateId ?? "",
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        const taskId = listed.tasks[0]?.resolutionTaskId ?? "";
+
+        const requestArgs = [
+          "review",
+          "--task",
+          taskId,
+          "--action",
+          "request_re_extraction",
+          "--version-num",
+          "0",
+          "--candidate-version",
+          String(candidateVersion),
+          "--actor",
+          "human:operator",
+          "--command-id",
+          "durable-request-1",
+          "--db",
+          database,
+          "--json"
+        ];
+        const requested = parseEnvelopeData<{
+          triageAttemptId: string;
+          actionId: string;
+          commandId: string;
+          newVersion: number;
+        }>(await runCli(requestArgs));
+        expect(requested.commandId).toBe("durable-request-1");
+        expect(requested.triageAttemptId).toMatch(/\S/);
+
+        const requestReplay = parseEnvelopeData<{
+          triageAttemptId: string;
+          actionId: string;
+          commandId: string;
+          newVersion: number;
+        }>(await runCli(requestArgs));
+        expect(requestReplay).toEqual(requested);
+
+        const extracted = parseEnvelopeData<{ succeeded: number; blockedFailures: number }>(
+          await runCli([
+            "triage:extract",
+            "--attempt",
+            requested.triageAttemptId,
+            "--demo-fixtures",
+            "--correction-overlay",
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        expect(extracted.succeeded).toBeGreaterThan(0);
+        expect(extracted.blockedFailures).toBe(0);
+
+        const completeArgs = [
+          "triage:complete-correction",
+          "--attempt",
+          requested.triageAttemptId,
+          "--version-num",
+          "1",
+          "--candidate-version",
+          String(candidateVersion),
+          "--command-id",
+          "durable-complete-1",
+          "--db",
+          database,
+          "--json"
+        ];
+        const completed = parseEnvelopeData<{
+          resultId: string;
+          commandId: string;
+          candidateHeadVersion: number;
+        }>(await runCli(completeArgs));
+        expect(completed.commandId).toBe("durable-complete-1");
+        expect(completed.candidateHeadVersion).toBe(2);
+
+        const completeReplay = parseEnvelopeData<{
+          resultId: string;
+          commandId: string;
+          candidateHeadVersion: number;
+        }>(await runCli(completeArgs));
+        expect(completeReplay).toEqual(completed);
+
+        const invalid = await runCli([
+          "review",
+          "--task",
+          taskId,
+          "--action",
+          "request_re_extraction",
+          "--version-num",
+          "0",
+          "--candidate-version",
+          String(candidateVersion),
+          "--actor",
+          "human:operator",
+          "--command-id",
+          "has space",
+          "--db",
+          database,
+          "--json"
+        ]);
+        expect(invalid.exitCode).not.toBe(EXIT_SUCCESS);
+        expect(invalid.stderr).toContain("valid command id");
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }

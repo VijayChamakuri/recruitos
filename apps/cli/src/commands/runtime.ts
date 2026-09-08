@@ -335,7 +335,8 @@ export async function runRuntimeCommand(
       actorId: DEFAULT_ACTOR_ID,
       triageAttemptId: attemptId,
       expectedTaskHeadVersion: args.options.versionNum,
-      expectedCandidateHeadVersion: args.options.candidateVersion
+      expectedCandidateHeadVersion: args.options.candidateVersion,
+      ...(args.options.commandId === undefined ? {} : { commandId: args.options.commandId })
     });
     if (!result.ok) return runtimeError(args.command, result.error, args, startTime);
     return success(

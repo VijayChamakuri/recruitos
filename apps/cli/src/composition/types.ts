@@ -255,6 +255,7 @@ export type RecordResolutionActionInput = Readonly<{
   rationale: string;
   expectedVersion: number;
   expectedCandidateHeadVersion?: number;
+  commandId?: string;
 }>;
 
 export type ListProposalsOptions = Readonly<{
@@ -309,6 +310,7 @@ export interface RecruitosComposition {
     triageAttemptId: string;
     expectedTaskHeadVersion: number;
     expectedCandidateHeadVersion: number;
+    commandId?: string;
   }>): Promise<Result<CompleteReExtractionSummary, RuntimeError>>;
 
   finalizeTriage(input: Readonly<{
@@ -349,6 +351,7 @@ export interface RecruitosComposition {
         newVersion: number;
         derivedStatus: ResolutionTaskStatus;
         triageAttemptId?: string;
+        commandId: string;
       },
       RuntimeError
     >
