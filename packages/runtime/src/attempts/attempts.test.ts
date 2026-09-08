@@ -40,9 +40,11 @@ import {
 import {
   insertExtractionArtifact,
   insertExtractionFailure,
+  insertExtractionRun,
   insertExtractionSpec,
   prepareExtractionArtifact,
   prepareExtractionFailure,
+  prepareExtractionRun,
   prepareExtractionSpec
 } from "../extraction/index.js";
 import {
@@ -116,6 +118,7 @@ const ATTEMPT_WORK_ITEM_COLUMNS = `
   attempt_count integer NOT NULL,
   extraction_artifact_id text,
   extraction_failure_id text,
+  extraction_run_id text,
   version integer NOT NULL,
   created_at integer NOT NULL,
   updated_at integer NOT NULL
@@ -306,6 +309,7 @@ function pendingWorkItem(index: number, overrides: Record<string, unknown> = {})
     attemptCount: 0,
     extractionArtifactId: null,
     extractionFailureId: null,
+    extractionRunId: null,
     version: 1,
     updatedAt: CREATED_AT
   };
@@ -598,6 +602,29 @@ function seedFailure(context: ImmediateTransactionContext, index = 0): void {
   );
 }
 
+function extractionRunDraft(index = 0, overrides: Record<string, unknown> = {}) {
+  return {
+    extractionRunId: `extraction-run-${index + 1}`,
+    spansReturned: 2,
+    spansLocated: 1,
+    droppedQuotes: [
+      {
+        quotedText: `missing-${index + 1}`,
+        dimensionId: "evaluation_practice",
+        reason: "quote was not found in normalized text"
+      }
+    ],
+    modelId: "test-extractor",
+    fixtureKey: null,
+    createdAt: CREATED_AT,
+    ...overrides
+  };
+}
+
+function seedExtractionRun(context: ImmediateTransactionContext, index = 0): void {
+  unwrap(insertExtractionRun(context, unwrap(prepareExtractionRun(extractionRunDraft(index)))));
+}
+
 function rebuildWithoutChecks(
   database: BetterSqlite3.Database,
   table: "triage_attempt" | "attempt_work_item"
@@ -733,6 +760,7 @@ describe("triage attempt persistence", () => {
         );
         expect(completed.state).toBe("succeeded");
         expect(completed.extractionArtifactId).toBe("extraction-artifact-1");
+        expect(completed.extractionRunId).toBeNull();
         expect(unwrap(readTriageAttempt(context, "triage-attempt-1"))?.status).toBe(
           "in_progress"
         );
@@ -753,6 +781,200 @@ describe("triage attempt persistence", () => {
         expect(Object.isFrozen(unwrap(readAttemptWorkItem(context, "attempt-work-item-1")))).toBe(
           true
         );
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("persists an optional extraction run id on complete and fail", async () => {
+    const connection = await openMigratedDatabase();
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedOfficialParents(context, 2);
+        seedOfficialAttempt(context);
+        seedArtifact(context, 0);
+        seedFailure(context, 1);
+        seedExtractionRun(context, 0);
+        seedExtractionRun(context, 1);
+        seedPendingWorkItem(context, 0);
+        seedPendingWorkItem(context, 1);
+
+        unwrap(claimAttemptWorkItem(context, claimInput(0)));
+        const completed = unwrap(
+          completeAttemptWorkItem(context, {
+            attemptWorkItemId: "attempt-work-item-1",
+            extractionArtifactId: "extraction-artifact-1",
+            extractionRunId: "extraction-run-1",
+            completedAt: COMPLETED_AT,
+            expectedVersion: 2
+          })
+        );
+        expect(completed.extractionRunId).toBe("extraction-run-1");
+
+        unwrap(claimAttemptWorkItem(context, claimInput(1)));
+        const failed = unwrap(
+          failAttemptWorkItem(context, {
+            attemptWorkItemId: "attempt-work-item-2",
+            state: "reviewable_failure",
+            extractionFailureId: "extraction-failure-2",
+            extractionRunId: "extraction-run-2",
+            failedAt: COMPLETED_AT,
+            expectedVersion: 2
+          })
+        );
+        expect(failed.extractionRunId).toBe("extraction-run-2");
+
+        expect(
+          completeAttemptWorkItem(context, {
+            attemptWorkItemId: "attempt-work-item-1",
+            extractionArtifactId: "extraction-artifact-1",
+            extractionRunId: "extraction-run-missing",
+            completedAt: COMPLETED_AT + 1,
+            expectedVersion: 3
+          })
+        ).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Attempt work item is not claimed"
+          })
+        });
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a completion that names a missing extraction run", async () => {
+    const connection = await openMigratedDatabase();
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedOfficialParents(context);
+        seedOfficialAttempt(context);
+        seedArtifact(context);
+        seedPendingWorkItem(context);
+        unwrap(claimAttemptWorkItem(context, claimInput(0)));
+        expect(
+          completeAttemptWorkItem(context, {
+            attemptWorkItemId: "attempt-work-item-1",
+            extractionArtifactId: "extraction-artifact-1",
+            extractionRunId: "extraction-run-missing",
+            completedAt: COMPLETED_AT,
+            expectedVersion: 2
+          })
+        ).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Attempt work item completion failed"
+          })
+        });
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a failure that names a missing extraction run", async () => {
+    const connection = await openMigratedDatabase();
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedOfficialParents(context);
+        seedOfficialAttempt(context);
+        seedFailure(context);
+        seedPendingWorkItem(context);
+        unwrap(claimAttemptWorkItem(context, claimInput(0)));
+        expect(
+          failAttemptWorkItem(context, {
+            attemptWorkItemId: "attempt-work-item-1",
+            state: "reviewable_failure",
+            extractionFailureId: "extraction-failure-1",
+            extractionRunId: "extraction-run-missing",
+            failedAt: COMPLETED_AT,
+            expectedVersion: 2
+          })
+        ).toEqual({
+          ok: false,
+          error: expect.objectContaining({
+            message: "Attempt work item failure failed"
+          })
+        });
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("clears the extraction run id when a retryable failure is claimed again", async () => {
+    const connection = await openMigratedDatabase();
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedOfficialParents(context);
+        seedOfficialAttempt(context);
+        seedFailure(context);
+        seedExtractionRun(context);
+        seedPendingWorkItem(context);
+        unwrap(claimAttemptWorkItem(context, claimInput(0)));
+        const failed = unwrap(
+          failAttemptWorkItem(context, {
+            attemptWorkItemId: "attempt-work-item-1",
+            state: "retryable_failure",
+            extractionFailureId: "extraction-failure-1",
+            extractionRunId: "extraction-run-1",
+            failedAt: COMPLETED_AT,
+            expectedVersion: 2
+          })
+        );
+        expect(failed.extractionRunId).toBe("extraction-run-1");
+
+        const retried = unwrap(
+          claimAttemptWorkItem(
+            context,
+            claimInput(0, {
+              claimId: "attempt-claim-retry",
+              claimedAt: COMPLETED_AT + 1,
+              claimExpiresAt: COMPLETED_AT + 61_000,
+              expectedVersion: 3
+            })
+          )
+        );
+        expect(retried.state).toBe("claimed");
+        expect(retried.extractionRunId).toBeNull();
+        expect(retried.extractionFailureId).toBeNull();
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
+  it("rejects a raw rewrite of extraction_run_id on a terminal work item", async () => {
+    const connection = await openMigratedDatabase();
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        seedOfficialParents(context);
+        seedOfficialAttempt(context);
+        seedArtifact(context);
+        seedExtractionRun(context, 0);
+        seedExtractionRun(context, 1);
+        seedPendingWorkItem(context);
+        unwrap(claimAttemptWorkItem(context, claimInput(0)));
+        unwrap(
+          completeAttemptWorkItem(context, {
+            attemptWorkItemId: "attempt-work-item-1",
+            extractionArtifactId: "extraction-artifact-1",
+            extractionRunId: "extraction-run-1",
+            completedAt: COMPLETED_AT,
+            expectedVersion: 2
+          })
+        );
+        expect(() =>
+          context.nativeDatabase.exec(`
+            UPDATE attempt_work_item
+            SET extraction_run_id = 'extraction-run-2',
+                version = 4,
+                updated_at = ${COMPLETED_AT + 1}
+            WHERE attempt_work_item_id = 'attempt-work-item-1'
+          `)
+        ).toThrow(/terminal state is immutable/u);
         return ok(undefined);
       })
     );

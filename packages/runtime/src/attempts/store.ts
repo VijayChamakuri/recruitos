@@ -116,6 +116,7 @@ const WORK_ITEM_SELECT = `SELECT
   attempt_count AS attemptCount,
   extraction_artifact_id AS extractionArtifactId,
   extraction_failure_id AS extractionFailureId,
+  extraction_run_id AS extractionRunId,
   version,
   created_at AS createdAt,
   updated_at AS updatedAt
@@ -215,6 +216,7 @@ export function prepareAttemptWorkItem(
           attemptCount: 0,
           extractionArtifactId: null,
           extractionFailureId: null,
+          extractionRunId: null,
           version: 1,
           updatedAt: draft.data.createdAt
         })
@@ -319,10 +321,11 @@ export function insertAttemptWorkItem(
           attempt_count,
           extraction_artifact_id,
           extraction_failure_id,
+          extraction_run_id,
           version,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         item.attemptWorkItemId,
@@ -340,6 +343,7 @@ export function insertAttemptWorkItem(
         item.attemptCount,
         item.extractionArtifactId,
         item.extractionFailureId,
+        item.extractionRunId,
         item.version,
         item.createdAt,
         item.updatedAt
@@ -507,6 +511,7 @@ export function claimAttemptWorkItem(
              attempt_count = ?,
              extraction_artifact_id = NULL,
              extraction_failure_id = NULL,
+             extraction_run_id = NULL,
              version = ?,
              updated_at = ?
          WHERE attempt_work_item_id = ?`
@@ -575,12 +580,14 @@ export function completeAttemptWorkItem(
          SET state = 'succeeded',
              extraction_artifact_id = ?,
              extraction_failure_id = NULL,
+             extraction_run_id = ?,
              version = ?,
              updated_at = ?
          WHERE attempt_work_item_id = ?`
       )
       .run(
         completion.extractionArtifactId,
+        completion.extractionRunId ?? null,
         item.version + 1,
         completion.completedAt,
         item.attemptWorkItemId
@@ -640,6 +647,7 @@ export function failAttemptWorkItem(
          SET state = ?,
              extraction_artifact_id = NULL,
              extraction_failure_id = ?,
+             extraction_run_id = ?,
              version = ?,
              updated_at = ?
          WHERE attempt_work_item_id = ?`
@@ -647,6 +655,7 @@ export function failAttemptWorkItem(
       .run(
         failure.state,
         failure.extractionFailureId,
+        failure.extractionRunId ?? null,
         item.version + 1,
         failure.failedAt,
         item.attemptWorkItemId
