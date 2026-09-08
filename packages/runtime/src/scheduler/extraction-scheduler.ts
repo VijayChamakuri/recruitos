@@ -21,8 +21,10 @@ import type { DroppedQuote } from "../evidence/index.js";
 import {
   insertExtractionArtifact,
   insertExtractionFailure,
+  insertExtractionRun,
   prepareExtractionArtifact,
   prepareExtractionFailure,
+  prepareExtractionRun,
   readExtractionArtifactByContentHash,
   readExtractionFailureByContentHash
 } from "../extraction/index.js";
@@ -41,9 +43,12 @@ import {
  * dimension mismatch, unusable quote).
  *
  * Concurrency, `SIGINT` grace, claim-expiry reclaim, and live retry and backoff
- * are out of scope here and are documented follow-ups. `extraction_run`
- * persistence is a filed schema request; until it lands the span counts and
- * dropped quotes are returned in the summary but not stored.
+ * are out of scope here and are documented follow-ups.
+ *
+ * Every processed work item, succeeded or failed, records one `extraction_run`
+ * row carrying the returned and located span counts and the dropped quotes, and
+ * links it on the work item. Finalize aggregates those rows into the confidence
+ * resolution term, so the term is reproducible from stored rows.
  */
 
 const CLAIM_TTL_MS = 5 * 60 * 1000;
@@ -84,6 +89,7 @@ function truncateDetail(text: string): string {
 type WorkItemContext = Readonly<{
   specContentJson: string;
   specContentHash: string;
+  specModelId: string;
   sourceDocumentId: string;
   documentKind: string;
   normalizedText: string;
@@ -93,6 +99,7 @@ type WorkItemContext = Readonly<{
 const WORK_ITEM_CONTEXT_SELECT = `SELECT
   s.content_json AS specContentJson,
   s.content_hash AS specContentHash,
+  s.model_id AS specModelId,
   cd.document_kind AS documentKind,
   sd.source_document_id AS sourceDocumentId,
   sd.normalized_text AS normalizedText,
@@ -149,13 +156,47 @@ type FailurePlan = Readonly<{
   summary: string;
   detail: string;
   responseBody: string;
+  spansReturned: number;
+  spansLocated: number;
+  droppedQuotes: readonly DroppedQuote[];
 }>;
+
+/**
+ * Builds the `extraction_run` record for one processed work item outside the
+ * writer lock. `fixtureKey` is the content-address the fixture adapter keyed on
+ * in fixture mode, and null for a live call or a provider error with no body.
+ */
+function prepareRunForItem(
+  composition: RuntimeComposition,
+  workContext: WorkItemContext,
+  spansReturned: number,
+  spansLocated: number,
+  droppedQuotes: readonly DroppedQuote[],
+  fixtureKey: string | null,
+  now: number
+): Result<{ extractionRunId: string }, RuntimeError> {
+  const prepared = prepareExtractionRun({
+    extractionRunId: composition.idGenerator.next(),
+    spansReturned,
+    spansLocated,
+    droppedQuotes: [...droppedQuotes],
+    modelId: workContext.specModelId,
+    fixtureKey,
+    createdAt: now
+  });
+  /* v8 ignore next 3 -- callers always pass counts that satisfy prepareExtractionRun. */
+  if (!prepared.ok) {
+    return prepared;
+  }
+  return ok(prepared.value);
+}
 
 function recordFailure(
   composition: RuntimeComposition,
   item: AttemptWorkItem,
   claimedVersion: number,
-  sourceDocumentId: string,
+  workContext: WorkItemContext,
+  fixtureKey: string | null,
   plan: FailurePlan,
   now: number
 ): Result<void, RuntimeError> {
@@ -163,7 +204,7 @@ function recordFailure(
   const prepared = prepareExtractionFailure({
     extractionFailureId: composition.idGenerator.next(),
     specId: item.extractionSpecId,
-    sourceDocumentId,
+    sourceDocumentId: workContext.sourceDocumentId,
     errorClass: plan.errorClass,
     responseHash: sha256Hex(plan.responseBody),
     responseByteLength,
@@ -172,6 +213,19 @@ function recordFailure(
   });
   if (!prepared.ok) {
     return prepared;
+  }
+  const preparedRun = prepareRunForItem(
+    composition,
+    workContext,
+    plan.spansReturned,
+    plan.spansLocated,
+    plan.droppedQuotes,
+    fixtureKey,
+    now
+  );
+  /* v8 ignore next 3 -- span counts are always consistent, so prepareExtractionRun cannot fail. */
+  if (!preparedRun.ok) {
+    return preparedRun;
   }
   return runImmediateTransaction(composition.connection, (context) => {
     const existing = readExtractionFailureByContentHash(context, prepared.value.contentHash);
@@ -188,10 +242,15 @@ function recordFailure(
         return inserted;
       }
     }
+    const insertedRun = insertExtractionRun(context, preparedRun.value);
+    if (!insertedRun.ok) {
+      return insertedRun;
+    }
     const failed = failAttemptWorkItem(context, {
       attemptWorkItemId: item.attemptWorkItemId,
       state: plan.state,
       extractionFailureId: failureId,
+      extractionRunId: preparedRun.value.extractionRunId,
       failedAt: now,
       expectedVersion: claimedVersion
     });
@@ -233,6 +292,11 @@ async function processWorkItem(
   }
   const claimedVersion = claimed.value.version;
   const sourceDocumentId = workContext.sourceDocumentId;
+  const noSpans: Pick<FailurePlan, "spansReturned" | "spansLocated" | "droppedQuotes"> = {
+    spansReturned: 0,
+    spansLocated: 0,
+    droppedQuotes: []
+  };
 
   const response = await composition.extraction.extract({
     extractionSpecHash: requestHash,
@@ -253,18 +317,23 @@ async function processWorkItem(
       composition,
       item,
       claimedVersion,
-      sourceDocumentId,
+      workContext,
+      null,
       {
         state: "blocked_failure",
         errorClass: "structurally_invalid",
         summary: "Extraction provider call failed",
         detail: response.error.message,
-        responseBody: ""
+        responseBody: "",
+        ...noSpans
       },
       now
     );
     return recorded.ok ? ok({ kind: "blocked_failure" }) : recorded;
   }
+
+  const fixtureKey =
+    response.value.descriptor.mode === "fixture" ? requestHash : null;
 
   const parsed = parseExtractionResponseBody(response.value.body);
   if (!parsed.ok) {
@@ -272,13 +341,15 @@ async function processWorkItem(
       composition,
       item,
       claimedVersion,
-      sourceDocumentId,
+      workContext,
+      fixtureKey,
       {
         state: "blocked_failure",
         errorClass: "structurally_invalid",
         summary: "Extraction response body is off contract",
         detail: parsed.error.message,
-        responseBody: response.value.body
+        responseBody: response.value.body,
+        ...noSpans
       },
       now
     );
@@ -290,13 +361,15 @@ async function processWorkItem(
       composition,
       item,
       claimedVersion,
-      sourceDocumentId,
+      workContext,
+      fixtureKey,
       {
         state: "blocked_failure",
         errorClass: "identity_mismatch",
         summary: "Extraction response is for the wrong dimension",
         detail: `expected ${item.dimensionId}, received ${parsed.value.dimensionId}`,
-        responseBody: response.value.body
+        responseBody: response.value.body,
+        ...noSpans
       },
       now
     );
@@ -309,13 +382,15 @@ async function processWorkItem(
       composition,
       item,
       claimedVersion,
-      sourceDocumentId,
+      workContext,
+      fixtureKey,
       {
         state: "blocked_failure",
         errorClass: "structurally_invalid",
         summary: "Extraction response quote is unusable",
         detail: located.error.message,
-        responseBody: response.value.body
+        responseBody: response.value.body,
+        ...noSpans
       },
       now
     );
@@ -324,6 +399,7 @@ async function processWorkItem(
 
   const { acceptedOutput, rejectedClaims, droppedQuotes, spansReturned, spansLocated } =
     located.value;
+  const spanCounts = { spansReturned, spansLocated, droppedQuotes };
 
   const hasSupportingSpan = acceptedOutput.spans.some(
     (span) => span.polarity === "supporting"
@@ -333,13 +409,15 @@ async function processWorkItem(
       composition,
       item,
       claimedVersion,
-      sourceDocumentId,
+      workContext,
+      fixtureKey,
       {
         state: "reviewable_failure",
         errorClass: "structurally_invalid",
         summary: "Extraction proposed a level with no located supporting span",
         detail: `level ${acceptedOutput.proposedLevel}, ${spansLocated} of ${spansReturned} spans located`,
-        responseBody: response.value.body
+        responseBody: response.value.body,
+        ...spanCounts
       },
       now
     );
@@ -361,17 +439,33 @@ async function processWorkItem(
       composition,
       item,
       claimedVersion,
-      sourceDocumentId,
+      workContext,
+      fixtureKey,
       {
         state: "blocked_failure",
         errorClass: "cardinality_exceeded",
         summary: "Extraction artifact failed preparation",
         detail: preparedArtifact.error.message,
-        responseBody: response.value.body
+        responseBody: response.value.body,
+        ...spanCounts
       },
       now
     );
     return recorded.ok ? ok({ kind: "blocked_failure" }) : recorded;
+  }
+
+  const preparedRun = prepareRunForItem(
+    composition,
+    workContext,
+    spansReturned,
+    spansLocated,
+    droppedQuotes,
+    fixtureKey,
+    now
+  );
+  /* v8 ignore next 3 -- locateResponseSpans guarantees consistent counts, so this cannot fail. */
+  if (!preparedRun.ok) {
+    return preparedRun;
   }
 
   const completion = runImmediateTransaction(composition.connection, (context) => {
@@ -392,9 +486,14 @@ async function processWorkItem(
         return inserted;
       }
     }
+    const insertedRun = insertExtractionRun(context, preparedRun.value);
+    if (!insertedRun.ok) {
+      return insertedRun;
+    }
     const completed = completeAttemptWorkItem(context, {
       attemptWorkItemId: item.attemptWorkItemId,
       extractionArtifactId: artifactId,
+      extractionRunId: preparedRun.value.extractionRunId,
       completedAt: now,
       expectedVersion: claimedVersion
     });
