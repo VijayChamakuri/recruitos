@@ -85,13 +85,50 @@ export const StructuredFactContentSchema = z
   .strict();
 export type StructuredFactContent = z.infer<typeof StructuredFactContentSchema>;
 
+function isParsedWorkAuthorizationFact(value: {
+  payload: { kind: string };
+  provenances: readonly { source: string }[];
+}): boolean {
+  return (
+    value.payload.kind === "work_authorization_statement" &&
+    value.provenances.length > 0 &&
+    value.provenances.every((provenance) => provenance.source === "parsed")
+  );
+}
+
+function refineStructuredFactEvidenceSpans(
+  value: {
+    payload: { kind: string };
+    provenances: readonly { source: string }[];
+    evidenceSpans: readonly unknown[];
+  },
+  context: z.RefinementCtx
+): void {
+  if (isParsedWorkAuthorizationFact(value)) {
+    if (value.evidenceSpans.length !== 0) {
+      context.addIssue({
+        code: "custom",
+        message: "Parsed work-authorization facts must not cite document evidence spans",
+        path: ["evidenceSpans"]
+      });
+    }
+    return;
+  }
+  if (value.evidenceSpans.length < 1) {
+    context.addIssue({
+      code: "custom",
+      message: "Document-grounded facts require at least one evidence span",
+      path: ["evidenceSpans"]
+    });
+  }
+}
+
 const structuredFactDraftShape = {
   structuredFactId: StructuredFactIdSchema,
   candidateId: CandidateIdSchema,
   payload: StructuredFactPayloadUnionSchema,
   evidenceSpans: z
     .array(StructuredFactEvidenceSpanDraftSchema)
-    .min(1)
     .max(MAXIMUM_EVIDENCE_SPANS_PER_FACT),
   provenances: z
     .array(StructuredFactProvenanceDraftSchema)
@@ -100,7 +137,10 @@ const structuredFactDraftShape = {
   createdAt: NonnegativeIntegerSchema
 };
 
-export const StructuredFactDraftSchema = z.object(structuredFactDraftShape).strict();
+export const StructuredFactDraftSchema = z
+  .object(structuredFactDraftShape)
+  .strict()
+  .superRefine(refineStructuredFactEvidenceSpans);
 export type StructuredFactDraft = z.infer<typeof StructuredFactDraftSchema>;
 
 export const StructuredFactSchema = z
@@ -112,11 +152,12 @@ export const StructuredFactSchema = z
     payload: StructuredFactPayloadSchema,
     contentJson: z.string(),
     contentHash: Sha256HexSchema,
-    evidenceSpans: z.array(StructuredFactEvidenceSpanSchema).min(1),
+    evidenceSpans: z.array(StructuredFactEvidenceSpanSchema),
     provenances: z.array(StructuredFactProvenanceSchema).min(1),
     createdAt: NonnegativeIntegerSchema
   })
-  .strict();
+  .strict()
+  .superRefine(refineStructuredFactEvidenceSpans);
 export type StructuredFact = z.infer<typeof StructuredFactSchema>;
 
 export const FactConflictMemberDraftSchema = z
