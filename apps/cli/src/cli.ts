@@ -1,5 +1,6 @@
 import {
   createCompositionFromRuntime,
+  createDemoRuntimeComposition,
   createDefaultRuntimeComposition,
   type RuntimeComposition
 } from "./composition/index.js";
@@ -41,9 +42,11 @@ export async function runCli(
   } else if (options?.runtime) {
     composition = createCompositionFromRuntime(options.runtime);
   } else if (parsed.options.db) {
-    const runtimeComp = createDefaultRuntimeComposition({
-      database: { filename: parsed.options.db }
-    });
+    const runtimeComp = parsed.command === "demo:prepare"
+      ? createDemoRuntimeComposition(parsed.options.db)
+      : createDefaultRuntimeComposition({
+          database: { filename: parsed.options.db }
+        });
     if (!runtimeComp.ok) {
       const durationMs = Date.now() - startTime;
       return {
@@ -148,6 +151,8 @@ export async function runCli(
 
   switch (parsed.command) {
     case "db:migrate":
+    case "demo:prepare":
+    case "eval:class1":
     case "import":
     case "corpus:import":
     case "triage:run":
@@ -165,7 +170,7 @@ export async function runCli(
       return runStatusCommand(parsed, composition, startTime);
     default: {
       const durationMs = Date.now() - startTime;
-      const msg = `Unknown command '${parsed.command}'. Available commands: triage, review, packet, status, help.`;
+      const msg = `Unknown command '${parsed.command}'. See 'recruitos --help' for available commands.`;
       if (parsed.flags.json) {
         return {
           exitCode: EXIT_USAGE_ERROR,

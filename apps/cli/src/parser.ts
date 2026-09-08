@@ -27,6 +27,7 @@ export type ParsedArgs = Readonly<{
     run?: string;
     corpusTag?: string;
     kind?: string;
+    candidateId?: string;
   }>;
   unknownOptions: readonly string[];
 }>;
@@ -63,6 +64,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     run?: string;
     corpusTag?: string;
     kind?: string;
+    candidateId?: string;
   } = {};
 
   let index = 0;
@@ -153,6 +155,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         case "kind":
           options.kind = value;
+          break;
+        case "candidate-id":
+          options.candidateId = value;
           break;
         default:
           unknownOptions.push(arg);

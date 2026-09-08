@@ -91,6 +91,82 @@ export async function runRuntimeCommand(
 ): Promise<CommandResult> {
   const actorId = args.options.actor ?? DEFAULT_ACTOR_ID;
 
+  if (args.command === "demo:prepare") {
+    if (!args.options.db) {
+      return usageError("demo:prepare", "--db <path> is required", args, startTime);
+    }
+    if (!composition.prepareDemo) {
+      return runtimeError(
+        args.command,
+        {
+          code: "persistence_failed",
+          message: "The active composition does not support demo preparation",
+          retryable: false
+        },
+        args,
+        startTime
+      );
+    }
+    const result = await composition.prepareDemo({ actorId });
+    if (!result.ok) return runtimeError(args.command, result.error, args, startTime);
+    return success(
+      args.command,
+      result.value,
+      [
+        "RecruitOS Demo Prepared",
+        `Candidates:      ${result.value.candidateIds.join(", ")}`,
+        `Triage Run ID:   ${result.value.triageRunId}`,
+        `Attempt ID:      ${result.value.triageAttemptId}`,
+        `Result IDs:      ${result.value.resultIds.join(", ")}`
+      ],
+      args,
+      startTime
+    );
+  }
+
+  if (args.command === "eval:class1") {
+    const candidateId = args.options.candidateId ?? args.positionals[0];
+    if (!args.options.db) {
+      return usageError("eval:class1", "--db <path> is required", args, startTime);
+    }
+    if (!candidateId) {
+      return usageError(
+        "eval:class1",
+        "--candidate-id <id> is required",
+        args,
+        startTime
+      );
+    }
+    if (!composition.evaluateClass1) {
+      return runtimeError(
+        args.command,
+        {
+          code: "persistence_failed",
+          message: "The active composition does not support Class 1 evaluation",
+          retryable: false
+        },
+        args,
+        startTime
+      );
+    }
+    const result = await composition.evaluateClass1(candidateId);
+    if (!result.ok) return runtimeError(args.command, result.error, args, startTime);
+    const lines = [
+      "RecruitOS Class 1 Evaluation",
+      `Candidate:                 ${result.value.candidateId}`,
+      `Passed:                    ${result.value.passed ? "yes" : "no"}`,
+      `Located-span coverage:     ${(result.value.locatedSpanCoverageRate * 100).toFixed(1)}%`,
+      `Coverage requirement met:  ${result.value.coverageRequirementMet ? "yes" : "no"}`,
+      `All dimensions accounted:  ${result.value.allDimensionsAccountedFor ? "yes" : "no"}`,
+      `Known limitations visible: ${result.value.knownLimitationsCountMet ? "yes" : "no"}`
+    ];
+    if (result.value.violations.length > 0) {
+      lines.push("Violations:", ...result.value.violations.map((item) => `  ${item}`));
+    }
+    const output = success(args.command, result.value, lines, args, startTime);
+    return result.value.passed ? output : { ...output, exitCode: 1 };
+  }
+
   if (args.command === "db:migrate") {
     if (!args.options.db) {
       return usageError("db:migrate", "--db <path> is required", args, startTime);

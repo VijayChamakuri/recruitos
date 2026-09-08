@@ -1,4 +1,7 @@
 import type { Result } from "@recruitos/core";
+import type { Class1EvaluationReport } from "../evaluation/class1.js";
+
+export type { Class1EvaluationReport } from "../evaluation/class1.js";
 
 export type RuntimeError = Readonly<{
   code: string;
@@ -218,6 +221,13 @@ export type FinalizeTriageSummary = Readonly<{
   resultIds: readonly string[];
 }>;
 
+export type DemoPrepareSummary = Readonly<{
+  candidateIds: readonly string[];
+  triageAttemptId: string;
+  triageRunId: string;
+  resultIds: readonly string[];
+}>;
+
 export type ListResolutionTasksOptions = Readonly<{
   candidateId?: string | undefined;
   status?: ResolutionTaskStatus | undefined;
@@ -249,6 +259,14 @@ export type ListAuditEventsOptions = Readonly<{
 }>;
 
 export interface RecruitosComposition {
+  prepareDemo?(input: Readonly<{
+    actorId?: string;
+  }>): Promise<Result<DemoPrepareSummary, RuntimeError>>;
+
+  evaluateClass1?(
+    candidateId: string
+  ): Promise<Result<Class1EvaluationReport, RuntimeError>>;
+
   importCandidates(input: Readonly<{
     actorId: string;
     corpusTag?: "main" | "variant" | undefined;

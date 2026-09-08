@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { err, ok, type Result } from "@recruitos/core";
 import {
   createRuntime,
+  demoCompositionOptions,
   type Clock,
   type CreateRuntimeOptions,
   type IdGenerator,
@@ -35,6 +36,7 @@ import { StubRecruitosComposition } from "./stub.js";
 
 import {
   finalizeTriageRun,
+  demoPrepare,
   importCandidates,
   listCandidates,
   listResolutionTasks,
@@ -45,6 +47,7 @@ import {
   type CandidateSummaryItem,
   type ResolutionTaskItem
 } from "@recruitos/runtime";
+import { runClass1EvaluationForFinalizedCandidate } from "../evaluation/index.js";
 
 function toRuntimeCandidateStatus(
   status?: CandidateTriageStatus
@@ -99,7 +102,93 @@ function toResolutionTaskSummary(item: ResolutionTaskItem): ResolutionTaskSummar
   };
 }
 
-function toCandidatePacket(packet: CandidatePacketModel): CandidatePacket {
+type ScoreContributionRow = Readonly<{
+  dimensionId: string;
+  level: "none" | "weak" | "partial" | "strong";
+  levelValue: string;
+  weight: number;
+  weightedValue: string;
+}>;
+
+function rationalNumber(value: string): number {
+  const [numerator, denominator] = value.split("/").map(Number);
+  return denominator ? (numerator ?? 0) / denominator : 0;
+}
+
+function toCandidatePacket(
+  packet: CandidatePacketModel,
+  nativeClient: NativeClientHandle | null
+): CandidatePacket {
+  let arithmeticTerms: CandidatePacket["arithmeticTerms"] = [];
+  let evidenceSpans: CandidatePacket["evidenceSpans"] = [];
+  let evidenceGaps: CandidatePacket["evidenceGaps"] = [];
+  let documents: CandidatePacket["documents"] = [];
+
+  if (nativeClient) {
+    const score = nativeClient
+      .prepare("SELECT content_json AS contentJson FROM score_result WHERE candidate_result_id = ?")
+      .get(packet.resultId) as { contentJson: string } | undefined;
+    if (score) {
+      const content = JSON.parse(score.contentJson) as {
+        contributions: readonly ScoreContributionRow[];
+      };
+      const totalWeight = content.contributions.reduce(
+        (sum, contribution) => sum + contribution.weight,
+        0
+      );
+      arithmeticTerms = content.contributions.map((contribution) => ({
+        dimensionId: contribution.dimensionId,
+        dimensionName: contribution.dimensionId,
+        weight: totalWeight === 0 ? 0 : (contribution.weight / totalWeight) * 100,
+        level: contribution.level,
+        levelScore: rationalNumber(contribution.levelValue) * 100,
+        weightedScore:
+          totalWeight === 0
+            ? 0
+            : (rationalNumber(contribution.weightedValue) / totalWeight) * 100
+      }));
+    }
+
+    evidenceSpans = nativeClient.prepare(
+      `SELECT
+        span.evidence_span_id AS evidenceSpanId,
+        span.dimension_id AS dimensionId,
+        span.start AS start,
+        span.end AS end,
+        span.quoted_text AS quotedText,
+        span.polarity AS polarity,
+        span.match_quality AS matchQuality,
+        span.document_id AS documentId
+       FROM candidate_result_evidence_span result_span
+       JOIN evidence_span span ON span.evidence_span_id = result_span.evidence_span_id
+       WHERE result_span.candidate_result_id = ?
+       ORDER BY result_span.span_ordinal ASC`
+    ).all(packet.resultId) as CandidatePacket["evidenceSpans"];
+
+    evidenceGaps = nativeClient.prepare(
+      `SELECT
+        result_gap.dimension_id AS dimensionId,
+        gap.reason_code AS reason
+       FROM candidate_result_evidence_gap result_gap
+       JOIN evidence_gap gap ON gap.evidence_gap_id = result_gap.evidence_gap_id
+       WHERE result_gap.candidate_result_id = ?
+       ORDER BY result_gap.gap_ordinal ASC`
+    ).all(packet.resultId) as CandidatePacket["evidenceGaps"];
+
+    documents = nativeClient.prepare(
+      `SELECT
+        document.source_document_id AS documentId,
+        candidate_document.document_kind AS documentKind,
+        candidate_document.label AS label,
+        document.raw_text AS text
+       FROM candidate_document
+       JOIN source_document document
+         ON document.source_document_id = candidate_document.source_document_id
+       WHERE candidate_document.candidate_id = ?
+       ORDER BY candidate_document.document_ordinal ASC`
+    ).all(packet.candidateId) as CandidatePacket["documents"];
+  }
+
   return {
     candidateId: packet.candidateId,
     sourceKey: packet.sourceKey,
@@ -123,10 +212,10 @@ function toCandidatePacket(packet: CandidatePacketModel): CandidatePacket {
     contentHash: packet.contentHash,
     sealed: packet.isSealed,
     createdAt: packet.createdAt,
-    arithmeticTerms: [],
-    evidenceSpans: [],
-    evidenceGaps: [],
-    documents: [],
+    arithmeticTerms,
+    evidenceSpans,
+    evidenceGaps,
+    documents,
     tasks: []
   };
 }
@@ -135,6 +224,7 @@ type NativeClientHandle = Readonly<{
   name?: string;
   prepare: (sql: string) => {
     get: (...params: readonly unknown[]) => unknown;
+    all: (...params: readonly unknown[]) => unknown[];
   };
 }>;
 
@@ -168,6 +258,21 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       databasePath ??
       (typeof nativeClient?.name === "string" ? nativeClient.name : ":memory:");
     this.fallback = new StubRecruitosComposition();
+  }
+
+  async prepareDemo(input: {
+    actorId?: string;
+  }): Promise<Result<import("./types.js").DemoPrepareSummary, RuntimeError>> {
+    return demoPrepare(this.runtime, input);
+  }
+
+  async evaluateClass1(
+    candidateId: string
+  ): Promise<Result<import("./types.js").Class1EvaluationReport, RuntimeError>> {
+    return runClass1EvaluationForFinalizedCandidate(
+      this.runtime.connection.database,
+      candidateId
+    );
   }
 
   async importCandidates(input: {
@@ -377,7 +482,7 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       candidateId
     );
     if (packetResult.ok) {
-      return ok(toCandidatePacket(packetResult.value));
+      return ok(toCandidatePacket(packetResult.value, getNativeClient(this.runtime.connection.database)));
     }
     if (!this.hasCandidatesInDb()) {
       return this.fallback.getCandidatePacket(candidateId);
@@ -502,4 +607,15 @@ export function createDefaultRuntimeComposition(
       isMemory ? ":memory:" : filename
     )
   );
+}
+
+/** Creates the deterministic synthetic composition used by `demo:prepare`. */
+export function createDemoRuntimeComposition(
+  filename: string
+): Result<RecruitosComposition, RuntimeError> {
+  const runtimeResult = createRuntime(
+    demoCompositionOptions({ database: { filename } })
+  );
+  if (!runtimeResult.ok) return runtimeResult;
+  return ok(new RuntimeRecruitosComposition(runtimeResult.value, filename));
 }

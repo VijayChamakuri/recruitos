@@ -1,5 +1,24 @@
 export function formatHelp(targetCommand?: string): string {
   switch (targetCommand) {
+    case "demo:prepare":
+      return [
+        "recruitos demo:prepare - Build the deterministic local demo spine",
+        "",
+        "Usage:",
+        "  recruitos demo:prepare --db <path> [--actor <id>] [--json]",
+        "",
+        "The database must be fresh. This imports the synthetic candidate, runs",
+        "fixture extraction, finalizes the run, and seals the result."
+      ].join("\n");
+
+    case "eval:class1":
+      return [
+        "recruitos eval:class1 - Evaluate one sealed candidate result",
+        "",
+        "Usage:",
+        "  recruitos eval:class1 --db <path> --candidate-id <id> [--json]"
+      ].join("\n");
+
     case "triage":
       return [
         "recruitos triage - Candidate triage queue and execution",
@@ -92,6 +111,8 @@ export function formatHelp(targetCommand?: string): string {
         "  recruitos <command> [options]",
         "",
         "Commands:",
+        "  demo:prepare     Build the deterministic one-candidate demo in a fresh database",
+        "  eval:class1      Run the Class 1 gate against a sealed candidate result",
         "  db:migrate       Open and migrate a local runtime database",
         "  corpus:import    Import candidates through the configured source adapter",
         "  triage:run       Start a triage attempt through the runtime use case",

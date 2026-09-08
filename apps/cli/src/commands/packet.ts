@@ -115,7 +115,7 @@ export async function runPacketCommand(
     const arithHeaders = ["Dimension", "Weight", "Level", "Level Score", "Weighted Score"];
     const arithRows = packet.arithmeticTerms.map((term: ArithmeticTerm) => [
       term.dimensionName,
-      `${term.weight}%`,
+      `${term.weight.toFixed(1)}%`,
       term.level,
       term.levelScore.toFixed(1),
       term.weightedScore.toFixed(2)

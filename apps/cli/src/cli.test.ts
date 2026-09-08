@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 import { err, ok } from "@recruitos/core";
 import { parseArgs } from "./parser.js";
@@ -61,6 +65,9 @@ describe("CLI Parser", () => {
       corpusTag: "variant",
       kind: "variant_run"
     });
+
+    const p4 = parseArgs(["eval:class1", "--candidate-id=candidate-1"]);
+    expect(p4.options.candidateId).toBe("candidate-1");
   });
 
   it("records unknown options", () => {
@@ -99,6 +106,8 @@ describe("CLI Commands Execution", () => {
       expect(res.stdout).toContain("review");
       expect(res.stdout).toContain("packet");
       expect(res.stdout).toContain("status");
+      expect(res.stdout).toContain("demo:prepare");
+      expect(res.stdout).toContain("eval:class1");
     });
 
     it("displays command-specific help", async () => {
@@ -193,6 +202,42 @@ describe("CLI Commands Execution", () => {
   });
 
   describe("Runtime Use-case Commands", () => {
+    it("prepares, prints, and evaluates the real one-candidate demo", async () => {
+      const directory = mkdtempSync(join(tmpdir(), "recruitos-cli-demo-"));
+      const database = join(directory, "runtime.db");
+      try {
+        const prepared = await runCli([
+          "demo:prepare",
+          "--db",
+          database,
+          "--json"
+        ]);
+        expect(prepared.exitCode).toBe(EXIT_SUCCESS);
+        const envelope = JSON.parse(prepared.stdout ?? "{}") as {
+          data?: { candidateIds?: string[] };
+        };
+        const candidateId = envelope.data?.candidateIds?.[0];
+        expect(candidateId).toMatch(/\S/);
+
+        const packet = await runCli(["packet", candidateId ?? "", "--db", database]);
+        expect(packet.exitCode).toBe(EXIT_SUCCESS);
+        expect(packet.stdout).toContain("Status:       escalated");
+        expect(packet.stdout).toContain("Sealed:       yes");
+
+        const evaluated = await runCli([
+          "eval:class1",
+          "--candidate-id",
+          candidateId ?? "",
+          "--db",
+          database
+        ]);
+        expect(evaluated.exitCode).toBe(EXIT_SUCCESS);
+        expect(evaluated.stdout).toContain("Passed:                    yes");
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
     it("requires a database path for migration", async () => {
       const result = await runCli(["db:migrate"]);
       expect(result.exitCode).toBe(EXIT_USAGE_ERROR);
@@ -243,6 +288,8 @@ describe("CLI Commands Execution", () => {
         EXIT_USAGE_ERROR
       );
       expect((await runCli(["triage:finalize"])).exitCode).toBe(EXIT_USAGE_ERROR);
+      expect((await runCli(["demo:prepare"])).exitCode).toBe(EXIT_USAGE_ERROR);
+      expect((await runCli(["eval:class1"])).exitCode).toBe(EXIT_USAGE_ERROR);
     });
   });
 
