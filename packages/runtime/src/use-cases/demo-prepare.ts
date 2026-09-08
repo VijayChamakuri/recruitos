@@ -14,6 +14,7 @@ import {
   DEMO_FROZEN_DATE,
   DEMO_ROLE_ID,
   DEMO_ROLE_TITLE,
+  demoCorrectionExtractionResponseBody,
   demoExtractionResponseBody
 } from "../corpus/demo/demo-corpus.js";
 import { insertDemoSession, prepareDemoSession } from "../demo-session/index.js";
@@ -146,13 +147,14 @@ JOIN source_document sd ON sd.source_document_id = cd.source_document_id
 JOIN candidate c ON c.candidate_id = awi.candidate_id
 WHERE awi.triage_attempt_id = ?`;
 
-function registerDemoFixtures(
+function registerAttemptFixtures(
   composition: RuntimeComposition,
-  triageAttemptId: string
+  triageAttemptId: string,
+  bodyFor: (dimensionId: string, sourceKey: string) => string
 ): Result<void, RuntimeError> {
   const adapter = composition.extraction;
   if (!(adapter instanceof FixtureExtractionAdapter)) {
-    return err(demoFailure("demoPrepare requires a FixtureExtractionAdapter"));
+    return err(demoFailure("Fixture registration requires a FixtureExtractionAdapter"));
   }
   const rows = runImmediateTransaction(composition.connection, (context) =>
     ok(
@@ -165,7 +167,6 @@ function registerDemoFixtures(
   if (!rows.ok) {
     return rows;
   }
-  /* v8 ignore next 3 -- a successful startTriageRun always produces work items. */
   if (rows.value.length === 0) {
     return err(demoFailure("Triage attempt produced no work items"));
   }
@@ -173,12 +174,27 @@ function registerDemoFixtures(
     const requestHash = sha256Hex(
       [row.specContentHash, row.documentKind, row.normalizedHash].join(REQUEST_HASH_SEPARATOR)
     );
-    adapter.registerFixture(
-      requestHash,
-      demoExtractionResponseBody(row.dimensionId, row.sourceKey)
-    );
+    adapter.registerFixture(requestHash, bodyFor(row.dimensionId, row.sourceKey));
   }
   return ok(undefined);
+}
+
+export function registerDemoFixtures(
+  composition: RuntimeComposition,
+  triageAttemptId: string
+): Result<void, RuntimeError> {
+  return registerAttemptFixtures(composition, triageAttemptId, demoExtractionResponseBody);
+}
+
+export function registerDemoCorrectionFixtures(
+  composition: RuntimeComposition,
+  triageAttemptId: string
+): Result<void, RuntimeError> {
+  return registerAttemptFixtures(
+    composition,
+    triageAttemptId,
+    demoCorrectionExtractionResponseBody
+  );
 }
 
 export async function demoPrepare(

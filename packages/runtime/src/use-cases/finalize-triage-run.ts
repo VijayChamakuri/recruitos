@@ -138,7 +138,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-type CandidateDocumentRow = Readonly<{
+export type CandidateDocumentRow = Readonly<{
   candidateDocumentId: string;
   documentKind: string;
   sourceDocumentId: string;
@@ -148,7 +148,7 @@ type CandidateDocumentRow = Readonly<{
 
 type ResolutionSpanCounts = Readonly<{ spansReturned: number; spansLocated: number }>;
 
-type HydratedWorkItem =
+export type HydratedWorkItem =
   | Readonly<{
       workItem: AttemptWorkItem;
       artifact: ExtractionArtifact;
@@ -162,7 +162,7 @@ type HydratedWorkItem =
       extractionRun: ExtractionRun | null;
     }>;
 
-type CandidateGroup = Readonly<{
+export type CandidateGroup = Readonly<{
   candidateId: string;
   artifacts: ExtractionArtifact[];
   extractions: CandidateExtractionResultInput[];
@@ -853,7 +853,7 @@ function hydrateWorkItemRun(
   return ok(run.value);
 }
 
-function hydrateWorkItems(
+export function hydrateWorkItems(
   context: ImmediateTransactionContext,
   workItems: readonly AttemptWorkItem[]
 ): Result<HydratedWorkItem[], RuntimeError> {
@@ -942,7 +942,7 @@ function foldResolutionSpans(
   }
 }
 
-function groupCandidates(hydrated: readonly HydratedWorkItem[]): CandidateGroup[] {
+export function groupCandidates(hydrated: readonly HydratedWorkItem[]): CandidateGroup[] {
   const groups = new Map<string, CandidateGroupAccumulator>();
   for (const item of hydrated) {
     let extraction: CandidateExtractionResultInput;
@@ -981,7 +981,7 @@ function groupCandidates(hydrated: readonly HydratedWorkItem[]): CandidateGroup[
   }));
 }
 
-function loadCandidateDocuments(
+export function loadCandidateDocuments(
   context: ImmediateTransactionContext,
   candidateId: string
 ): CandidateDocumentRow[] {
@@ -1001,7 +1001,7 @@ function loadCandidateDocuments(
     .all(candidateId) as CandidateDocumentRow[];
 }
 
-function toBridgeDocument(row: CandidateDocumentRow): CandidateDocumentBridgeInput {
+export function toBridgeDocument(row: CandidateDocumentRow): CandidateDocumentBridgeInput {
   return {
     candidateDocumentId: row.candidateDocumentId,
     documentKind: row.documentKind,
@@ -1018,7 +1018,7 @@ function toBridgeDocument(row: CandidateDocumentRow): CandidateDocumentBridgeInp
  * miss; complete availability always carries score; duplicate span ids cannot
  * collide because each work item owns a unique artifact id.
  */
-function persistCandidateResult(args: {
+export function persistCandidateResult(args: {
   context: ImmediateTransactionContext;
   nextId: () => string;
   createdAt: number;
@@ -1028,8 +1028,16 @@ function persistCandidateResult(args: {
   extractorVersion: string;
   decision: CandidateDecisionOutput;
   resultId: string;
+  kind?: "initial" | "correction";
+  supersedesResultId?: string | null;
+  expectedCandidateHeadVersion?: number;
+  skipExistingSpans?: boolean;
 }): Result<string, RuntimeError> {
   const sealId = args.nextId();
+  const kind = args.kind ?? "initial";
+  const supersedesResultId = args.supersedesResultId ?? null;
+  const expectedCandidateHeadVersion = args.expectedCandidateHeadVersion ?? 0;
+  const skipExistingSpans = args.skipExistingSpans ?? false;
   if (args.decision.dimensionDerivation.availability === "unavailable") {
     return persistUnavailableResult({
       context: args.context,
@@ -1039,7 +1047,10 @@ function persistCandidateResult(args: {
       documents: args.documents,
       decision: args.decision,
       resultId: args.resultId,
-      sealId
+      sealId,
+      kind,
+      supersedesResultId,
+      expectedCandidateHeadVersion
     });
   }
   return persistCompleteResult({
@@ -1052,7 +1063,11 @@ function persistCandidateResult(args: {
     extractorVersion: args.extractorVersion,
     decision: args.decision,
     resultId: args.resultId,
-    sealId
+    sealId,
+    kind,
+    supersedesResultId,
+    expectedCandidateHeadVersion,
+    skipExistingSpans
   });
 }
 
@@ -1065,6 +1080,9 @@ function persistUnavailableResult(args: {
   decision: CandidateDecisionOutput;
   resultId: string;
   sealId: string;
+  kind: "initial" | "correction";
+  supersedesResultId: string | null;
+  expectedCandidateHeadVersion: number;
 }): Result<string, RuntimeError> {
   const sourceDocumentIds = uniqueSourceIds(args.documents);
   const gapRows: Array<{ evidenceGapId: string; dimensionId: string }> = [];
@@ -1109,10 +1127,10 @@ function persistUnavailableResult(args: {
   const preparedResult = prepareCandidateTriageResult({
     candidateTriageResultId: args.resultId,
     candidateId: args.candidateId,
-    kind: "initial",
+    kind: args.kind,
     availability: "unavailable",
     status: "escalated",
-    supersedesResultId: null,
+    supersedesResultId: args.supersedesResultId,
     evidenceSpans: [],
     evidenceGaps: gapRows.map((gap) => ({
       candidateResultEvidenceGapId: args.nextId(),
@@ -1152,7 +1170,8 @@ function persistUnavailableResult(args: {
     createdAt: args.createdAt,
     candidateId: args.candidateId,
     resultId: args.resultId,
-    sealId: args.sealId
+    sealId: args.sealId,
+    expectedCandidateHeadVersion: args.expectedCandidateHeadVersion
   });
   /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!sealed.ok) {
@@ -1172,6 +1191,10 @@ function persistCompleteResult(args: {
   decision: CandidateDecisionOutput;
   resultId: string;
   sealId: string;
+  kind: "initial" | "correction";
+  supersedesResultId: string | null;
+  expectedCandidateHeadVersion: number;
+  skipExistingSpans: boolean;
 }): Result<string, RuntimeError> {
   // deriveCandidateDecision only scores when availability is complete.
   /* v8 ignore next 3 -- complete availability always carries score and confidence */
@@ -1187,7 +1210,8 @@ function persistCompleteResult(args: {
     artifacts: args.artifacts,
     extractorVersion: args.extractorVersion,
     createdAt: args.createdAt,
-    persistedSpanIds
+    persistedSpanIds,
+    skipExistingSpans: args.skipExistingSpans
   });
   if (!artifactSpans.ok) {
     return artifactSpans;
@@ -1371,10 +1395,10 @@ function persistCompleteResult(args: {
   const preparedResult = prepareCandidateTriageResult({
     candidateTriageResultId: args.resultId,
     candidateId: args.candidateId,
-    kind: "initial",
+    kind: args.kind,
     availability: "complete",
     status: args.decision.routing.status,
-    supersedesResultId: null,
+    supersedesResultId: args.supersedesResultId,
     evidenceSpans: [...persistedSpanIds].map((evidenceSpanId) => ({
       candidateResultEvidenceSpanId: args.nextId(),
       evidenceSpanId
@@ -1442,7 +1466,8 @@ function persistCompleteResult(args: {
     createdAt: args.createdAt,
     candidateId: args.candidateId,
     resultId: args.resultId,
-    sealId: args.sealId
+    sealId: args.sealId,
+    expectedCandidateHeadVersion: args.expectedCandidateHeadVersion
   });
   /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!sealed.ok) {
@@ -1459,6 +1484,7 @@ function persistArtifactSpans(args: {
   extractorVersion: string;
   createdAt: number;
   persistedSpanIds: Set<string>;
+  skipExistingSpans: boolean;
 }): Result<void, RuntimeError> {
   const documentBySource = new Map(args.documents.map((document) => [document.sourceDocumentId, document] as const));
   for (const artifact of args.artifacts) {
@@ -1475,6 +1501,15 @@ function persistArtifactSpans(args: {
         return err(
           finalizeFailure("Trusted extraction produced a duplicate evidence span id")
         );
+      }
+      if (args.skipExistingSpans) {
+        const existing = args.context.nativeDatabase
+          .prepare("SELECT 1 AS present FROM evidence_span WHERE evidence_span_id = ?")
+          .get(spanId);
+        if (existing !== undefined) {
+          args.persistedSpanIds.add(spanId);
+          continue;
+        }
       }
       const prepared = prepareEvidenceSpan({
         evidenceSpanId: spanId,
@@ -1553,6 +1588,7 @@ function sealResultAndHead(args: {
   candidateId: string;
   resultId: string;
   sealId: string;
+  expectedCandidateHeadVersion: number;
 }): Result<void, RuntimeError> {
   const preparedSeal = prepareCandidateResultSeal({
     candidateResultSealId: args.sealId,
@@ -1571,7 +1607,7 @@ function sealResultAndHead(args: {
   const head = setCandidateHead(
     args.context,
     { candidateId: args.candidateId, currentResultId: args.resultId },
-    0
+    args.expectedCandidateHeadVersion
   );
   /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!head.ok) {

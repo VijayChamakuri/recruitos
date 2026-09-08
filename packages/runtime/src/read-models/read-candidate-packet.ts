@@ -18,6 +18,7 @@ interface CandidateHeadRow {
 
 interface ResultRow {
   resultId: string;
+  candidateId: string;
   resultKind: string;
   resultAvailability: string;
   resultStatus: "scored" | "rejected_hard_requirement" | "escalated";
@@ -73,12 +74,14 @@ function parseStoredConfidenceInput(
 }
 
 /**
- * Reads a candidate packet anchored to CandidateHead.currentResultId.
- * Returns not_found with a clear message when the candidate, head, or result is missing.
+ * Reads a candidate packet. By default the packet is anchored to
+ * CandidateHead.currentResultId. Pass `resultId` to inspect a historical
+ * sealed result for the same candidate, including a superseded original.
  */
 export function readCandidatePacket(
   database: unknown,
-  candidateId: string
+  candidateId: string,
+  options?: { resultId?: string }
 ): Result<CandidatePacketModel, RuntimeError> {
   if (typeof candidateId !== "string" || candidateId.trim() === "") {
     return err(
@@ -137,9 +140,12 @@ export function readCandidatePacket(
       );
     }
 
+    const requestedResultId = options?.resultId ?? candRow.currentResultId;
+
     const resultStmt = client.prepare(
       `SELECT
         candidate_triage_result_id AS resultId,
+        candidate_id AS candidateId,
         kind AS resultKind,
         availability AS resultAvailability,
         status AS resultStatus,
@@ -148,12 +154,21 @@ export function readCandidatePacket(
       FROM candidate_triage_result
       WHERE candidate_triage_result_id = ?`
     );
-    const resultRow = resultStmt.get(candRow.currentResultId) as ResultRow | undefined;
+    const resultRow = resultStmt.get(requestedResultId) as ResultRow | undefined;
     if (!resultRow) {
       return err(
         createRuntimeError(
           "not_found",
-          `Triage result not found for candidate head: ${candRow.currentResultId}`,
+          `Triage result not found for candidate head: ${requestedResultId}`,
+          false
+        )
+      );
+    }
+    if (resultRow.candidateId !== candidateId) {
+      return err(
+        createRuntimeError(
+          "not_found",
+          `Triage result "${requestedResultId}" does not belong to candidate "${candidateId}"`,
           false
         )
       );
@@ -162,7 +177,7 @@ export function readCandidatePacket(
     const sealStmt = client.prepare(
       "SELECT count(*) AS count FROM candidate_result_seal WHERE candidate_result_id = ?"
     );
-    const sealRow = sealStmt.get(candRow.currentResultId) as { count: number };
+    const sealRow = sealStmt.get(requestedResultId) as { count: number };
     const isSealed = sealRow.count > 0;
 
     const scoreStmt = client.prepare(
@@ -175,7 +190,7 @@ export function readCandidatePacket(
       FROM score_result
       WHERE candidate_result_id = ?`
     );
-    const scoreRow = scoreStmt.get(candRow.currentResultId) as ScoreRow | undefined;
+    const scoreRow = scoreStmt.get(requestedResultId) as ScoreRow | undefined;
 
     const reasonStmt = client.prepare(
       `SELECT reason_code AS reasonCode
@@ -183,7 +198,7 @@ export function readCandidatePacket(
        WHERE candidate_result_id = ?
        ORDER BY reason_ordinal ASC`
     );
-    const reasonRows = reasonStmt.all(candRow.currentResultId) as ReasonRow[];
+    const reasonRows = reasonStmt.all(requestedResultId) as ReasonRow[];
 
     let confidenceInput: CandidatePacketConfidenceInput | null = null;
     if (scoreRow !== undefined) {
