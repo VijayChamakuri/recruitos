@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | b7e949d |
+| origin/main | 3b8c9cc |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import (MERGED #54), scheduler (MERGED #57), start-run (MERGED #59), extraction bridge plus OQ-7 policy, finalize, correction. |
@@ -42,7 +42,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/finalize-triage-run-c42c | T10.5 finalize triage run use-case (PR #61). Writer-lock follow-up: `planFinalize` uses deferred snapshot reads, `deriveCandidateDecision` runs outside any transaction, short `BEGIN IMMEDIATE` commit rechecks attempt/work-item/corpus/version races. Gates green. | ready |
+| Cursor | cursor/schema-standby-pr62-c42c | Review gate for #62 and later runtime PRs. Persistence review of #62 posted: no merge blockers, no schema change. Demo spine: `demo_session` singleton `synthetic_demo` already exists (0018); no fixtures table needed. Idle unless a schema request lands. | idle / schema standby |
 | Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). T10.3 MERGED #59. T10.4 MERGED #60. T10.5 in progress on Cursor. T10.6 (correction) still queued. | paused |
 | Antigravity | main | PR #60 merged (T10.4: Extraction-to-pipeline bridge and hard-requirements policy v1). Idle after T10.4. Cursor picked up T10.5. | idle / ready |
 
@@ -143,3 +143,4 @@ your own rows plus the log.
 - 2026-09-08 Cursor: picking up T10.5 on cursor/finalize-triage-run-c42c from origin/main b7e949d after Antigravity left T10.4 merged and idle. No c/t10-finalize branch existed. Implementing finalizeTriageRun plus packet score, confidence, and reason fields. No T10.6. No migration.
 - 2026-09-08 Cursor: T10.5 trust-boundary follow-up on PR #61. Audit envelopes prepared outside the writer lock. Packet confidence parsed through ConfidenceInputSchema. Trusted extraction span persistence fails closed. Work authorization stays a parsed application-answer fact with no resume relocation. Remaining finalize v8 ignores are schema or race-fence comments. `pnpm check` 1420 tests plus 25 integration, `test:coverage` 1265 tests All files 100 percent, diff-check clean, no em dashes. Ready for review. No merge.
 - 2026-09-08 Cursor: T10.5 writer-lock follow-up on PR #61. `planFinalize` no longer uses `BEGIN IMMEDIATE`. Snapshot reads are deferred, `deriveCandidateDecision` runs with `inTransaction === false`, and the command transaction rechecks attempt readiness, work-item identities, corpus membership, and attempt version. Concurrent writers are blocked only during the short commit. `pnpm check` 1429 tests plus 25 integration, `test:coverage` 1274 tests All files 100 percent, diff-check clean, no em dashes, product-scope scan clean. SAFE_TO_MERGE. No merge from this agent.
+- 2026-09-08 Cursor: persistence review of PR #62 posted. Complete and fail both insert `extraction_run` then link `attempt_work_item.extraction_run_id` in one immediate transaction; prepare stays outside the lock; count-consistency matches `locateResponseSpans` plus CHECK; reviewable-failure finalize still unavailable; null-FK fallback is the pre-#62 path. No drizzle change. Schema standby: `demo_session` (`synthetic_demo`) already exists for `demo:prepare` / `demo:reset`; tier-1 corpus uses existing corpus and candidate tables. No migration PR. Idle.
