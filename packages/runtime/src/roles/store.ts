@@ -102,14 +102,21 @@ function dimensionFromRow(
   row: Record<string, unknown>
 ): Result<StoredRubricDimension, RuntimeError> {
   const dimension = StoredRubricDimensionSchema.safeParse({
-    ...row,
+    rubricDimensionId: row["rubricDimensionId"],
+    rubricId: row["rubricId"],
+    dimensionId: row["dimensionId"],
+    weight: row["weight"],
     required: row["required"] === 1,
+    definition: row["definition"],
+    jobRelatedJustification: row["jobRelatedJustification"],
     levelAnchors: {
       none: row["levelAnchorNone"],
       weak: row["levelAnchorWeak"],
       partial: row["levelAnchorPartial"],
       strong: row["levelAnchorStrong"]
-    }
+    },
+    ordinal: row["ordinal"],
+    createdAt: row["createdAt"]
   });
   if (!dimension.success) {
     return err(persistenceFailure("Stored rubric dimension is invalid"));

@@ -460,6 +460,7 @@ describe("runtime public API", () => {
       "reviewDecisions",
       "roles",
       "rubricDimensions",
+      "rubricProvenanceAssumptions",
       "rubrics",
       "runImmediateTransaction",
       "runInputSnapshots",
