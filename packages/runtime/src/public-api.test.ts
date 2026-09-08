@@ -478,6 +478,7 @@ describe("runtime public API", () => {
       "rubricDimensions",
       "rubricProvenanceAssumptions",
       "rubrics",
+      "runExtractionAttempt",
       "runImmediateTransaction",
       "runInputSnapshots",
       "runUseCaseCommand",
