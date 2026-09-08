@@ -1,5 +1,24 @@
 export function formatHelp(targetCommand?: string): string {
   switch (targetCommand) {
+    case "demo:prepare":
+      return [
+        "recruitos demo:prepare - Build the deterministic local demo spine",
+        "",
+        "Usage:",
+        "  recruitos demo:prepare --db <path> [--actor <id>] [--json]",
+        "",
+        "The database must be fresh. This imports the synthetic candidate, runs",
+        "fixture extraction, finalizes the run, and seals the result."
+      ].join("\n");
+
+    case "eval:class1":
+      return [
+        "recruitos eval:class1 - Evaluate one sealed candidate result",
+        "",
+        "Usage:",
+        "  recruitos eval:class1 --db <path> --candidate-id <id> [--json]"
+      ].join("\n");
+
     case "triage":
       return [
         "recruitos triage - Candidate triage queue and execution",
@@ -92,6 +111,13 @@ export function formatHelp(targetCommand?: string): string {
         "  recruitos <command> [options]",
         "",
         "Commands:",
+        "  demo:prepare     Build the deterministic one-candidate demo in a fresh database",
+        "  eval:class1      Run the Class 1 gate against a sealed candidate result",
+        "  db:migrate       Open and migrate a local runtime database",
+        "  corpus:import    Import candidates through the configured source adapter",
+        "  triage:run       Start a triage attempt through the runtime use case",
+        "  triage:extract   Run deterministic fixture extraction for an attempt",
+        "  triage:finalize  Finalize an attempt and seal candidate results",
         "  triage     List candidate triage queue or run automated triage",
         "  review     Inspect and resolve open tasks or review stage proposals",
         "  packet     Inspect candidate evaluation packet (arithmetic, evidence, doc)",
@@ -99,6 +125,7 @@ export function formatHelp(targetCommand?: string): string {
         "  help       Show help for a command",
         "",
         "Global Options:",
+        "  --db <path>  Use a local SQLite runtime database",
         "  --json        Emit output in structured JSON envelope",
         "  -h, --help    Show help message",
         "  -v, --version Show RecruitOS version",

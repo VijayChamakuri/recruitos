@@ -79,14 +79,35 @@ export async function runPacketCommand(
     `RecruitOS Candidate Evaluation Packet: ${packet.candidateId}`,
     "=".repeat(60),
     `Source Key:   ${packet.sourceKey}`,
-    `Role:         ${packet.roleTitle} (${packet.roleId})`,
+    ...(packet.roleId === "role-default"
+      ? []
+      : [`Role:         ${packet.roleTitle} (${packet.roleId})`]),
     `Channel:      ${packet.channel}`,
     `Status:       ${packet.status}`,
-    `Score:        ${packet.score !== null ? packet.score.toFixed(1) : "-"}`,
-    `Confidence:   ${packet.confidence !== null ? `${Math.round(packet.confidence * 100)}%` : "-"}`,
+    `Score:        ${packet.scoreText ?? (packet.score !== null ? packet.score.toFixed(1) : "-")}`,
+    `Confidence:   ${packet.confidenceText ?? (packet.confidence !== null ? `${Math.round(packet.confidence * 100)}%` : "-")}`,
     `Sealed:       ${packet.sealed ? "yes" : "no"}`,
     `Content Hash: ${packet.contentHash}`
   ];
+
+  if (packet.confidenceInput !== null) {
+    lines.push("");
+    lines.push("Confidence Inputs:");
+    lines.push(
+      `  Dimension coverage: ${packet.confidenceInput.dimensionsWithLocatedSpan}/${packet.confidenceInput.totalDimensions}`,
+      `  Quote resolution:   ${packet.confidenceInput.spansLocated}/${packet.confidenceInput.spansReturned}`,
+      `  Contradictions:     ${packet.confidenceInput.contradictionCount}`,
+      `  Required missing:   ${packet.confidenceInput.requiredFieldsMissing}/${packet.confidenceInput.totalRequiredFields}`
+    );
+  }
+
+  lines.push("");
+  lines.push(`Reasons (${packet.reasons.length}):`);
+  lines.push(
+    ...(packet.reasons.length === 0
+      ? ["  none"]
+      : packet.reasons.map((reason) => `  ${reason}`))
+  );
 
   if (format === "full" || format === "arithmetic") {
     lines.push("");
@@ -94,7 +115,7 @@ export async function runPacketCommand(
     const arithHeaders = ["Dimension", "Weight", "Level", "Level Score", "Weighted Score"];
     const arithRows = packet.arithmeticTerms.map((term: ArithmeticTerm) => [
       term.dimensionName,
-      `${term.weight}%`,
+      `${term.weight.toFixed(1)}%`,
       term.level,
       term.levelScore.toFixed(1),
       term.weightedScore.toFixed(2)

@@ -1,7 +1,7 @@
 import {
   createCompositionFromRuntime,
+  createDemoRuntimeComposition,
   createDefaultRuntimeComposition,
-  createStubComposition,
   type RuntimeComposition
 } from "./composition/index.js";
 import type { RecruitosComposition } from "./composition/types.js";
@@ -9,6 +9,7 @@ import {
   formatHelp,
   runPacketCommand,
   runReviewCommand,
+  runRuntimeCommand,
   runStatusCommand,
   runTriageCommand,
   type CommandResult
@@ -18,7 +19,7 @@ import {
   createSuccessEnvelope,
   formatEnvelopeJson
 } from "./envelopes.js";
-import { EXIT_SUCCESS, EXIT_USAGE_ERROR } from "./exit-codes.js";
+import { EXIT_RUNTIME_ERROR, EXIT_SUCCESS, EXIT_USAGE_ERROR } from "./exit-codes.js";
 import { parseArgs } from "./parser.js";
 
 export const CLI_VERSION = "0.1.0";
@@ -41,13 +42,51 @@ export async function runCli(
   } else if (options?.runtime) {
     composition = createCompositionFromRuntime(options.runtime);
   } else if (parsed.options.db) {
-    const runtimeComp = createDefaultRuntimeComposition({
-      database: { filename: parsed.options.db }
-    });
-    composition = runtimeComp.ok ? runtimeComp.value : createStubComposition();
+    const runtimeComp = parsed.command === "demo:prepare"
+      ? createDemoRuntimeComposition(parsed.options.db)
+      : createDefaultRuntimeComposition({
+          database: { filename: parsed.options.db }
+        });
+    if (!runtimeComp.ok) {
+      const durationMs = Date.now() - startTime;
+      return {
+        exitCode: EXIT_RUNTIME_ERROR,
+        stderr: parsed.flags.json
+          ? formatEnvelopeJson(
+              createErrorEnvelope(
+                parsed.command,
+                runtimeComp.error.code,
+                runtimeComp.error.message,
+                EXIT_RUNTIME_ERROR,
+                durationMs,
+                runtimeComp.error.details
+              )
+            )
+          : `Error [${runtimeComp.error.code}]: ${runtimeComp.error.message}`
+      };
+    }
+    composition = runtimeComp.value;
   } else {
     const runtimeComp = createDefaultRuntimeComposition();
-    composition = runtimeComp.ok ? runtimeComp.value : createStubComposition();
+    if (!runtimeComp.ok) {
+      const durationMs = Date.now() - startTime;
+      return {
+        exitCode: EXIT_RUNTIME_ERROR,
+        stderr: parsed.flags.json
+          ? formatEnvelopeJson(
+              createErrorEnvelope(
+                parsed.command,
+                runtimeComp.error.code,
+                runtimeComp.error.message,
+                EXIT_RUNTIME_ERROR,
+                durationMs,
+                runtimeComp.error.details
+              )
+            )
+          : `Error [${runtimeComp.error.code}]: ${runtimeComp.error.message}`
+      };
+    }
+    composition = runtimeComp.value;
   }
 
   if (parsed.unknownOptions.length > 0) {
@@ -111,6 +150,16 @@ export async function runCli(
   }
 
   switch (parsed.command) {
+    case "db:migrate":
+    case "demo:prepare":
+    case "eval:class1":
+    case "import":
+    case "corpus:import":
+    case "triage:run":
+    case "triage:start":
+    case "triage:extract":
+    case "triage:finalize":
+      return runRuntimeCommand(parsed, composition, startTime);
     case "triage":
       return runTriageCommand(parsed, composition, startTime);
     case "review":
@@ -121,7 +170,7 @@ export async function runCli(
       return runStatusCommand(parsed, composition, startTime);
     default: {
       const durationMs = Date.now() - startTime;
-      const msg = `Unknown command '${parsed.command}'. Available commands: triage, review, packet, status, help.`;
+      const msg = `Unknown command '${parsed.command}'. See 'recruitos --help' for available commands.`;
       if (parsed.flags.json) {
         return {
           exitCode: EXIT_USAGE_ERROR,

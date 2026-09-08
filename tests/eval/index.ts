@@ -6,3 +6,4 @@
 export * from "./types.js";
 export * from "./span-matching.js";
 export * from "./class1-gate.js";
+export * from "./finalized-run.js";

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { err, ok, type Result } from "@recruitos/core";
 import {
   createRuntime,
+  demoCompositionOptions,
   type Clock,
   type CreateRuntimeOptions,
   type IdGenerator,
@@ -34,20 +35,30 @@ import type {
 import { StubRecruitosComposition } from "./stub.js";
 
 import {
+  finalizeTriageRun,
+  demoPrepare,
+  importCandidates,
   listCandidates,
   listResolutionTasks,
   readCandidatePacket,
+  runExtractionAttempt,
+  startTriageRun,
   type CandidatePacketModel,
   type CandidateSummaryItem,
   type ResolutionTaskItem
 } from "@recruitos/runtime";
+import { runClass1EvaluationForFinalizedCandidate } from "../evaluation/index.js";
 
 function toRuntimeCandidateStatus(
   status?: CandidateTriageStatus
 ): "scored" | "rejected_hard_requirement" | "escalated" | "pending" | undefined {
   if (!status) return undefined;
-  if (status === "shortlisted" || status === "reviewed") return "scored";
-  if (status === "rejected") return "rejected_hard_requirement";
+  if (status === "scored" || status === "shortlisted" || status === "reviewed") {
+    return "scored";
+  }
+  if (status === "rejected_hard_requirement" || status === "rejected") {
+    return "rejected_hard_requirement";
+  }
   if (status === "escalated") return "escalated";
   if (status === "pending") return "pending";
   return undefined;
@@ -56,10 +67,7 @@ function toRuntimeCandidateStatus(
 function toCliCandidateStatus(
   status: "scored" | "rejected_hard_requirement" | "escalated" | "pending"
 ): CandidateTriageStatus {
-  if (status === "scored") return "shortlisted";
-  if (status === "rejected_hard_requirement") return "rejected";
-  if (status === "escalated") return "escalated";
-  return "pending";
+  return status;
 }
 
 function toCandidateSummary(item: CandidateSummaryItem): CandidateSummary {
@@ -71,7 +79,8 @@ function toCandidateSummary(item: CandidateSummaryItem): CandidateSummary {
     roleTitle: "Staff Software Engineer",
     status: toCliCandidateStatus(item.status),
     score: item.scoreBasisPoints !== null ? item.scoreBasisPoints / 100 : null,
-    confidence: item.confidenceBasisPoints !== null ? item.confidenceBasisPoints / 100 : null,
+    confidence:
+      item.confidenceBasisPoints !== null ? item.confidenceBasisPoints / 10_000 : null,
     reasons: item.reasons,
     tasksCount: 0,
     sealed: item.isSealed,
@@ -93,7 +102,93 @@ function toResolutionTaskSummary(item: ResolutionTaskItem): ResolutionTaskSummar
   };
 }
 
-function toCandidatePacket(packet: CandidatePacketModel): CandidatePacket {
+type ScoreContributionRow = Readonly<{
+  dimensionId: string;
+  level: "none" | "weak" | "partial" | "strong";
+  levelValue: string;
+  weight: number;
+  weightedValue: string;
+}>;
+
+function rationalNumber(value: string): number {
+  const [numerator, denominator] = value.split("/").map(Number);
+  return denominator ? (numerator ?? 0) / denominator : 0;
+}
+
+function toCandidatePacket(
+  packet: CandidatePacketModel,
+  nativeClient: NativeClientHandle | null
+): CandidatePacket {
+  let arithmeticTerms: CandidatePacket["arithmeticTerms"] = [];
+  let evidenceSpans: CandidatePacket["evidenceSpans"] = [];
+  let evidenceGaps: CandidatePacket["evidenceGaps"] = [];
+  let documents: CandidatePacket["documents"] = [];
+
+  if (nativeClient) {
+    const score = nativeClient
+      .prepare("SELECT content_json AS contentJson FROM score_result WHERE candidate_result_id = ?")
+      .get(packet.resultId) as { contentJson: string } | undefined;
+    if (score) {
+      const content = JSON.parse(score.contentJson) as {
+        contributions: readonly ScoreContributionRow[];
+      };
+      const totalWeight = content.contributions.reduce(
+        (sum, contribution) => sum + contribution.weight,
+        0
+      );
+      arithmeticTerms = content.contributions.map((contribution) => ({
+        dimensionId: contribution.dimensionId,
+        dimensionName: contribution.dimensionId,
+        weight: totalWeight === 0 ? 0 : (contribution.weight / totalWeight) * 100,
+        level: contribution.level,
+        levelScore: rationalNumber(contribution.levelValue) * 100,
+        weightedScore:
+          totalWeight === 0
+            ? 0
+            : (rationalNumber(contribution.weightedValue) / totalWeight) * 100
+      }));
+    }
+
+    evidenceSpans = nativeClient.prepare(
+      `SELECT
+        span.evidence_span_id AS evidenceSpanId,
+        span.dimension_id AS dimensionId,
+        span.start AS start,
+        span.end AS end,
+        span.quoted_text AS quotedText,
+        span.polarity AS polarity,
+        span.match_quality AS matchQuality,
+        span.document_id AS documentId
+       FROM candidate_result_evidence_span result_span
+       JOIN evidence_span span ON span.evidence_span_id = result_span.evidence_span_id
+       WHERE result_span.candidate_result_id = ?
+       ORDER BY result_span.span_ordinal ASC`
+    ).all(packet.resultId) as CandidatePacket["evidenceSpans"];
+
+    evidenceGaps = nativeClient.prepare(
+      `SELECT
+        result_gap.dimension_id AS dimensionId,
+        gap.reason_code AS reason
+       FROM candidate_result_evidence_gap result_gap
+       JOIN evidence_gap gap ON gap.evidence_gap_id = result_gap.evidence_gap_id
+       WHERE result_gap.candidate_result_id = ?
+       ORDER BY result_gap.gap_ordinal ASC`
+    ).all(packet.resultId) as CandidatePacket["evidenceGaps"];
+
+    documents = nativeClient.prepare(
+      `SELECT
+        document.source_document_id AS documentId,
+        candidate_document.document_kind AS documentKind,
+        candidate_document.label AS label,
+        document.raw_text AS text
+       FROM candidate_document
+       JOIN source_document document
+         ON document.source_document_id = candidate_document.source_document_id
+       WHERE candidate_document.candidate_id = ?
+       ORDER BY candidate_document.document_ordinal ASC`
+    ).all(packet.candidateId) as CandidatePacket["documents"];
+  }
+
   return {
     candidateId: packet.candidateId,
     sourceKey: packet.sourceKey,
@@ -102,15 +197,25 @@ function toCandidatePacket(packet: CandidatePacketModel): CandidatePacket {
     roleId: "role-default",
     roleTitle: "Staff Software Engineer",
     status: toCliCandidateStatus(packet.resultStatus),
-    score: null,
-    confidence: null,
+    score:
+      packet.scoreAggregateBasisPoints === null
+        ? null
+        : packet.scoreAggregateBasisPoints / 100,
+    confidence:
+      packet.scoreConfidenceBasisPoints === null
+        ? null
+        : packet.scoreConfidenceBasisPoints / 10_000,
+    scoreText: packet.scoreAggregateText,
+    confidenceText: packet.scoreConfidenceText,
+    confidenceInput: packet.confidenceInput,
+    reasons: packet.reasons,
     contentHash: packet.contentHash,
     sealed: packet.isSealed,
     createdAt: packet.createdAt,
-    arithmeticTerms: [],
-    evidenceSpans: [],
-    evidenceGaps: [],
-    documents: [],
+    arithmeticTerms,
+    evidenceSpans,
+    evidenceGaps,
+    documents,
     tasks: []
   };
 }
@@ -119,6 +224,7 @@ type NativeClientHandle = Readonly<{
   name?: string;
   prepare: (sql: string) => {
     get: (...params: readonly unknown[]) => unknown;
+    all: (...params: readonly unknown[]) => unknown[];
   };
 }>;
 
@@ -144,14 +250,95 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   readonly runtime: RuntimeComposition;
   readonly databasePath: string;
   private readonly fallback: StubRecruitosComposition;
+  private readonly allowStubFallback: boolean;
 
-  constructor(runtime: RuntimeComposition, databasePath?: string) {
+  constructor(
+    runtime: RuntimeComposition,
+    databasePath?: string,
+    allowStubFallback = false
+  ) {
     this.runtime = runtime;
     const nativeClient = getNativeClient(runtime.connection.database);
     this.databasePath =
       databasePath ??
       (typeof nativeClient?.name === "string" ? nativeClient.name : ":memory:");
     this.fallback = new StubRecruitosComposition();
+    this.allowStubFallback = allowStubFallback;
+  }
+
+  async prepareDemo(input: {
+    actorId?: string;
+  }): Promise<Result<import("./types.js").DemoPrepareSummary, RuntimeError>> {
+    if (this.hasCandidatesInDb()) {
+      return err({
+        code: "persistence_failed",
+        message: "Demo corpus imported no candidates",
+        retryable: false
+      });
+    }
+    return demoPrepare(this.runtime, input);
+  }
+
+  async evaluateClass1(
+    candidateId: string
+  ): Promise<Result<import("./types.js").Class1EvaluationReport, RuntimeError>> {
+    return runClass1EvaluationForFinalizedCandidate(
+      this.runtime.connection.database,
+      candidateId
+    );
+  }
+
+  async importCandidates(input: {
+    actorId: string;
+    corpusTag?: "main" | "variant" | undefined;
+  }): Promise<Result<import("./types.js").ImportCandidatesSummary, RuntimeError>> {
+    const result = await importCandidates(this.runtime, {
+      actorId: input.actorId,
+      ...(input.corpusTag === undefined ? {} : { corpusTag: input.corpusTag })
+    });
+    if (!result.ok) return result;
+    return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
+  }
+
+  async startTriage(input: {
+    actorId: string;
+    roleId: string;
+    candidateIds: readonly string[];
+    kind?: "main_run" | "variant_run" | undefined;
+  }): Promise<Result<import("./types.js").StartTriageSummary, RuntimeError>> {
+    const result = startTriageRun(this.runtime, {
+      actorId: input.actorId,
+      roleId: input.roleId,
+      candidateIds: input.candidateIds,
+      ...(input.kind === undefined ? {} : { kind: input.kind })
+    });
+    if (!result.ok) return result;
+    return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
+  }
+
+  async extractTriage(
+    triageAttemptId: string
+  ): Promise<Result<import("./types.js").ExtractionAttemptSummary, RuntimeError>> {
+    const result = await runExtractionAttempt(this.runtime, { triageAttemptId });
+    if (!result.ok) return result;
+    return ok({
+      ...result.value,
+      droppedQuoteCount: result.value.droppedQuotes.length
+    });
+  }
+
+  async finalizeTriage(input: {
+    actorId: string;
+    triageAttemptId: string;
+    triageRunId?: string | undefined;
+  }): Promise<Result<import("./types.js").FinalizeTriageSummary, RuntimeError>> {
+    const result = finalizeTriageRun(this.runtime, {
+      actorId: input.actorId,
+      triageAttemptId: input.triageAttemptId,
+      ...(input.triageRunId === undefined ? {} : { triageRunId: input.triageRunId })
+    });
+    if (!result.ok) return result;
+    return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
   }
 
   private hasCandidatesInDb(): boolean {
@@ -248,7 +435,11 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       }
 
       // If DB has data, report DB stats. If empty (in-memory test), merge with fallback.
-      if (candidateCount === 0 && openTasksCount === 0) {
+      if (
+        this.allowStubFallback &&
+        candidateCount === 0 &&
+        openTasksCount === 0
+      ) {
         const fallbackStatus = await this.fallback.getStatus();
         if (fallbackStatus.ok) {
           return ok({
@@ -282,7 +473,7 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   async listCandidates(
     options?: ListCandidatesOptions
   ): Promise<Result<readonly CandidateSummary[], RuntimeError>> {
-    if (this.hasCandidatesInDb()) {
+    if (this.hasCandidatesInDb() || !this.allowStubFallback) {
       const pageResult = await listCandidates(this.runtime.connection.database, {
         limit: options?.limit,
         channel: options?.channel,
@@ -308,9 +499,9 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       candidateId
     );
     if (packetResult.ok) {
-      return ok(toCandidatePacket(packetResult.value));
+      return ok(toCandidatePacket(packetResult.value, getNativeClient(this.runtime.connection.database)));
     }
-    if (!this.hasCandidatesInDb()) {
+    if (this.allowStubFallback && !this.hasCandidatesInDb()) {
       return this.fallback.getCandidatePacket(candidateId);
     }
     return err({
@@ -329,7 +520,7 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   async listResolutionTasks(
     options?: ListResolutionTasksOptions
   ): Promise<Result<readonly ResolutionTaskSummary[], RuntimeError>> {
-    if (this.hasTasksInDb()) {
+    if (this.hasTasksInDb() || !this.allowStubFallback) {
       const pageResult = await listResolutionTasks(this.runtime.connection.database, {
         candidateId: options?.candidateId,
         status: options?.status
@@ -430,7 +621,19 @@ export function createDefaultRuntimeComposition(
   return ok(
     new RuntimeRecruitosComposition(
       runtimeResult.value,
-      isMemory ? ":memory:" : filename
+      isMemory ? ":memory:" : filename,
+      options === undefined
     )
   );
+}
+
+/** Creates the deterministic synthetic composition used by `demo:prepare`. */
+export function createDemoRuntimeComposition(
+  filename: string
+): Result<RecruitosComposition, RuntimeError> {
+  const runtimeResult = createRuntime(
+    demoCompositionOptions({ database: { filename } })
+  );
+  if (!runtimeResult.ok) return runtimeResult;
+  return ok(new RuntimeRecruitosComposition(runtimeResult.value, filename));
 }
