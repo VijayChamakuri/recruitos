@@ -1,6 +1,7 @@
 import type { EvidenceSpan } from "@recruitos/cli";
-import { escapeHtml, validateSpanContent, validateSpanInterval } from "./safe-text.js";
+import { escapeHtml, validateSpanContent } from "./safe-text.js";
 import { renderSpanIntegrityFailure } from "./span-integrity-failure.js";
+import { TEST_IDS } from "../testids.js";
 
 export type SpanHighlightProps = Readonly<{
   text: string;
@@ -25,7 +26,7 @@ export function renderSpanHighlight(props: SpanHighlightProps): string {
     ? `<span class="tag">${escapeHtml(props.dimensionId)}</span>`
     : "";
 
-  return `<mark class="${cls}${focusedCls}"${idAttr}${dataDim} data-polarity="${props.polarity}">${escapeHtml(
+  return `<mark class="${cls}${focusedCls}"${idAttr}${dataDim} data-polarity="${props.polarity}" data-evidence-polarity="${props.polarity}" data-testid="${TEST_IDS.SPAN_HIGHLIGHT}">${escapeHtml(
     props.text
   )}${tag}</mark>`;
 }
@@ -42,7 +43,7 @@ export function renderAnnotatedDocument(
   focusedSpanId?: string
 ): string {
   if (spans.length === 0) {
-    return `<div class="doc">${escapeHtml(sourceText).replace(/\n/g, "<br>")}</div>`;
+    return `<div class="doc" data-testid="${TEST_IDS.RESUME_VIEWER}">${escapeHtml(sourceText).replace(/\n/g, "<br>")}</div>`;
   }
 
   // Sort spans by start ascending
@@ -101,5 +102,5 @@ export function renderAnnotatedDocument(
     parts.push(escapeHtml(sourceText.slice(cursor)).replace(/\n/g, "<br>"));
   }
 
-  return `<div class="doc">${parts.join("")}</div>`;
+  return `<div class="doc" data-testid="${TEST_IDS.RESUME_VIEWER}">${parts.join("")}</div>`;
 }

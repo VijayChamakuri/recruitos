@@ -1,192 +1,124 @@
-/**
- * Playwright E2E test harness and type declarations.
- * Provides type-safe test definitions and runner interfaces matching Playwright test API.
- */
+import { test as base, expect, type BrowserContext, type Page } from "@playwright/test";
+import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import http from "node:http";
+import net from "node:net";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
-export interface PageElement {
-  textContent(): Promise<string | null>;
-  innerText(): Promise<string>;
-  getAttribute(name: string): Promise<string | null>;
-  isVisible(): Promise<boolean>;
-  click(): Promise<void>;
-  fill(value: string): Promise<void>;
+export interface TestServerEnvironment {
+  readonly port: number;
+  readonly serverUrl: string;
+  readonly tempDir: string;
+  readonly dbPath: string;
 }
 
-export interface Page {
-  goto(url: string, options?: { timeout?: number; waitUntil?: string }): Promise<void>;
-  locator(selector: string): PageElement;
-  getByRole(role: string, options?: { name?: string | RegExp }): PageElement;
-  getByText(text: string | RegExp): PageElement;
-  getByTestId(testId: string): PageElement;
-  title(): Promise<string>;
-  content(): Promise<string>;
-  screenshot(options?: { path?: string; fullPage?: boolean }): Promise<Buffer>;
-  close(): Promise<void>;
+export interface RecruitOsTestFixtures {
+  testEnvironment: TestServerEnvironment;
 }
 
-export interface BrowserContext {
-  newPage(): Promise<Page>;
-  close(): Promise<void>;
-}
-
-export interface PlaywrightTestArgs {
-  page: Page;
-  context: BrowserContext;
-}
-
-export type TestFunction = (args: PlaywrightTestArgs) => Promise<void> | void;
-
-export interface TestModifier {
-  (title: string, testFn: TestFunction): void;
-  skip(title: string, testFn: TestFunction): void;
-  only(title: string, testFn: TestFunction): void;
-  describe(title: string, suiteFn: () => void): void;
-}
-
-const createTestRunner = (): TestModifier => {
-  const runner = ((title: string, _testFn: TestFunction): void => {
-    void title;
-  }) as TestModifier;
-
-  runner.skip = (title: string, _testFn: TestFunction): void => {
-    // Intentionally skipped stub pending browser runtime environment
-    void title;
-  };
-
-  runner.only = (title: string, _testFn: TestFunction): void => {
-    void title;
-  };
-
-  runner.describe = (title: string, suiteFn: () => void): void => {
-    void title;
-    suiteFn();
-  };
-
-  return runner;
-};
-
-export const test: TestModifier = createTestRunner();
-
-export interface ExpectMatcher<T> {
-  toBe(expected: T): void;
-  toEqual(expected: T): void;
-  toContain(expected: unknown): void;
-  toBeGreaterThan(expected: number): void;
-  toBeGreaterThanOrEqual(expected: number): void;
-  toBeLessThan(expected: number): void;
-  toBeLessThanOrEqual(expected: number): void;
-  toBeTruthy(): void;
-  toBeFalsy(): void;
-  toBeVisible(): Promise<void>;
-  toHaveText(expected: string | RegExp): Promise<void>;
-  toHaveValue(expected: string): Promise<void>;
-  not: ExpectMatcher<T>;
-}
-
-export function expect<T>(actual: T): ExpectMatcher<T> {
-  const matcher: ExpectMatcher<T> = {
-    toBe(expected: T): void {
-      if (actual !== expected) {
-        throw new Error(`Expected ${String(expected)}, received ${String(actual)}`);
+function allocateAvailablePort(): Promise<number> {
+  return new Promise((resolvePort, rejectPort) => {
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const address = srv.address();
+      if (!address || typeof address === "string") {
+        srv.close(() => rejectPort(new Error("Unable to obtain port address")));
+        return;
       }
-    },
-    toEqual(expected: T): void {
-      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-        throw new Error(`Expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`);
-      }
-    },
-    toContain(expected: unknown): void {
-      if (typeof actual === "string" && typeof expected === "string") {
-        if (!actual.includes(expected)) {
-          throw new Error(`Expected string to contain ${expected}`);
+      const port = address.port;
+      srv.close((err) => {
+        if (err) rejectPort(err);
+        else resolvePort(port);
+      });
+    });
+    srv.on("error", rejectPort);
+  });
+}
+
+function waitForServerReady(url: string, timeoutMs = 15_000): Promise<void> {
+  const startTime = Date.now();
+  return new Promise((resolveReady, rejectReady) => {
+    const check = (): void => {
+      const req = http.get(url, (res) => {
+        res.resume();
+        if (res.statusCode && res.statusCode < 500) {
+          resolveReady();
+        } else if (Date.now() - startTime > timeoutMs) {
+          rejectReady(
+            new Error(
+              `Server at ${url} did not become ready within ${timeoutMs}ms (HTTP ${res.statusCode ?? 0})`
+            )
+          );
+        } else {
+          setTimeout(check, 100);
         }
-      } else if (Array.isArray(actual)) {
-        if (!actual.includes(expected)) {
-          throw new Error(`Expected array to contain ${JSON.stringify(expected)}`);
+      });
+      req.on("error", () => {
+        if (Date.now() - startTime > timeoutMs) {
+          rejectReady(new Error(`Server at ${url} did not respond within ${timeoutMs}ms`));
+        } else {
+          setTimeout(check, 100);
         }
-      }
-    },
-    toBeGreaterThan(expected: number): void {
-      if (typeof actual !== "number" || actual <= expected) {
-        throw new Error(`Expected ${actual} > ${expected}`);
-      }
-    },
-    toBeGreaterThanOrEqual(expected: number): void {
-      if (typeof actual !== "number" || actual < expected) {
-        throw new Error(`Expected ${actual} >= ${expected}`);
-      }
-    },
-    toBeLessThan(expected: number): void {
-      if (typeof actual !== "number" || actual >= expected) {
-        throw new Error(`Expected ${actual} < ${expected}`);
-      }
-    },
-    toBeLessThanOrEqual(expected: number): void {
-      if (typeof actual !== "number" || actual > expected) {
-        throw new Error(`Expected ${actual} <= ${expected}`);
-      }
-    },
-    toBeTruthy(): void {
-      if (!actual) throw new Error(`Expected truthy value, received ${String(actual)}`);
-    },
-    toBeFalsy(): void {
-      if (actual) throw new Error(`Expected falsy value, received ${String(actual)}`);
-    },
-    async toBeVisible(): Promise<void> {},
-    async toHaveText(_expected: string | RegExp): Promise<void> {},
-    async toHaveValue(_expected: string): Promise<void> {},
-    get not(): ExpectMatcher<T> {
-      return {
-        toBe(expected: T): void {
-          if (actual === expected) {
-            throw new Error(`Expected value not to be ${String(expected)}`);
-          }
-        },
-        toEqual(expected: T): void {
-          if (JSON.stringify(actual) === JSON.stringify(expected)) {
-            throw new Error(`Expected value not to equal ${JSON.stringify(expected)}`);
-          }
-        },
-        toContain(expected: unknown): void {
-          if (typeof actual === "string" && typeof expected === "string" && actual.includes(expected)) {
-            throw new Error(`Expected string not to contain ${expected}`);
-          }
-        },
-        toBeGreaterThan(expected: number): void {
-          if (typeof actual === "number" && actual > expected) {
-            throw new Error(`Expected ${actual} not > ${expected}`);
-          }
-        },
-        toBeGreaterThanOrEqual(expected: number): void {
-          if (typeof actual === "number" && actual >= expected) {
-            throw new Error(`Expected ${actual} not >= ${expected}`);
-          }
-        },
-        toBeLessThan(expected: number): void {
-          if (typeof actual === "number" && actual < expected) {
-            throw new Error(`Expected ${actual} not < ${expected}`);
-          }
-        },
-        toBeLessThanOrEqual(expected: number): void {
-          if (typeof actual === "number" && actual <= expected) {
-            throw new Error(`Expected ${actual} not <= ${expected}`);
-          }
-        },
-        toBeTruthy(): void {
-          if (actual) throw new Error("Expected falsy");
-        },
-        toBeFalsy(): void {
-          if (!actual) throw new Error("Expected truthy");
-        },
-        async toBeVisible(): Promise<void> {},
-        async toHaveText(_expected: string | RegExp): Promise<void> {},
-        async toHaveValue(_expected: string): Promise<void> {},
-        get not(): ExpectMatcher<T> {
-          return matcher;
-        }
-      };
+      });
+      req.end();
+    };
+    check();
+  });
+}
+
+export const test = base.extend<RecruitOsTestFixtures>({
+  testEnvironment: async ({}, use) => {
+    const tempDir = mkdtempSync(join(tmpdir(), "recruitos-e2e-"));
+    const dbPath = join(tempDir, "recruitos.db");
+    const port = await allocateAvailablePort();
+    const serverUrl = `http://127.0.0.1:${port}`;
+
+    // Path to repository root and production web server entrypoint
+    const repoRoot = resolve(import.meta.dirname, "../..");
+    const serverScript = resolve(repoRoot, "apps/web/dist/server/server.js");
+
+    const serverProcess = spawn("node", [serverScript], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        PORT: String(port),
+        DATABASE_PATH: dbPath
+      },
+      stdio: "pipe"
+    });
+
+    try {
+      await waitForServerReady(`${serverUrl}/status`);
+      await use({
+        port,
+        serverUrl,
+        tempDir,
+        dbPath
+      });
+    } finally {
+      // Teardown: terminate server process with no hidden reset endpoint
+      serverProcess.kill("SIGTERM");
+      await new Promise<void>((resolveExit) => {
+        const killTimer = setTimeout(() => {
+          serverProcess.kill("SIGKILL");
+          resolveExit();
+        }, 3000);
+        serverProcess.on("exit", () => {
+          clearTimeout(killTimer);
+          resolveExit();
+        });
+      });
+
+      // Remove isolated per-test database and directory
+      rmSync(tempDir, { recursive: true, force: true });
     }
-  };
+  },
 
-  return matcher;
-}
+  baseURL: async ({ testEnvironment }, use) => {
+    await use(testEnvironment.serverUrl);
+  }
+});
+
+export { expect, type BrowserContext, type Page };

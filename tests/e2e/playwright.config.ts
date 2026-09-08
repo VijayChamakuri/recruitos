@@ -1,11 +1,14 @@
+import { defineConfig, devices } from "@playwright/test";
+import { resolve } from "node:path";
+
 /**
  * Playwright E2E configuration for RecruitOS browser workflows.
- * Enforces single worker, zero CI retries, and failure-only trace retention.
+ * Enforces single worker, zero CI retries, Chromium project, and failure-only trace retention.
  */
-
-export const config = {
+export default defineConfig({
   testDir: "./",
   testMatch: /.*\.e2e\.ts$/,
+  outputDir: resolve(import.meta.dirname, "../../dist/test-results"),
   timeout: 60_000,
   expect: {
     timeout: 10_000
@@ -13,12 +16,12 @@ export const config = {
   workers: 1,
   retries: 0,
   fullyParallel: false,
+  globalSetup: resolve(import.meta.dirname, "global-setup.ts"),
   reporter: [
     ["list"],
-    ["html", { open: "never", outputFolder: "playwright-report" }]
+    ["html", { open: "never", outputFolder: resolve(import.meta.dirname, "../../dist/playwright-report") }]
   ],
   use: {
-    baseURL: "http://127.0.0.1:3000",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure"
@@ -27,17 +30,8 @@ export const config = {
     {
       name: "chromium",
       use: {
-        browserName: "chromium",
-        viewport: { width: 1440, height: 900 }
+        ...devices["Desktop Chrome"]
       }
     }
-  ],
-  webServer: {
-    command: "node apps/web/dist/server/server.js",
-    port: 3000,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000
-  }
-};
-
-export default config;
+  ]
+});

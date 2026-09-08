@@ -1,4 +1,5 @@
 import { expect, test } from "./harness.js";
+import { ROUTES, TEST_IDS } from "../../apps/web/src/testids.js";
 
 /**
  * Required browser workflow 3: Resolution Rescore
@@ -8,33 +9,46 @@ import { expect, test } from "./harness.js";
  * - assert zero live calls
  */
 test.describe("Workflow 3: Resolution Rescore", () => {
-  test.skip("resolves missing evidence task, supersedes triage result, and retains original", async ({ page }) => {
-    // 1. Navigate to resolution tasks view
-    await page.goto("/review?tab=tasks");
+  test.fixme(
+    "resolves missing evidence task, supersedes triage result, and retains original",
+    async ({ page }) => {
+      // 1. Navigate to resolution tasks queue
+      await page.goto(ROUTES.REVIEW_TASKS);
 
-    // 2. Open pinned missing-evidence task
-    const taskItem = page.locator("[data-testid='task-item-task-1']");
-    await expect(taskItem).toBeVisible();
-    await taskItem.click();
+      // 2. Open pinned missing-evidence task
+      const taskItem = page.getByTestId(TEST_IDS.TASK_ITEM("task-1"));
+      await expect(taskItem).toBeVisible();
+      await taskItem.click();
 
-    // 3. Fill evidence and level resolution form
-    const evidenceInput = page.locator("[name='evidenceText']");
-    await evidenceInput.fill("Supplied verified transcript from accredited institution.");
+      // 3. Fill evidence and level resolution form
+      const evidenceInput = page.locator("[name='evidenceText']");
+      await evidenceInput.fill(
+        "Supplied verified transcript confirming advanced distributed systems tenure."
+      );
 
-    const levelSelect = page.locator("[name='assignedLevel']");
-    await levelSelect.fill("Senior");
+      const levelSelect = page.locator("[name='assignedLevel']");
+      await levelSelect.selectOption("proficient");
 
-    // 4. Submit resolution action
-    const submitBtn = page.getByRole("button", { name: /Submit Resolution/i });
-    await submitBtn.click();
+      // 4. Submit resolution action
+      const submitBtn = page.getByTestId(TEST_IDS.SUBMIT_RESOLUTION_BTN);
+      await submitBtn.click();
 
-    // 5. Verify superseding result reflects updated score and confidence
-    await page.goto("/packet/candidate-1");
-    const updatedBadge = page.locator("[data-testid='superseding-badge']");
-    await expect(updatedBadge).toBeVisible();
+      // 5. Verify superseding result reflects updated score and confidence
+      await page.goto(ROUTES.PACKET("candidate-1"));
+      const supersedingBadge = page.getByTestId(TEST_IDS.SUPERSEDING_BADGE);
+      await expect(supersedingBadge).toBeVisible();
 
-    // 6. Verify original result remains inspectable in version history
-    const historyLink = page.getByText(/View Prior Version/i);
-    await expect(historyLink).toBeVisible();
-  });
+      // 6. Verify original result remains inspectable in version history
+      const historyLink = page.getByTestId(TEST_IDS.PRIOR_VERSION_LINK);
+      await expect(historyLink).toBeVisible();
+      await historyLink.click();
+      const priorResult = page.getByTestId(TEST_IDS.PACKET_VIEW);
+      await expect(priorResult).toBeVisible();
+
+      // 7. Verify zero live extraction calls occurred
+      await page.goto(ROUTES.RUNS);
+      const auditLog = await page.content();
+      expect(auditLog).not.toContain("live_extraction_attempt");
+    }
+  );
 });
