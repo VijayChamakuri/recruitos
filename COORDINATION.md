@@ -14,9 +14,9 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 09c3b9e |
+| origin/main | ffcc764 |
 | Migration lock held by | Cursor, for one PR: role store persists the full locked rubric (integer version, provenance, level anchors), then `draft-v1.ts` is deleted and an architecture rule forbids `DRAFT_RUBRIC_V1`. Greenlit 2026-09-07. Blocks T10.5. |
-| Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `DRAFT_RUBRIC_V1` shim in `packages/core/src/rubric/draft-v1.ts` remains; one consumer left (`roles.test.ts`), removed by Cursor's migration PR. |
+| Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. This PR deletes the `DRAFT_RUBRIC_V1` shim. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import, scheduler, start-run, extraction bridge plus OQ-7 policy, finalize, correction. |
 
 ## Lanes and file locks
@@ -41,7 +41,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | (holds migration lock) | One PR: role store persists the full locked rubric (integer version, provenance, level anchors), reconstructs it in `readCoreRubric` as `toEqual(RUBRIC_V1)`, updates `roles.test.ts` and the `rubricVersion: "draft-v1"` literals in `attempts`/`runs`/`snapshots` tests, deletes `packages/core/src/rubric/draft-v1.ts` and its `rubric/index.ts` export, points `roles.test.ts` at `RUBRIC_V1`, and adds an architecture rule forbidding any `draft-v1` / `DRAFT_RUBRIC_V1` import. Spec: `docs/plans/t10-runtime-use-cases-plan.md` "Dependency on Cursor". | starting |
+| Cursor | cursor/locked-rubric-persistence-c42c | One PR: role store persists the full locked rubric (integer version, provenance, level anchors), reconstructs it in `readCoreRubric` as `toEqual(RUBRIC_V1)`, updates `roles.test.ts` and the `rubricVersion: "draft-v1"` literals in `attempts`/`runs`/`snapshots` tests, deletes `packages/core/src/rubric/draft-v1.ts` and its `rubric/index.ts` export, points `roles.test.ts` at `RUBRIC_V1`, and adds an architecture rule forbidding any `draft-v1` / `DRAFT_RUBRIC_V1` import. Spec: `docs/plans/t10-runtime-use-cases-plan.md` "Dependency on Cursor". | building |
 | Claude Code | b/t10-plan then b/t10-import-candidates | T10 runtime use-cases per `docs/plans/t10-runtime-use-cases-plan.md`. Plan PR first, then T10.1 (candidate import). | building |
 | Antigravity | c/e2e-playwright-harness | Replace the hand-rolled `tests/e2e/harness.ts` with real `@playwright/test`: `playwright.config.ts` (Chromium, one worker, zero retries), a per-test fixture giving each test a unique temp dir, SQLite db, and port with a production Next server start and teardown and no reset endpoint, and a single Next build before the suite. Flesh out the six spec bodies as real assertions and interactions behind `test.fixme` until T10 and the UI land. Publish the `data-testid` and route contract the packet, resolution, proposal, and Trust Center pages must satisfy as `apps/web/src/testids.ts`, and align existing web presenter components to emit those testids. Do not touch `packages/runtime/**`. Do not wire `make demo` end to end yet; it needs T10. | assigned |
 
@@ -123,3 +123,4 @@ your own rows plus the log.
 - 2026-09-07 Claude: wrote `docs/plans/t10-runtime-use-cases-plan.md` (PR on b/t10-plan). T10 is six `b/` PRs: T10.1 candidate import, T10.2 extraction scheduler, T10.3 start triage run, T10.4 extraction-to-pipeline bridge plus the OQ-7 hard-requirement policy (`packages/runtime/src/policy/hard-requirements-v1.ts`), T10.5 finalize run (needs Cursor's migration merged first), T10.6 correction and re-extraction. No schema changes in any T10 PR. Starting T10.1 after the plan PR.
 - 2026-09-07 Claude: greenlit Cursor for the role-store full-rubric persistence migration. Migration lock moves to Cursor for that one PR. It removes the `DRAFT_RUBRIC_V1` shim and adds the architecture rule. Blocks T10.5 only.
 - 2026-09-07 Claude: assigned Antigravity `c/e2e-playwright-harness`: real `@playwright/test` harness and per-test isolation fixture replacing `tests/e2e/harness.ts`, the six spec bodies written out behind `test.fixme`, and a `data-testid` and route contract at `apps/web/src/testids.ts`. Blocked from `packages/runtime/**` and from wiring `make demo` end to end (needs T10).
+- 2026-09-08 Cursor: starting `cursor/locked-rubric-persistence-c42c`. Migration lock stays with Cursor. Role store persists integer version, provenance authorship, `rubric_provenance_assumption`, and four level anchors so `readCoreRubric` round-trips `RUBRIC_V1`. Deletes `draft-v1.ts` and adds an architecture rule against that import. Blocks T10.5 only.
