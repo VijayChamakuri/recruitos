@@ -12,7 +12,10 @@ import {
 } from "@recruitos/core";
 import { z } from "zod";
 
-import { readCandidateApplicationAnswerByCandidateQuestion } from "../application-answers/index.js";
+import {
+  readCandidateApplicationAnswerByCandidateQuestion,
+  type CandidateApplicationAnswer
+} from "../application-answers/index.js";
 import {
   readAttemptWorkItems,
   readTriageAttempt,
@@ -25,7 +28,7 @@ import {
   type AuditEvent
 } from "../audit/index.js";
 import {
-  runImmediateTransaction,
+  runDeferredTransaction,
   type ImmediateTransactionContext
 } from "../commands/index.js";
 import type { IdGenerator } from "../composition/index.js";
@@ -55,8 +58,8 @@ import {
 } from "../facts/index.js";
 import { createHardRequirementPolicyV1 } from "../policy/index.js";
 import { insertResolutionTask, prepareResolutionTask } from "../resolution/index.js";
+import * as candidateResults from "../results/index.js";
 import {
-  deriveCandidateDecision,
   insertCandidateResultReason,
   insertCandidateResultSeal,
   insertCandidateTriageResult,
@@ -84,12 +87,14 @@ import {
 } from "./contract.js";
 
 /**
- * Finalizes a ready official triage attempt: one command transaction writes
- * sealed candidate results, candidate heads, the official triage run, and
- * already-prepared audit events. Audit envelopes are hashed and timestamped
- * before the writer lock. A blocked work item refuses finalization.
- * Reviewable failures become unavailable results with exactly one
- * `assessment_unavailable` reason.
+ * Finalizes a ready official triage attempt. Immutable snapshot reads use a
+ * short deferred transaction so planning does not take the SQLite writer
+ * lock. Candidate derivation, scoring, routing, and audit hashing all run
+ * outside any transaction. The command transaction is a short BEGIN IMMEDIATE
+ * that rechecks mutable preconditions and persists sealed results, heads, the
+ * official triage run, and already-prepared audit events. A blocked work item
+ * refuses finalization. Reviewable failures become unavailable results with
+ * exactly one `assessment_unavailable` reason.
  */
 
 export const FINALIZE_TRIAGE_RUN_COMMAND_NAME = "triage_run.finalize";
@@ -149,6 +154,34 @@ type CandidateGroup = Readonly<{
   extractions: CandidateExtractionResultInput[];
 }>;
 
+type PlannedWorkItemIdentity = Readonly<{
+  attemptWorkItemId: string;
+  version: number;
+  state: AttemptWorkItem["state"];
+  candidateId: string;
+  candidateDocumentId: string;
+  dimensionId: string;
+  extractionArtifactId: string | null;
+  extractionFailureId: string | null;
+}>;
+
+type SnapshotCandidate = Readonly<{
+  candidateId: string;
+  documents: readonly CandidateDocumentRow[];
+  artifacts: readonly ExtractionArtifact[];
+  extractions: readonly CandidateExtractionResultInput[];
+  workAuthorization: CandidateApplicationAnswer | undefined;
+}>;
+
+type FinalizeSnapshot = Readonly<{
+  attempt: TriageAttempt;
+  workItemIdentities: readonly PlannedWorkItemIdentity[];
+  extractorVersion: string;
+  frozenYearMonth: string;
+  candidates: readonly SnapshotCandidate[];
+  importOrdinalByCandidate: ReadonlyMap<string, number>;
+}>;
+
 type PlannedCandidate = Readonly<{
   candidateId: string;
   documents: readonly CandidateDocumentRow[];
@@ -159,6 +192,7 @@ type PlannedCandidate = Readonly<{
 
 type FinalizePlan = Readonly<{
   attempt: TriageAttempt;
+  workItemIdentities: readonly PlannedWorkItemIdentity[];
   extractorVersion: string;
   policy: HardRequirementPolicy;
   candidates: readonly PlannedCandidate[];
@@ -219,8 +253,7 @@ export function finalizeTriageRun(
     composition,
     triageAttemptId: input.triageAttemptId,
     requestedTriageRunId: input.triageRunId,
-    rubric,
-    createdAt
+    rubric
   });
   if (!plan.ok) {
     return plan;
@@ -268,11 +301,25 @@ function planFinalize(args: {
   triageAttemptId: string;
   requestedTriageRunId: string | undefined;
   rubric: LockedRubric;
-  createdAt: number;
 }): Result<FinalizePlan, RuntimeError> {
-  return runImmediateTransaction(args.composition.connection, (context) => {
-    const nextId = () => args.composition.idGenerator.next();
-    const loaded = loadReadyAttempt(context, args.triageAttemptId);
+  const snapshot = snapshotFinalizeInputs(args.composition, args.triageAttemptId);
+  if (!snapshot.ok) {
+    return snapshot;
+  }
+  return deriveFinalizePlan({
+    composition: args.composition,
+    snapshot: snapshot.value,
+    requestedTriageRunId: args.requestedTriageRunId,
+    rubric: args.rubric
+  });
+}
+
+function snapshotFinalizeInputs(
+  composition: UseCaseComposition,
+  triageAttemptId: string
+): Result<FinalizeSnapshot, RuntimeError> {
+  return runDeferredTransaction(composition.connection, (context) => {
+    const loaded = loadReadyAttempt(context, triageAttemptId);
     if (!loaded.ok) {
       return loaded;
     }
@@ -287,11 +334,6 @@ function planFinalize(args: {
       return err(createRuntimeError("not_found", `Run input snapshot "${attempt.snapshotId}" not found`, false));
     }
     const snapshot = snapshotResult.value;
-    const policyResult = createHardRequirementPolicyV1(snapshot.frozenDate.slice(0, 7));
-    /* v8 ignore next 3 -- frozenDate from a stored snapshot is a valid year-month prefix. */
-    if (!policyResult.ok) {
-      return policyResult;
-    }
 
     const hydratedResult = hydrateWorkItems(context, workItems);
     if (!hydratedResult.ok) {
@@ -315,7 +357,7 @@ function planFinalize(args: {
       );
     });
 
-    const candidates: PlannedCandidate[] = [];
+    const candidates: SnapshotCandidate[] = [];
     for (const group of orderedGroups) {
       const documents = loadCandidateDocuments(context, group.candidateId);
       if (documents.length === 0) {
@@ -330,39 +372,74 @@ function planFinalize(args: {
       if (!workAuthResult.ok) {
         return workAuthResult;
       }
-      const decisionResult = deriveCandidateDecision({
-        candidateId: group.candidateId,
-        documents: documents.map(toBridgeDocument),
-        extractions: group.extractions,
-        applicationAnswers:
-          workAuthResult.value === undefined
-            ? undefined
-            : { workAuthorization: workAuthResult.value },
-        rubric: args.rubric,
-        hardRequirementPolicy: policyResult.value,
-        isVariant: attempt.kind === "variant_run"
-      });
-      if (!decisionResult.ok) {
-        return decisionResult;
-      }
       candidates.push({
         candidateId: group.candidateId,
         documents,
         artifacts: group.artifacts,
-        decision: decisionResult.value,
-        resultId: nextId()
+        extractions: group.extractions,
+        workAuthorization: workAuthResult.value
       });
     }
 
     return ok({
       attempt,
+      workItemIdentities: workItems.map(toWorkItemIdentity),
       extractorVersion: snapshot.extractorVersion,
-      policy: policyResult.value,
+      frozenYearMonth: snapshot.frozenDate.slice(0, 7),
       candidates,
-      importOrdinalByCandidate,
-      triageRunId: args.requestedTriageRunId ?? nextId(),
-      kind: resolveOfficialTriageRunKind(attempt.kind, candidates.length)
+      importOrdinalByCandidate
     });
+  });
+}
+
+function deriveFinalizePlan(args: {
+  composition: UseCaseComposition;
+  snapshot: FinalizeSnapshot;
+  requestedTriageRunId: string | undefined;
+  rubric: LockedRubric;
+}): Result<FinalizePlan, RuntimeError> {
+  const policyResult = createHardRequirementPolicyV1(args.snapshot.frozenYearMonth);
+  /* v8 ignore next 3 -- frozenDate from a stored snapshot is a valid year-month prefix. */
+  if (!policyResult.ok) {
+    return policyResult;
+  }
+
+  const nextId = () => args.composition.idGenerator.next();
+  const candidates: PlannedCandidate[] = [];
+  for (const candidate of args.snapshot.candidates) {
+    const decisionResult = candidateResults.deriveCandidateDecision({
+      candidateId: candidate.candidateId,
+      documents: candidate.documents.map(toBridgeDocument),
+      extractions: candidate.extractions,
+      applicationAnswers:
+        candidate.workAuthorization === undefined
+          ? undefined
+          : { workAuthorization: candidate.workAuthorization },
+      rubric: args.rubric,
+      hardRequirementPolicy: policyResult.value,
+      isVariant: args.snapshot.attempt.kind === "variant_run"
+    });
+    if (!decisionResult.ok) {
+      return decisionResult;
+    }
+    candidates.push({
+      candidateId: candidate.candidateId,
+      documents: candidate.documents,
+      artifacts: candidate.artifacts,
+      decision: decisionResult.value,
+      resultId: nextId()
+    });
+  }
+
+  return ok({
+    attempt: args.snapshot.attempt,
+    workItemIdentities: args.snapshot.workItemIdentities,
+    extractorVersion: args.snapshot.extractorVersion,
+    policy: policyResult.value,
+    candidates,
+    importOrdinalByCandidate: args.snapshot.importOrdinalByCandidate,
+    triageRunId: args.requestedTriageRunId ?? nextId(),
+    kind: resolveOfficialTriageRunKind(args.snapshot.attempt.kind, candidates.length)
   });
 }
 
@@ -379,26 +456,18 @@ function commitFinalize(args: {
   const nextId = () => composition.idGenerator.next();
 
   const loaded = loadReadyAttempt(context, plan.attempt.triageAttemptId);
-  /* v8 ignore next 3 -- planFinalize already loaded this attempt; missing attempts fail in plan. */
   if (!loaded.ok) {
     return loaded;
   }
-  const existingRun = readExistingTriageRun(
+  const stillValid = assertFinalizePlanStillValid(
     context,
-    plan.attempt.snapshotId,
-    plan.attempt.corpusManifestId
+    plan,
+    loaded.value.attempt,
+    loaded.value.workItems
   );
-  /* v8 ignore start -- planFinalize already refuses an existing run; this is the writer-lock race fence. */
-  if (existingRun !== undefined) {
-    return err(
-      createRuntimeError(
-        "command_conflict",
-        `A triage run already exists for this snapshot and manifest (${existingRun.id})`,
-        false
-      )
-    );
+  if (!stillValid.ok) {
+    return stillValid;
   }
-  /* v8 ignore stop */
 
   const resultIds: string[] = [];
   for (const candidate of plan.candidates) {
@@ -552,6 +621,83 @@ function prepareFinalizeAuditEvents(args: {
   }
   events.push(sealed.value);
   return ok(events);
+}
+
+function toWorkItemIdentity(item: AttemptWorkItem): PlannedWorkItemIdentity {
+  return {
+    attemptWorkItemId: item.attemptWorkItemId,
+    version: item.version,
+    state: item.state,
+    candidateId: item.candidateId,
+    candidateDocumentId: item.candidateDocumentId,
+    dimensionId: item.dimensionId,
+    extractionArtifactId: item.extractionArtifactId,
+    extractionFailureId: item.extractionFailureId
+  };
+}
+
+function workItemIdentityFingerprint(items: readonly PlannedWorkItemIdentity[]): string {
+  return items
+    .map((item) =>
+      [
+        item.attemptWorkItemId,
+        String(item.version),
+        item.state,
+        item.candidateId,
+        item.candidateDocumentId,
+        item.dimensionId,
+        item.extractionArtifactId ?? "",
+        item.extractionFailureId ?? ""
+      ].join("\u0000")
+    )
+    .sort()
+    .join("\n");
+}
+
+function corpusMembershipFingerprint(ordinals: ReadonlyMap<string, number>): string {
+  return [...ordinals.entries()]
+    .map(([candidateId, importOrdinal]) => `${candidateId}\u0000${String(importOrdinal)}`)
+    .sort()
+    .join("\n");
+}
+
+function assertFinalizePlanStillValid(
+  context: ImmediateTransactionContext,
+  plan: FinalizePlan,
+  attempt: TriageAttempt,
+  workItems: readonly AttemptWorkItem[]
+): Result<void, RuntimeError> {
+  if (attempt.version !== plan.attempt.version) {
+    return err(
+      createRuntimeError("version_conflict", "Finalize plan is stale: attempt version changed", false)
+    );
+  }
+  if (
+    workItemIdentityFingerprint(workItems.map(toWorkItemIdentity)) !==
+    workItemIdentityFingerprint(plan.workItemIdentities)
+  ) {
+    return err(
+      createRuntimeError(
+        "command_conflict",
+        "Finalize plan is stale: work item identities changed",
+        false
+      )
+    );
+  }
+  const importOrdinalByCandidate = loadImportOrdinals(context, plan.attempt.corpusManifestId);
+  if (
+    corpusMembershipFingerprint(importOrdinalByCandidate) !==
+    corpusMembershipFingerprint(plan.importOrdinalByCandidate)
+  ) {
+    return err(
+      createRuntimeError(
+        "command_conflict",
+        "Finalize plan is stale: corpus membership changed",
+        false
+      )
+    );
+  }
+  return ok(undefined);
 }
 
 function loadReadyAttempt(
