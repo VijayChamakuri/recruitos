@@ -1,7 +1,7 @@
 import {
   consolidateStructuredFacts,
   deriveDimensionAssessments,
-  DRAFT_RUBRIC_V1,
+  RUBRIC_V1,
   foldForMatching,
   HardRequirementPolicySchema,
   normalizeSourceText,
@@ -171,7 +171,7 @@ export function createMatchingTasks(iterations = 2000): BenchmarkTask[] {
     ]
   });
 
-  const sampleDimensionEvidence = DRAFT_RUBRIC_V1.dimensions.map((dim, idx) => {
+  const sampleDimensionEvidence = RUBRIC_V1.dimensions.map((dim, idx) => {
     if (idx === 0) {
       return {
         dimensionId: dim.dimensionId,
@@ -270,7 +270,7 @@ export function createMatchingTasks(iterations = 2000): BenchmarkTask[] {
       name: "Pipeline: Dimension Assessment Derivation",
       iterations,
       fn: () => {
-        deriveDimensionAssessments(sampleDimensionEvidence, DRAFT_RUBRIC_V1);
+        deriveDimensionAssessments(sampleDimensionEvidence, RUBRIC_V1);
       }
     },
     {

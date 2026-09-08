@@ -7,7 +7,7 @@ import {
   canonicalJsonStringify,
   computeAggregateScore,
   computeConfidence,
-  DRAFT_RUBRIC_V1,
+  RUBRIC_V1,
   formatRational,
   ok,
   sha256Hex,
@@ -70,7 +70,7 @@ const temporaryDirectories: string[] = [];
 const CREATED_AT = 1_788_700_000_000;
 const DOCUMENT_TEXT = "ABCDEFGHIJ";
 const TRANSACTION_REQUIRED = "Candidate result rows require an active command transaction";
-const RUBRIC_DIMENSIONS = DRAFT_RUBRIC_V1.dimensions.map((dimension) => dimension.dimensionId);
+const RUBRIC_DIMENSIONS = RUBRIC_V1.dimensions.map((dimension) => dimension.dimensionId);
 
 const CANDIDATE_TRIAGE_RESULT_COLUMNS = `
   candidate_triage_result_id text PRIMARY KEY NOT NULL,
@@ -274,7 +274,7 @@ function zeroConfidenceInput() {
 }
 
 function noneLevelAssessments() {
-  return DRAFT_RUBRIC_V1.dimensions.map((dimension) => ({
+  return RUBRIC_V1.dimensions.map((dimension) => ({
     dimensionId: dimension.dimensionId,
     level: "none" as const
   }));
@@ -291,7 +291,7 @@ function placeholderContributions(dimensionIds: readonly string[]) {
 }
 
 function computedScoreDraft(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  const computation = unwrap(computeAggregateScore(noneLevelAssessments(), DRAFT_RUBRIC_V1));
+  const computation = unwrap(computeAggregateScore(noneLevelAssessments(), RUBRIC_V1));
   const confidenceInput = zeroConfidenceInput();
   const confidence = unwrap(computeConfidence(confidenceInput));
   return {
@@ -507,7 +507,7 @@ function seedTwoTitleFacts(context: ImmediateTransactionContext): void {
 }
 
 function seedRubricChildren(context: ImmediateTransactionContext): void {
-  for (const dimension of DRAFT_RUBRIC_V1.dimensions) {
+  for (const dimension of RUBRIC_V1.dimensions) {
     unwrap(
       insertEvidenceGap(
         context,
@@ -1386,7 +1386,7 @@ describe("candidate result persistence", () => {
           })
         });
         unwrap(insertActor(context, unwrap(prepareActor(actorDraft()))));
-        for (const dimension of DRAFT_RUBRIC_V1.dimensions) {
+        for (const dimension of RUBRIC_V1.dimensions) {
           unwrap(
             insertEvidenceGap(
               context,
@@ -1425,7 +1425,7 @@ describe("candidate result persistence", () => {
             message: "Candidate result requires stored dimension assessments"
           })
         });
-        for (const dimension of DRAFT_RUBRIC_V1.dimensions) {
+        for (const dimension of RUBRIC_V1.dimensions) {
           unwrap(
             insertDimensionAssessment(
               context,

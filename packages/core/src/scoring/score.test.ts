@@ -6,19 +6,19 @@ import {
   rationalFromInteger,
   roundHalfUp
 } from "../canonical/rational.js";
-import { DRAFT_RUBRIC_V1 } from "../rubric/draft-v1.js";
+import { RUBRIC_V1 } from "../rubric/rubric-v1.js";
 import type { DimensionLevel } from "../rubric/levels.js";
 import { computeAggregateScore, type LevelAssessment } from "./score.js";
 
 function assessmentsWith(levels: Partial<Record<string, DimensionLevel>>): LevelAssessment[] {
-  return DRAFT_RUBRIC_V1.dimensions.map((dimension) => ({
+  return RUBRIC_V1.dimensions.map((dimension) => ({
     dimensionId: dimension.dimensionId,
     level: levels[dimension.dimensionId] ?? "none"
   }));
 }
 
 function scoreOrThrow(assessments: readonly LevelAssessment[]) {
-  const result = computeAggregateScore(assessments, DRAFT_RUBRIC_V1);
+  const result = computeAggregateScore(assessments, RUBRIC_V1);
   if (!result.ok) {
     throw new Error(result.error.message);
   }
@@ -35,7 +35,7 @@ describe("computeAggregateScore", () => {
     const allStrong = scoreOrThrow(
       assessmentsWith(
         Object.fromEntries(
-          DRAFT_RUBRIC_V1.dimensions.map((dimension) => [dimension.dimensionId, "strong"])
+          RUBRIC_V1.dimensions.map((dimension) => [dimension.dimensionId, "strong"])
         )
       )
     );
@@ -62,7 +62,7 @@ describe("computeAggregateScore", () => {
   });
 
   it("rejects malformed assessment input", () => {
-    expect(computeAggregateScore("nope", DRAFT_RUBRIC_V1)).toMatchObject({
+    expect(computeAggregateScore("nope", RUBRIC_V1)).toMatchObject({
       ok: false,
       error: { code: "invalid_input" }
     });
@@ -74,7 +74,7 @@ describe("computeAggregateScore", () => {
       ...assessments.slice(0, 5),
       { dimensionId: assessments[0]!.dimensionId, level: "weak" }
     ];
-    expect(computeAggregateScore(duplicated, DRAFT_RUBRIC_V1)).toMatchObject({
+    expect(computeAggregateScore(duplicated, RUBRIC_V1)).toMatchObject({
       ok: false,
       error: { code: "score_invariant_failed" }
     });
@@ -82,7 +82,7 @@ describe("computeAggregateScore", () => {
 
   it("rejects an assessment count that does not cover every dimension", () => {
     const assessments = assessmentsWith({}).slice(0, 5);
-    expect(computeAggregateScore(assessments, DRAFT_RUBRIC_V1)).toMatchObject({
+    expect(computeAggregateScore(assessments, RUBRIC_V1)).toMatchObject({
       ok: false,
       error: { code: "score_invariant_failed" }
     });
@@ -94,7 +94,7 @@ describe("computeAggregateScore", () => {
       ...assessments.slice(0, 5),
       { dimensionId: "extra_dimension", level: "none" }
     ];
-    expect(computeAggregateScore(mismatched, DRAFT_RUBRIC_V1)).toMatchObject({
+    expect(computeAggregateScore(mismatched, RUBRIC_V1)).toMatchObject({
       ok: false,
       error: { code: "score_invariant_failed" }
     });

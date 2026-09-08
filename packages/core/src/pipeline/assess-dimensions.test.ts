@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DRAFT_RUBRIC_V1 } from "../rubric/draft-v1.js";
+import { RUBRIC_V1 } from "../rubric/rubric-v1.js";
 import { createRubric, type Rubric } from "../rubric/rubric.js";
 import type { DimensionLevel } from "../rubric/levels.js";
 import {
@@ -10,7 +10,7 @@ import {
   type DimensionAssessmentDerivation
 } from "./assess-dimensions.js";
 
-const DIMENSION_IDS = DRAFT_RUBRIC_V1.dimensions.map((dimension) => dimension.dimensionId);
+const DIMENSION_IDS = RUBRIC_V1.dimensions.map((dimension) => dimension.dimensionId);
 const FIRST = DIMENSION_IDS[0]!;
 
 type SpanInput = Readonly<{
@@ -59,7 +59,7 @@ function withFirst(first: DimensionInput): readonly DimensionInput[] {
 
 function derived(
   dimensions: readonly DimensionInput[],
-  rubric: Rubric = DRAFT_RUBRIC_V1
+  rubric: Rubric = RUBRIC_V1
 ): DimensionAssessmentDerivation {
   const result = deriveDimensionAssessments(dimensions, rubric);
   if (!result.ok) {
@@ -79,7 +79,7 @@ function firstAssessment(first: DimensionInput): DimensionAssessment {
 
 describe("deriveDimensionAssessments rubric coverage", () => {
   it("rejects input that is not dimension evidence", () => {
-    expect(deriveDimensionAssessments("nope", DRAFT_RUBRIC_V1)).toMatchObject({
+    expect(deriveDimensionAssessments("nope", RUBRIC_V1)).toMatchObject({
       ok: false,
       error: { code: "invalid_input", message: "Invalid dimension evidence" }
     });
@@ -89,7 +89,7 @@ describe("deriveDimensionAssessments rubric coverage", () => {
     expect(
       deriveDimensionAssessments(
         [noEvidence(FIRST), ...DIMENSION_IDS.map(noEvidence)],
-        DRAFT_RUBRIC_V1
+        RUBRIC_V1
       )
     ).toMatchObject({
       ok: false,
@@ -99,7 +99,7 @@ describe("deriveDimensionAssessments rubric coverage", () => {
 
   it("rejects evidence that does not cover the rubric exactly once", () => {
     expect(
-      deriveDimensionAssessments(DIMENSION_IDS.slice(1).map(noEvidence), DRAFT_RUBRIC_V1)
+      deriveDimensionAssessments(DIMENSION_IDS.slice(1).map(noEvidence), RUBRIC_V1)
     ).toMatchObject({
       ok: false,
       error: { message: "Evidence must cover every rubric dimension exactly once" }
@@ -108,7 +108,7 @@ describe("deriveDimensionAssessments rubric coverage", () => {
 
   it("rejects evidence whose dimension ids are not the rubric's", () => {
     const wrong = [...DIMENSION_IDS.slice(1).map(noEvidence), noEvidence("unknown_dimension")];
-    expect(deriveDimensionAssessments(wrong, DRAFT_RUBRIC_V1)).toMatchObject({
+    expect(deriveDimensionAssessments(wrong, RUBRIC_V1)).toMatchObject({
       ok: false,
       error: { message: "Evidence does not match the rubric dimensions" }
     });
@@ -151,7 +151,7 @@ describe("deriveDimensionAssessments proposal validation", () => {
           proposals: [{ kind: "human_level", level: "none" }],
           spans: []
         }),
-        DRAFT_RUBRIC_V1
+        RUBRIC_V1
       )
     ).toMatchObject({
       ok: false,
@@ -166,7 +166,7 @@ describe("deriveDimensionAssessments proposal validation", () => {
     expect(
       deriveDimensionAssessments(
         withFirst({ dimensionId: FIRST, proposals, spans: [] }),
-        DRAFT_RUBRIC_V1
+        RUBRIC_V1
       )
     ).toMatchObject({
       ok: false,
@@ -182,7 +182,7 @@ describe("deriveDimensionAssessments proposal validation", () => {
           proposals: [documentLevel("weak")],
           spans: [span("span_1", "document_elsewhere")]
         }),
-        DRAFT_RUBRIC_V1
+        RUBRIC_V1
       )
     ).toMatchObject({
       ok: false,
@@ -198,7 +198,7 @@ describe("deriveDimensionAssessments proposal validation", () => {
           proposals: [{ kind: "guessed_level", level: "weak" } as unknown as ProposalInput],
           spans: []
         }),
-        DRAFT_RUBRIC_V1
+        RUBRIC_V1
       ).ok
     ).toBe(false);
   });
@@ -316,7 +316,7 @@ describe("deriveDimensionAssessments human writes", () => {
           proposals: [documentLevel("none"), { kind: "human_level", level: "strong" }],
           spans: [span("span_1", "document_resume", "contradicting")]
         }),
-        DRAFT_RUBRIC_V1
+        RUBRIC_V1
       )
     ).toMatchObject({
       ok: false,
