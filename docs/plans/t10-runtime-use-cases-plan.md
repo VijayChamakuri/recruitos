@@ -138,19 +138,24 @@ tier; fuzzy deferred), returning the located `ExtractionAcceptedOutput`, pass-th
 counts. Structured facts (employment intervals, titles, work-authorization statements) are
 candidate-scoped, not dimension-scoped, so they are not in this body; T10.4 handles them.
 
-**T10.2  Extraction scheduler**
-`packages/runtime/src/scheduler/`.
-A single loop that serves one attempt's work items in manifest order. Per item: claim in a
-short transaction (`claimAttemptWorkItem`), then outside the transaction call
-`composition.extraction.extract` with the `extractionSpecHash` and normalized documents,
-then in a second short transaction parse and locate the response
-(`parseExtractionResponseBody`, `locateResponseSpans` from T10.2a), write the
-content-addressed artifact or a typed failure and the `extraction_run` row, and move the
-item to `succeeded`, `reviewable_failure` (non-none level with no located supporting span),
-or `blocked_failure` (fixture miss, malformed body, schema violation). Reuse a completed
-artifact by hash before any adapter call. Fixture miss and schema-validation failure are
-terminal and not retried. Serial for now; fixture concurrency 8, `SIGINT` grace, and live
-retry and backoff are out of scope for T10 and left as documented stubs.
+**T10.2  Extraction scheduler**  (`runExtractionAttempt` in `packages/runtime/src/scheduler/`)
+A single serial loop that serves one attempt's `pending` and `retryable_failure` work items
+in manifest order. Per item: load the spec text and document in one join, build a composite
+request hash over `{ spec content hash, document kind, normalized hash }`, claim in a short
+transaction (`claimAttemptWorkItem`), call `composition.extraction.extract` outside any
+lock, then `parseExtractionResponseBody` and `locateResponseSpans` (T10.2a), and in a short
+transaction write the content-addressed artifact (reused by content hash when identical) or
+a typed `extraction_failure` (reused by content hash), and move the item to `succeeded`,
+`reviewable_failure` (non-none level with no located supporting span), or `blocked_failure`
+(fixture miss, malformed body, dimension mismatch, unusable quote, over-limit spans).
+Already `succeeded` items are counted and skipped. Returns a summary with the span counts
+and the dropped quotes.
+
+`extraction_run` persistence is filed to Cursor (COORDINATION 2026-09-08): the span counts
+and dropped quotes are returned in memory now and a follow-up stores them once the schema
+lands, before T10.5 needs them for the confidence resolution term. Concurrency, `SIGINT`
+grace, claim-expiry reclaim, and live retry and backoff are out of scope for T10 and left
+as documented stubs.
 
 **T10.3  Start triage run use-case**
 `packages/runtime/src/use-cases/start-triage-run.ts`.
