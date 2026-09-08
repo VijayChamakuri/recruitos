@@ -9,12 +9,18 @@ function resume(overrides: Partial<ResumeFactDocument> = {}): ResumeFactDocument
     normalizedText: [
       "Summary line",
       "",
-      "EXPERIENCE",
+      "EXPERIENCE (STRUCTURED)",
       "Senior Machine Learning Engineer | TechCorp | 2021-03 | present",
       "Machine Learning Engineer | DataCo | 2019-06 | 2021-02"
     ].join("\n"),
     ...overrides
   };
+}
+
+function block(...roleLines: string[]): ResumeFactDocument {
+  return resume({
+    normalizedText: ["EXPERIENCE (STRUCTURED)", ...roleLines].join("\n")
+  });
 }
 
 describe("parseResumeFacts", () => {
@@ -31,12 +37,17 @@ describe("parseResumeFacts", () => {
     for (const proposal of proposals) {
       expect(proposal.provenance).toBe("parsed");
       expect(proposal.documentId).toBe("cdoc_1");
-      expect(proposal.groundingQuotes).toBeUndefined();
       expect(proposal.evidenceSpanIds).toBeUndefined();
+      expect(proposal.groundingQuotes).toHaveLength(1);
+      expect(proposal.groundingQuotes![0]!.polarity).toBe("supporting");
     }
+    // The grounding quote for each employment role is the verbatim role line.
+    expect(proposals[0]!.groundingQuotes![0]!.quotedText).toBe(
+      "Senior Machine Learning Engineer | TechCorp | 2021-03 | present"
+    );
   });
 
-  it("takes the current title from the most recent role, keyed by present then start month", () => {
+  it("takes the current title from the most recent still-present role", () => {
     const [, , , , currentTitle] = parseResumeFacts([resume()]);
     expect(currentTitle?.payload).toEqual({
       kind: "current_title",
@@ -46,27 +57,23 @@ describe("parseResumeFacts", () => {
 
   it("picks the latest start month when no role is still present", () => {
     const proposals = parseResumeFacts([
-      resume({
-        normalizedText: [
-          "EXPERIENCE",
-          "Engineer | EarlyCo | 2018-01 | 2021-12",
-          "Staff Engineer | LateCo | 2022-01 | 2023-06"
-        ].join("\n")
-      })
+      block(
+        "Engineer | EarlyCo | 2018-01 | 2021-12",
+        "Staff Engineer | LateCo | 2022-01 | 2023-06"
+      )
     ]);
-    const currentTitle = proposals.at(-1);
-    expect(currentTitle?.payload).toMatchObject({ kind: "current_title", title: "Staff Engineer" });
+    expect(proposals.at(-1)?.payload).toMatchObject({
+      kind: "current_title",
+      title: "Staff Engineer"
+    });
   });
 
   it("prefers a later role that is still present over an earlier closed one", () => {
     const proposals = parseResumeFacts([
-      resume({
-        normalizedText: [
-          "EXPERIENCE",
-          "Engineer | EarlyCo | 2018-01 | 2019-01",
-          "Staff Engineer | NowCo | 2022-01 | present"
-        ].join("\n")
-      })
+      block(
+        "Engineer | EarlyCo | 2018-01 | 2019-01",
+        "Staff Engineer | NowCo | 2022-01 | present"
+      )
     ]);
     expect(proposals.at(-1)?.payload).toMatchObject({
       kind: "current_title",
@@ -75,11 +82,7 @@ describe("parseResumeFacts", () => {
   });
 
   it("parses a closed interval into an iso year-month end", () => {
-    const proposals = parseResumeFacts([
-      resume({
-        normalizedText: ["EXPERIENCE", "Engineer | OnlyCo | 2020-01 | 2021-02"].join("\n")
-      })
-    ]);
+    const proposals = parseResumeFacts([block("Engineer | OnlyCo | 2020-01 | 2021-02")]);
     expect(proposals[0]?.payload).toEqual({
       kind: "employment_interval",
       employer: "OnlyCo",
@@ -93,20 +96,33 @@ describe("parseResumeFacts", () => {
     expect(parseResumeFacts([resume({ documentKind: "cover_letter" })])).toEqual([]);
   });
 
-  it("contributes nothing when there is no EXPERIENCE block", () => {
+  it("contributes nothing when the sentinel is present but the block is empty", () => {
     expect(
-      parseResumeFacts([resume({ normalizedText: "Summary only\nNo experience header here" })])
+      parseResumeFacts([resume({ normalizedText: "EXPERIENCE (STRUCTURED)\n\nOther section" })])
     ).toEqual([]);
   });
 
-  it("stops at the first blank line after the header", () => {
+  it("contributes nothing without the structured sentinel", () => {
+    expect(
+      parseResumeFacts([
+        resume({
+          normalizedText: [
+            "EXPERIENCE",
+            "Engineer | OnlyCo | 2020-01 | present"
+          ].join("\n")
+        })
+      ])
+    ).toEqual([]);
+  });
+
+  it("ends the block at the first blank line", () => {
     const proposals = parseResumeFacts([
       resume({
         normalizedText: [
-          "EXPERIENCE",
+          "EXPERIENCE (STRUCTURED)",
           "Engineer | OnlyCo | 2020-01 | present",
           "",
-          "Engineer | AfterBlankCo | 2010-01 | 2011-01"
+          "Older roles omitted for brevity"
         ].join("\n")
       })
     ]);
@@ -116,34 +132,19 @@ describe("parseResumeFacts", () => {
     expect(employers).toEqual(["OnlyCo"]);
   });
 
-  it("stops at the first line it cannot parse", () => {
+  it("contributes nothing when any line in the block is malformed", () => {
     const cases = [
-      "Engineer | OnlyCo | 2020-01 | present | extra field",
-      " | OnlyCo | 2020-01 | present",
-      "Engineer |  | 2020-01 | present",
-      "Engineer | OnlyCo | not-a-month | present",
-      "Engineer | OnlyCo | 2020-01 | not-a-month",
-      "Engineer | OnlyCo | 2021-06 | 2020-01"
+      ["Engineer | OnlyCo | 2020-01 | present | extra field"],
+      [" | OnlyCo | 2020-01 | present"],
+      ["Engineer |  | 2020-01 | present"],
+      ["Engineer | OnlyCo | not-a-month | present"],
+      ["Engineer | OnlyCo | 2020-01 | not-a-month"],
+      ["Engineer | OnlyCo | 2021-06 | 2020-01"],
+      // one good role then unsupported older history on the very next line
+      ["Engineer | GoodCo | 2022-01 | present", "Senior Dev, OldCo, 2015 to 2018"]
     ];
-    for (const bad of cases) {
-      const proposals = parseResumeFacts([
-        resume({ normalizedText: ["EXPERIENCE", bad].join("\n") })
-      ]);
-      expect(proposals).toEqual([]);
+    for (const roleLines of cases) {
+      expect(parseResumeFacts([block(...roleLines)])).toEqual([]);
     }
-  });
-
-  it("keeps roles authored before an unparsable line", () => {
-    const proposals = parseResumeFacts([
-      resume({
-        normalizedText: [
-          "EXPERIENCE",
-          "Engineer | GoodCo | 2020-01 | present",
-          "garbage line"
-        ].join("\n")
-      })
-    ]);
-    expect(proposals).toHaveLength(3);
-    expect(proposals[0]?.payload).toMatchObject({ employer: "GoodCo" });
   });
 });

@@ -179,20 +179,33 @@ describe("consolidateStructuredFacts input validation", () => {
     });
   });
 
-  it("accepts a parsed employment fact that carries no document id or spans", () => {
+  it("accepts a parsed employment fact that cites a document but no spans", () => {
     const result = consolidated([
-      { provenance: "parsed", payload: TITLE_STAFF, evidenceSpanIds: [] }
+      {
+        provenance: "parsed",
+        documentId: "document_resume",
+        payload: TITLE_STAFF,
+        evidenceSpanIds: []
+      }
     ]);
     expect(result.facts).toHaveLength(1);
     expect(result.facts[0]).toMatchObject({
       payload: TITLE_STAFF,
       provenance: ["parsed"],
-      documentIds: [],
+      documentIds: ["document_resume"],
       evidenceSpanIds: []
     });
   });
 
-  it("still accepts a parsed employment fact that is document grounded", () => {
+  it("rejects a parsed employment fact that cites no source document", () => {
+    expect(
+      consolidateStructuredFacts([
+        { provenance: "parsed", payload: TITLE_STAFF, evidenceSpanIds: [] }
+      ]).ok
+    ).toBe(false);
+  });
+
+  it("still accepts a parsed employment fact that is span grounded", () => {
     const result = consolidated([
       proposal(ACME_2020, { provenance: "parsed", documentId: "document_resume" })
     ]);

@@ -123,8 +123,16 @@ describe("demo corpus", () => {
       expect(outcome.sealed).toBe(true);
       expect(["scored", "escalated", "rejected_hard_requirement"]).toContain(outcome.status);
       expect(["complete", "unavailable"]).toContain(outcome.availability);
-      expect(outcome.hasScore).toBe(outcome.availability === "complete");
-      expect(outcome.hasConfidence).toBe(outcome.availability === "complete");
+      const complete = outcome.availability === "complete";
+      expect(outcome.scoreText === null).toBe(!complete);
+      expect(outcome.confidenceText === null).toBe(!complete);
+      expect(outcome.spansReturned === null).toBe(!complete);
+      expect(outcome.spansLocated === null).toBe(!complete);
+      if (complete) {
+        expect(outcome.scoreText).toMatch(/^\d+\/\d+$/);
+        expect(outcome.confidenceText).toMatch(/^\d+\/\d+$/);
+        expect(outcome.spansLocated!).toBeLessThanOrEqual(outcome.spansReturned!);
+      }
     }
   });
 
@@ -134,8 +142,14 @@ describe("demo corpus", () => {
     expect(
       DEMO_EXPECTED_OUTCOMES.some((outcome) => outcome.availability === "unavailable")
     ).toBe(true);
+    // The quote-grounding route is the one with a returned-but-unlocated span.
     expect(
-      DEMO_EXPECTED_OUTCOMES.some((outcome) => outcome.resolutionShortfall === true)
+      DEMO_EXPECTED_OUTCOMES.some(
+        (outcome) =>
+          outcome.spansReturned !== null &&
+          outcome.spansLocated !== null &&
+          outcome.spansReturned > outcome.spansLocated
+      )
     ).toBe(true);
   });
 });

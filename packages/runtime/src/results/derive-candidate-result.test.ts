@@ -387,6 +387,56 @@ describe("deriveCandidateTriageInputs", () => {
     ]);
   });
 
+  it("confirms a parsed grounding quote without pinning an evidence span", () => {
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      rawFactProposals: [
+        {
+          documentId: "cdoc_1",
+          provenance: "parsed" as const,
+          payload: { kind: "current_title" as const, title: "Senior Machine Learning Engineer" },
+          groundingQuotes: [
+            { quotedText: "TechCorp (2023-01 to Present)", polarity: "supporting" as const }
+          ]
+        }
+      ],
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.structuredFactProposals).toHaveLength(1);
+    expect(result.value.structuredFactProposals[0]?.evidenceSpanIds).toEqual([]);
+    expect(result.value.locatedSpans).toHaveLength(0);
+    expect(result.value.droppedQuotes).toHaveLength(0);
+  });
+
+  it("drops a parsed proposal whose only grounding quote is absent from the document", () => {
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      rawFactProposals: [
+        {
+          documentId: "cdoc_1",
+          provenance: "parsed" as const,
+          payload: { kind: "current_title" as const, title: "CTO" },
+          groundingQuotes: [
+            { quotedText: "not present anywhere in this resume", polarity: "supporting" as const }
+          ]
+        }
+      ],
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.structuredFactProposals).toHaveLength(0);
+    expect(result.value.droppedQuotes).toHaveLength(1);
+  });
+
   it("emits a parsed raw fact proposal that carries no grounding quotes or spans", () => {
     const result = deriveCandidateTriageInputs({
       candidateId: "cand_1",

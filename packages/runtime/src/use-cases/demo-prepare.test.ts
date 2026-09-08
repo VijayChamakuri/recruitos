@@ -98,21 +98,18 @@ describe("demoPrepare", () => {
       expect(packet.isSealed, expected.sourceKey).toBe(expected.sealed);
       expect([...packet.reasons], expected.sourceKey).toEqual([...expected.reasonCodes]);
 
-      if (expected.hasScore) {
-        expect(packet.scoreAggregateText, expected.sourceKey).toMatch(/^\d+\/\d+$/);
+      expect(packet.scoreAggregateText, expected.sourceKey).toBe(expected.scoreText);
+      expect(packet.scoreConfidenceText, expected.sourceKey).toBe(expected.confidenceText);
+
+      if (expected.spansReturned === null) {
+        expect(packet.confidenceInput, expected.sourceKey).toBeNull();
       } else {
-        expect(packet.scoreAggregateText, expected.sourceKey).toBeNull();
-      }
-      if (expected.hasConfidence) {
-        expect(packet.scoreConfidenceText, expected.sourceKey).toMatch(/^\d+\/\d+$/);
-      } else {
-        expect(packet.scoreConfidenceText, expected.sourceKey).toBeNull();
-      }
-      if (expected.resolutionShortfall === true) {
-        expect(
-          packet.confidenceInput!.spansReturned,
-          expected.sourceKey
-        ).toBeGreaterThan(packet.confidenceInput!.spansLocated);
+        expect(packet.confidenceInput!.spansReturned, expected.sourceKey).toBe(
+          expected.spansReturned
+        );
+        expect(packet.confidenceInput!.spansLocated, expected.sourceKey).toBe(
+          expected.spansLocated
+        );
       }
     }
 

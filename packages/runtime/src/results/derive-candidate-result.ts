@@ -274,6 +274,39 @@ export function deriveCandidateTriageInputs(
         }
       }
 
+      // Parsed proposals come from a deterministic producer that reads one
+      // document. Confirm each grounding quote is present in that document, but
+      // do not pin a span: the producer plus the cited document is the
+      // grounding. A proposal whose only grounding was quotes, none locatable,
+      // is dropped like an unlocatable model claim.
+      if (rawProposal.provenance === "parsed") {
+        let locatedQuoteCount = 0;
+        for (const quote of rawProposal.groundingQuotes ?? []) {
+          if (relocateQuote(doc.normalizedText, quote.quotedText).ok) {
+            locatedQuoteCount += 1;
+          } else {
+            droppedQuotes.push(
+              Object.freeze({
+                quotedText: quote.quotedText,
+                dimensionId: input.rubric.dimensions[0]!.dimensionId,
+                reason: "unlocated"
+              })
+            );
+          }
+        }
+        const quoteCount = rawProposal.groundingQuotes?.length ?? 0;
+        if (quoteCount > 0 && locatedQuoteCount === 0 && evidenceSpanIds.length === 0) {
+          continue;
+        }
+        structuredFactProposals.push({
+          documentId: CandidateDocumentIdSchema.parse(rawProposal.documentId),
+          provenance: "parsed",
+          payload: rawProposal.payload,
+          evidenceSpanIds
+        });
+        continue;
+      }
+
       if (Array.isArray(rawProposal.groundingQuotes)) {
         for (const quote of rawProposal.groundingQuotes) {
           quoteOrdinal += 1;
@@ -309,11 +342,8 @@ export function deriveCandidateTriageInputs(
         }
       }
 
-      // Model and human proposals are only emitted once at least one quote
-      // located. Parsed proposals come from a deterministic producer and are
-      // grounded by it, so they are emitted with whatever spans located,
-      // including none.
-      if (evidenceSpanIds.length > 0 || rawProposal.provenance === "parsed") {
+      // Only emit grounded proposals (must have at least one located span)
+      if (evidenceSpanIds.length > 0) {
         structuredFactProposals.push({
           documentId: CandidateDocumentIdSchema.parse(rawProposal.documentId),
           provenance: rawProposal.provenance,

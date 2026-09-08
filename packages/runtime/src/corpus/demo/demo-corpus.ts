@@ -112,9 +112,20 @@ type ExpectedOutcome = Readonly<{
   availability: "complete" | "unavailable";
   reasonCodes: readonly string[];
   sealed: true;
-  hasScore: boolean;
-  hasConfidence: boolean;
-  resolutionShortfall?: boolean;
+  /**
+   * The exact sealed score and confidence fractions, or `null` when the
+   * assessment is unavailable. These are reviewed fixture values: a change to
+   * scoring, confidence, or the corpus should update them deliberately.
+   */
+  scoreText: string | null;
+  confidenceText: string | null;
+  /**
+   * Exact extractor span totals behind the confidence resolution term, or
+   * `null` when the assessment is unavailable. `spansReturned > spansLocated`
+   * is the quote-grounding shortfall.
+   */
+  spansReturned: number | null;
+  spansLocated: number | null;
 }>;
 
 type DemoCandidate = Readonly<{
@@ -150,8 +161,10 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       availability: "complete",
       reasonCodes: [],
       sealed: true,
-      hasScore: true,
-      hasConfidence: true
+      scoreText: "467/6",
+      confidenceText: "7/10",
+      spansReturned: 6,
+      spansLocated: 6
     }
   },
   {
@@ -168,8 +181,10 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       // separate reason code for it (route-result keeps reasons empty here).
       reasonCodes: [],
       sealed: true,
-      hasScore: true,
-      hasConfidence: true
+      scoreText: "467/6",
+      confidenceText: "7/10",
+      spansReturned: 6,
+      spansLocated: 6
     }
   },
   {
@@ -186,8 +201,10 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       availability: "complete",
       reasonCodes: ["missing_evidence:work_authorization"],
       sealed: true,
-      hasScore: true,
-      hasConfidence: true
+      scoreText: "467/6",
+      confidenceText: "27/40",
+      spansReturned: 6,
+      spansLocated: 6
     }
   },
   {
@@ -206,8 +223,10 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       availability: "unavailable",
       reasonCodes: ["assessment_unavailable"],
       sealed: true,
-      hasScore: false,
-      hasConfidence: false
+      scoreText: null,
+      confidenceText: null,
+      spansReturned: null,
+      spansLocated: null
     }
   },
   {
@@ -227,8 +246,10 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
         ...MISSING_TENURE
       ],
       sealed: true,
-      hasScore: true,
-      hasConfidence: true
+      scoreText: "317/6",
+      confidenceText: "61/120",
+      spansReturned: 6,
+      spansLocated: 5
     }
   },
   {
@@ -243,8 +264,10 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       availability: "complete",
       reasonCodes: [...MISSING_TENURE],
       sealed: true,
-      hasScore: true,
-      hasConfidence: true
+      scoreText: "467/6",
+      confidenceText: "5/8",
+      spansReturned: 6,
+      spansLocated: 6
     }
   },
   {
@@ -263,9 +286,11 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       availability: "complete",
       reasonCodes: [],
       sealed: true,
-      hasScore: true,
-      hasConfidence: true,
-      resolutionShortfall: true
+      scoreText: "467/6",
+      confidenceText: "93/140",
+      // The deliberately dropped quote: one extractor span returned, not located.
+      spansReturned: 7,
+      spansLocated: 6
     }
   }
 ];
@@ -282,7 +307,7 @@ function resumeText(candidate: DemoCandidate): string {
     )
   ];
   if (candidate.experienceBlock.length > 0) {
-    lines.push("", "EXPERIENCE", ...candidate.experienceBlock);
+    lines.push("", "EXPERIENCE (STRUCTURED)", ...candidate.experienceBlock);
   }
   return lines.join("\n");
 }

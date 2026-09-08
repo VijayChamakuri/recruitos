@@ -120,8 +120,8 @@ function refineStructuredFactEvidenceSpans(
     return;
   }
   if (isFullyParsed(value)) {
-    // Parsed facts are grounded by a deterministic producer, so document
-    // spans are optional corroboration rather than a requirement.
+    // Parsed facts are grounded by a deterministic producer that reads the
+    // cited document, so a pinned evidence span is optional corroboration.
     return;
   }
   if (value.evidenceSpans.length < 1) {
