@@ -14,9 +14,10 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 0998681 |
-| Migration lock held by | none. Follow-up: role store must persist the full locked rubric (integer version, provenance, anchors) before `draft-v1.ts` can be deleted. Needs a migration. |
-| Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `DRAFT_RUBRIC_V1` shim in `packages/core/src/rubric/draft-v1.ts` remains; one consumer left (`roles.test.ts`). |
+| origin/main | 09c3b9e |
+| Migration lock held by | Cursor, for one PR: role store persists the full locked rubric (integer version, provenance, level anchors), then `draft-v1.ts` is deleted and an architecture rule forbids `DRAFT_RUBRIC_V1`. Greenlit 2026-09-07. Blocks T10.5. |
+| Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `DRAFT_RUBRIC_V1` shim in `packages/core/src/rubric/draft-v1.ts` remains; one consumer left (`roles.test.ts`), removed by Cursor's migration PR. |
+| T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import, scheduler, start-run, extraction bridge plus OQ-7 policy, finalize, correction. |
 
 ## Lanes and file locks
 
@@ -40,9 +41,9 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | (idle-complete) | Migration chain done through step 7 plus rubric v1 lock (#47). Nothing queued. | idle |
-| Claude Code | b/migrate-draft-rubric-consumers | Migrated the 8 structure-only `DRAFT_RUBRIC_V1` consumers to `RUBRIC_V1` (PR #49). Shim isolated to `roles.test.ts`. | ready PR |
-| Antigravity | (pending) | Wired eval span-matching and bench suites to real core matching and pipeline modules (PR #44 merged). Ready for next task. | idle |
+| Cursor | (holds migration lock) | One PR: role store persists the full locked rubric (integer version, provenance, level anchors), reconstructs it in `readCoreRubric` as `toEqual(RUBRIC_V1)`, updates `roles.test.ts` and the `rubricVersion: "draft-v1"` literals in `attempts`/`runs`/`snapshots` tests, deletes `packages/core/src/rubric/draft-v1.ts` and its `rubric/index.ts` export, points `roles.test.ts` at `RUBRIC_V1`, and adds an architecture rule forbidding any `draft-v1` / `DRAFT_RUBRIC_V1` import. Spec: `docs/plans/t10-runtime-use-cases-plan.md` "Dependency on Cursor". | starting |
+| Claude Code | b/t10-plan then b/t10-import-candidates | T10 runtime use-cases per `docs/plans/t10-runtime-use-cases-plan.md`. Plan PR first, then T10.1 (candidate import). | building |
+| Antigravity | c/e2e-playwright-harness | Replace the hand-rolled `tests/e2e/harness.ts` with real `@playwright/test`: `playwright.config.ts` (Chromium, one worker, zero retries), a per-test fixture giving each test a unique temp dir, SQLite db, and port with a production Next server start and teardown and no reset endpoint, and a single Next build before the suite. Flesh out the six spec bodies as real assertions and interactions behind `test.fixme` until T10 and the UI land. Publish the `data-testid` and route contract the packet, resolution, proposal, and Trust Center pages must satisfy as `apps/web/src/testids.ts`, and align existing web presenter components to emit those testids. Do not touch `packages/runtime/**`. Do not wire `make demo` end to end yet; it needs T10. | assigned |
 
 ## Hard rules
 
@@ -118,3 +119,7 @@ your own rows plus the log.
 - 2026-09-07 Cursor: `a/rubric-v1-lock` ready on a9179da (PR #47). RUBRIC_V1_HASH `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. pnpm check 1214 plus 24 integration exit 0, test:coverage 1060 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Frozen structure untouched. Pipeline owner note for OQ-7 is in the PR body.
 - 2026-09-07 Claude: PR #47 (rubric v1 lock) and PR #46 (demo session and demographics persistence) merged to main at 0998681. Cursor's migration lane is complete. Two follow-ups from the #47 review: (1) migrate `DRAFT_RUBRIC_V1` consumers to `RUBRIC_V1` and delete `draft-v1.ts`, mine; (2) OQ-7 hard-requirement predicates in `packages/core/src/pipeline/hard-requirements.ts`, pipeline owner.
 - 2026-09-07 Claude: PR #49 on b/migrate-draft-rubric-consumers. Migrated the 8 `DRAFT_RUBRIC_V1` import sites that read only dimension id, weight, and required (core scoring/routing/assess-dimensions tests, bench matching suite, four runtime store tests) to the locked `RUBRIC_V1`. Pure rename plus import-path fix on the three core files. `draft-v1.ts` stays: its one remaining consumer is `roles.test.ts`, which needs the role store to round-trip the full locked rubric first, which needs a migration. That plus an architecture rule against `draft-v1` imports is the remaining follow-up. test:types, check:architecture, and pnpm test (1214) green.
+- 2026-09-07 Vijay: PR #49 merged at 09c3b9e. PR #48 (Cursor coordination housekeeping) closed as redundant. Directed the T10 kickoff and the three-agent reassignment below.
+- 2026-09-07 Claude: wrote `docs/plans/t10-runtime-use-cases-plan.md` (PR on b/t10-plan). T10 is six `b/` PRs: T10.1 candidate import, T10.2 extraction scheduler, T10.3 start triage run, T10.4 extraction-to-pipeline bridge plus the OQ-7 hard-requirement policy (`packages/runtime/src/policy/hard-requirements-v1.ts`), T10.5 finalize run (needs Cursor's migration merged first), T10.6 correction and re-extraction. No schema changes in any T10 PR. Starting T10.1 after the plan PR.
+- 2026-09-07 Claude: greenlit Cursor for the role-store full-rubric persistence migration. Migration lock moves to Cursor for that one PR. It removes the `DRAFT_RUBRIC_V1` shim and adds the architecture rule. Blocks T10.5 only.
+- 2026-09-07 Claude: assigned Antigravity `c/e2e-playwright-harness`: real `@playwright/test` harness and per-test isolation fixture replacing `tests/e2e/harness.ts`, the six spec bodies written out behind `test.fixme`, and a `data-testid` and route contract at `apps/web/src/testids.ts`. Blocked from `packages/runtime/**` and from wiring `make demo` end to end (needs T10).
