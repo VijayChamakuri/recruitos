@@ -24,12 +24,16 @@ import {
 } from "../entities/index.js";
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
 import {
+  insertExtractionRun,
+  prepareExtractionRun,
+  readExtractionRun
+} from "../extraction/index.js";
+import {
   DroppedQuoteSchema,
   insertDimensionAssessment,
   insertDimensionAssessmentEvidenceSpan,
   insertEvidenceGap,
   insertEvidenceSpan,
-  insertExtractionRun,
   MAXIMUM_DROP_REASON_LENGTH,
   MAXIMUM_EXTRACTOR_VERSION_LENGTH,
   MAXIMUM_MODEL_ID_LENGTH,
@@ -38,12 +42,10 @@ import {
   prepareDimensionAssessmentEvidenceSpan,
   prepareEvidenceGap,
   prepareEvidenceSpan,
-  prepareExtractionRun,
   readDimensionAssessment,
   readDimensionAssessmentEvidenceSpan,
   readDimensionAssessmentSpanRefs,
   readEvidenceGap,
-  readExtractionRun,
   readEvidenceSpan
 } from "./index.js";
 
@@ -55,6 +57,8 @@ const SURROGATE_DOCUMENT_TEXT = "A\uD83D\uDE00B";
 const FIXTURE_KEY = sha256Hex("extraction-fixture-key");
 const TRANSACTION_REQUIRED =
   "Evidence and extraction rows require an active command transaction";
+const EXTRACTION_TRANSACTION_REQUIRED =
+  "Extraction spec rows require an active command transaction";
 
 async function openMigratedDatabase(): Promise<RuntimeDatabaseConnection> {
   const directory = await mkdtemp(join(tmpdir(), "recruitos-evidence-test-"));
@@ -612,8 +616,10 @@ describe("evidence and extraction persistence", () => {
   it("refuses every read and write outside an active transaction", async () => {
     const connection = await openMigratedDatabase();
     const contexts = [undefined, null, {}, { nativeDatabase: null }];
+    const extractionWrites = [
+      [insertExtractionRun, unwrap(prepareExtractionRun(extractionRunDraft()))]
+    ] as const;
     const writes = [
-      [insertExtractionRun, unwrap(prepareExtractionRun(extractionRunDraft()))],
       [insertEvidenceSpan, unwrap(prepareEvidenceSpan(evidenceSpanDraft()))],
       [insertEvidenceGap, unwrap(prepareEvidenceGap(evidenceGapDraft()))],
       [insertDimensionAssessment, unwrap(prepareDimensionAssessment(dimensionAssessmentDraft()))],
@@ -622,8 +628,8 @@ describe("evidence and extraction persistence", () => {
         unwrap(prepareDimensionAssessmentEvidenceSpan(associationDraft()))
       ]
     ] as const;
+    const extractionReads = [[readExtractionRun, "extraction-run-1"]] as const;
     const reads = [
-      [readExtractionRun, "extraction-run-1"],
       [readEvidenceSpan, "evidence-span-1"],
       [readEvidenceGap, "evidence-gap-1"],
       [readDimensionAssessment, "dimension-assessment-1"],
@@ -632,10 +638,22 @@ describe("evidence and extraction persistence", () => {
     ] as const;
 
     for (const context of contexts) {
+      for (const [insert, prepared] of extractionWrites) {
+        expect(insert(context, prepared)).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: EXTRACTION_TRANSACTION_REQUIRED })
+        });
+      }
       for (const [insert, prepared] of writes) {
         expect(insert(context, prepared)).toEqual({
           ok: false,
           error: expect.objectContaining({ message: TRANSACTION_REQUIRED })
+        });
+      }
+      for (const [read, id] of extractionReads) {
+        expect(read(context, id)).toEqual({
+          ok: false,
+          error: expect.objectContaining({ message: EXTRACTION_TRANSACTION_REQUIRED })
         });
       }
       for (const [read, id] of reads) {

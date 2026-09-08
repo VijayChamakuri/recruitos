@@ -3,7 +3,6 @@ import {
   DimensionAssessmentIdSchema,
   EvidenceGapIdSchema,
   EvidenceSpanIdSchema,
-  ExtractionRunIdSchema,
   canonicalJsonStringify,
   err,
   formatReasonCode,
@@ -27,16 +26,12 @@ import {
   EvidenceGapSchema,
   EvidenceSpanDraftSchema,
   EvidenceSpanSchema,
-  ExtractionRunDraftSchema,
-  ExtractionRunSchema,
   type DimensionAssessment,
   type DimensionAssessmentEvidenceSpan,
   type EvidenceGap,
-  type EvidenceSpan,
-  type ExtractionRun
+  type EvidenceSpan
 } from "./schemas.js";
 
-const preparedExtractionRuns = new WeakSet<object>();
 const preparedEvidenceSpans = new WeakSet<object>();
 const preparedEvidenceGaps = new WeakSet<object>();
 const preparedDimensionAssessments = new WeakSet<object>();
@@ -134,55 +129,6 @@ function documentIsStored(
       .prepare("SELECT 1 AS present FROM source_document WHERE source_document_id = ?")
       .get(documentId) !== undefined
   );
-}
-
-/**
- * Validates the extraction counters, hashes the dropped quotes, and freezes the
- * record before any writer lock is taken. Dropped quotes account for exactly
- * the spans the extractor returned but could not locate, which is the property
- * that makes the confidence resolution term reproducible from stored rows.
- */
-export function prepareExtractionRun(
-  draftInput: unknown
-): Result<ExtractionRun, RuntimeError> {
-  try {
-    const draft = ExtractionRunDraftSchema.safeParse(draftInput);
-    if (!draft.success) {
-      return err(persistenceFailure("Invalid extraction run input"));
-    }
-    if (draft.data.spansLocated > draft.data.spansReturned) {
-      return err(
-        persistenceFailure("Extraction run located spans cannot exceed returned spans")
-      );
-    }
-    if (
-      draft.data.droppedQuotes.length !==
-      draft.data.spansReturned - draft.data.spansLocated
-    ) {
-      return err(
-        persistenceFailure(
-          "Extraction run dropped quotes must account for every unlocated span"
-        )
-      );
-    }
-
-    const canonical = canonicalWithHash(
-      draft.data.droppedQuotes,
-      "Extraction run dropped quotes are not canonical JSON"
-    );
-    if (!canonical.ok) {
-      return canonical;
-    }
-
-    const run = ExtractionRunSchema.parse({
-      ...draft.data,
-      droppedQuotesJson: canonical.value.json,
-      droppedQuotesHash: canonical.value.hash
-    });
-    return ok(register(preparedExtractionRuns, run));
-  } catch {
-    return err(persistenceFailure("Extraction run preparation failed"));
-  }
 }
 
 /**
@@ -289,55 +235,6 @@ export function prepareDimensionAssessmentEvidenceSpan(
     return err(
       persistenceFailure("Dimension assessment evidence span preparation failed")
     );
-  }
-}
-
-export function insertExtractionRun(
-  contextInput: unknown,
-  preparedInput: unknown
-): Result<ExtractionRun, RuntimeError> {
-  try {
-    const context = validateContext(contextInput);
-    if (!context.ok) {
-      return context;
-    }
-    const prepared = requirePrepared<ExtractionRun>(
-      preparedExtractionRuns,
-      preparedInput,
-      "Invalid prepared extraction run"
-    );
-    if (!prepared.ok) {
-      return prepared;
-    }
-    const run = prepared.value;
-
-    context.value.nativeDatabase
-      .prepare(
-        `INSERT INTO extraction_run (
-          extraction_run_id,
-          spans_returned,
-          spans_located,
-          dropped_quotes_json,
-          dropped_quotes_hash,
-          model_id,
-          fixture_key,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        run.extractionRunId,
-        run.spansReturned,
-        run.spansLocated,
-        run.droppedQuotesJson,
-        run.droppedQuotesHash,
-        run.modelId,
-        run.fixtureKey,
-        run.createdAt
-      );
-
-    return ok(run);
-  } catch {
-    return err(persistenceFailure("Extraction run insert failed"));
   }
 }
 
@@ -609,63 +506,6 @@ export function insertDimensionAssessmentEvidenceSpan(
     return ok(association);
   } catch {
     return err(persistenceFailure("Dimension assessment evidence span insert failed"));
-  }
-}
-
-export function readExtractionRun(
-  contextInput: unknown,
-  extractionRunIdInput: unknown
-): Result<ExtractionRun | undefined, RuntimeError> {
-  try {
-    const context = validateContext(contextInput);
-    if (!context.ok) {
-      return context;
-    }
-    const extractionRunId = ExtractionRunIdSchema.safeParse(extractionRunIdInput);
-    if (!extractionRunId.success) {
-      return err(persistenceFailure("Invalid extraction run ID"));
-    }
-    const row = context.value.nativeDatabase
-      .prepare(
-        `SELECT
-          extraction_run_id AS extractionRunId,
-          spans_returned AS spansReturned,
-          spans_located AS spansLocated,
-          dropped_quotes_json AS droppedQuotesJson,
-          dropped_quotes_hash AS droppedQuotesHash,
-          model_id AS modelId,
-          fixture_key AS fixtureKey,
-          created_at AS createdAt
-        FROM extraction_run
-        WHERE extraction_run_id = ?`
-      )
-      .get(extractionRunId.data) as
-      | Readonly<{ droppedQuotesJson: string; droppedQuotesHash: string }>
-      | undefined;
-    if (row === undefined) {
-      return ok(undefined);
-    }
-
-    const decoded = decodeCanonicalJson(
-      row.droppedQuotesJson,
-      row.droppedQuotesHash,
-      "Stored extraction run dropped quotes are not valid JSON",
-      "Stored extraction run failed integrity validation"
-    );
-    if (!decoded.ok) {
-      return decoded;
-    }
-
-    const run = ExtractionRunSchema.safeParse({
-      ...row,
-      droppedQuotes: decoded.value
-    });
-    if (!run.success) {
-      return err(persistenceFailure("Stored extraction run is invalid"));
-    }
-    return ok(Object.freeze(run.data));
-  } catch {
-    return err(persistenceFailure("Extraction run read failed"));
   }
 }
 
