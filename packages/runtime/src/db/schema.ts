@@ -388,12 +388,19 @@ export const rubrics = sqliteTable(
     roleId: text("role_id")
       .notNull()
       .references(() => roles.roleId, { onDelete: "restrict" }),
-    version: text("version").notNull(),
+    version: integer("version").notNull(),
+    provenanceAuthorship: text("provenance_authorship", {
+      enum: ["product-authored", "recruiter-validated"]
+    }).notNull(),
     createdAt: integer("created_at").notNull()
   },
   (table) => [
     uniqueIndex("rubric_role_version_unique").on(table.roleId, table.version),
-    check("rubric_version", sql`length(${table.version}) BETWEEN 1 AND 64`),
+    check("rubric_version", sql`${table.version} > 0`),
+    check(
+      "rubric_provenance_authorship",
+      sql`${table.provenanceAuthorship} IN ('product-authored', 'recruiter-validated')`
+    ),
     check("rubric_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
@@ -410,6 +417,10 @@ export const rubricDimensions = sqliteTable(
     required: integer("required").notNull(),
     definition: text("definition").notNull(),
     jobRelatedJustification: text("job_related_justification").notNull(),
+    levelAnchorNone: text("level_anchor_none").notNull(),
+    levelAnchorWeak: text("level_anchor_weak").notNull(),
+    levelAnchorPartial: text("level_anchor_partial").notNull(),
+    levelAnchorStrong: text("level_anchor_strong").notNull(),
     ordinal: integer("ordinal").notNull(),
     createdAt: integer("created_at").notNull()
   },
@@ -432,8 +443,54 @@ export const rubricDimensions = sqliteTable(
       "rubric_dimension_job_related_justification",
       sql`length(${table.jobRelatedJustification}) BETWEEN 1 AND 2000`
     ),
+    check(
+      "rubric_dimension_level_anchor_none",
+      sql`length(${table.levelAnchorNone}) BETWEEN 1 AND 2000`
+    ),
+    check(
+      "rubric_dimension_level_anchor_weak",
+      sql`length(${table.levelAnchorWeak}) BETWEEN 1 AND 2000`
+    ),
+    check(
+      "rubric_dimension_level_anchor_partial",
+      sql`length(${table.levelAnchorPartial}) BETWEEN 1 AND 2000`
+    ),
+    check(
+      "rubric_dimension_level_anchor_strong",
+      sql`length(${table.levelAnchorStrong}) BETWEEN 1 AND 2000`
+    ),
     check("rubric_dimension_ordinal", sql`${table.ordinal} >= 0`),
     check("rubric_dimension_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const rubricProvenanceAssumptions = sqliteTable(
+  "rubric_provenance_assumption",
+  {
+    rubricProvenanceAssumptionId: text("rubric_provenance_assumption_id").primaryKey(),
+    rubricId: text("rubric_id")
+      .notNull()
+      .references(() => rubrics.rubricId, { onDelete: "restrict" }),
+    workflowAssumptionId: text("workflow_assumption_id").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("rubric_provenance_assumption_rubric_ordinal_unique").on(
+      table.rubricId,
+      table.ordinal
+    ),
+    uniqueIndex("rubric_provenance_assumption_rubric_assumption_unique").on(
+      table.rubricId,
+      table.workflowAssumptionId
+    ),
+    check(
+      "rubric_provenance_assumption_workflow_assumption_id",
+      sql`length(${table.workflowAssumptionId}) = 5
+        AND ${table.workflowAssumptionId} GLOB 'WA-[0-9][0-9]'`
+    ),
+    check("rubric_provenance_assumption_ordinal", sql`${table.ordinal} >= 0`),
+    check("rubric_provenance_assumption_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
 
@@ -2090,6 +2147,57 @@ export const candidateDemographics = sqliteTable(
       )`
     ),
     check("candidate_demographics_created_at", sql`${table.createdAt} >= 0`)
+  ]
+);
+
+export const candidateApplicationAnswers = sqliteTable(
+  "candidate_application_answer",
+  {
+    candidateApplicationAnswerId: text("candidate_application_answer_id").primaryKey(),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.candidateId, { onDelete: "restrict" }),
+    questionKey: text("question_key").notNull(),
+    selectedOptionKey: text("selected_option_key").notNull(),
+    freeText: text("free_text"),
+    collectedBy: text("collected_by").notNull(),
+    formId: text("form_id").notNull(),
+    questionId: text("question_id").notNull(),
+    collectedAt: integer("collected_at").notNull(),
+    createdAt: integer("created_at").notNull()
+  },
+  (table) => [
+    uniqueIndex("candidate_application_answer_candidate_question_unique").on(
+      table.candidateId,
+      table.questionKey
+    ),
+    index("candidate_application_answer_candidate").on(table.candidateId),
+    check(
+      "candidate_application_answer_question_key",
+      sql`length(${table.questionKey}) BETWEEN 1 AND 200`
+    ),
+    check(
+      "candidate_application_answer_selected_option_key",
+      sql`length(${table.selectedOptionKey}) BETWEEN 1 AND 200`
+    ),
+    check(
+      "candidate_application_answer_free_text",
+      sql`${table.freeText} IS NULL OR length(${table.freeText}) BETWEEN 1 AND 2000`
+    ),
+    check(
+      "candidate_application_answer_collected_by",
+      sql`length(${table.collectedBy}) BETWEEN 1 AND 200`
+    ),
+    check(
+      "candidate_application_answer_form_id",
+      sql`length(${table.formId}) BETWEEN 1 AND 128`
+    ),
+    check(
+      "candidate_application_answer_question_id",
+      sql`length(${table.questionId}) BETWEEN 1 AND 128`
+    ),
+    check("candidate_application_answer_collected_at", sql`${table.collectedAt} >= 0`),
+    check("candidate_application_answer_created_at", sql`${table.createdAt} >= 0`)
   ]
 );
 

@@ -200,7 +200,7 @@ function snapshotContent() {
   return {
     frozenDate: "2026-09-07",
     roleId: "role-applied-ai-engineer",
-    rubricVersion: "draft-v1",
+    rubricVersion: "1",
     dimensions: [dimension(0), dimension(1)],
     scoringPolicy: {
       levelValues: { ...SCORING_POLICY_V1.levelValues },

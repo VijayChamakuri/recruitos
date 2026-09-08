@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { checkCoreArchitecture } from "./check-architecture.mjs";
+import { checkCoreArchitecture, checkRetiredDraftRubricImports } from "./check-architecture.mjs";
 
 const fixtureRoot = resolve(import.meta.dirname, "architecture-fixtures");
 
@@ -121,6 +121,42 @@ describe("core architecture boundary", () => {
       expect(checkCoreArchitecture({ sourceRoot: directory, displayRoot: directory })).toEqual(
         expect.arrayContaining([expect.stringContaining("symbolic links are not allowed")])
       );
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("retired draft rubric imports", () => {
+  it("rejects a source file that imports the retired draft rubric", () => {
+    const directory = mkdtempSync(join(tmpdir(), "recruitos-draft-rubric-"));
+    try {
+      const retiredExport = ["DRAFT", "RUBRIC", "V1"].join("_");
+      const retiredModule = ["./draft", "v1"].join("-") + ".js";
+      writeFileSync(
+        join(directory, "source.ts"),
+        `import { ${retiredExport} } from "${retiredModule}";\n`
+      );
+
+      expect(
+        checkRetiredDraftRubricImports({ sourceRoot: directory, displayRoot: directory })
+      ).toEqual(expect.arrayContaining([expect.stringContaining("retired draft rubric import")]));
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("allows source that only mentions the retired names in comments", () => {
+    const directory = mkdtempSync(join(tmpdir(), "recruitos-draft-rubric-ok-"));
+    try {
+      writeFileSync(
+        join(directory, "source.ts"),
+        "export const version = 1;\n"
+      );
+
+      expect(
+        checkRetiredDraftRubricImports({ sourceRoot: directory, displayRoot: directory })
+      ).toEqual([]);
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }

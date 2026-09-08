@@ -1,10 +1,15 @@
 import {
+  LevelAnchorsSchema,
   NonnegativeIntegerSchema,
+  PositiveIntegerSchema,
   PositiveWeightSchema,
   RequirementIdSchema,
   RoleIdSchema,
+  RubricAuthorshipSchema,
   RubricDimensionIdSchema,
-  RubricIdSchema
+  RubricIdSchema,
+  RubricProvenanceAssumptionIdSchema,
+  WorkflowAssumptionIdSchema
 } from "@recruitos/core";
 import { z } from "zod";
 
@@ -14,7 +19,6 @@ import { z } from "zod";
  */
 export const MAXIMUM_ROLE_TITLE_LENGTH = 200;
 export const MAXIMUM_REQUIREMENT_DESCRIPTION_LENGTH = 2000;
-export const MAXIMUM_RUBRIC_VERSION_LENGTH = 64;
 export const MAXIMUM_RUBRIC_PROSE_LENGTH = 2000;
 
 export const RequirementKindSchema = z.enum(["hard", "scored"]);
@@ -26,7 +30,6 @@ const requirementDescription = z
   .trim()
   .min(1)
   .max(MAXIMUM_REQUIREMENT_DESCRIPTION_LENGTH);
-const rubricVersion = z.string().trim().min(1).max(MAXIMUM_RUBRIC_VERSION_LENGTH);
 const rubricProse = z.string().trim().min(1).max(MAXIMUM_RUBRIC_PROSE_LENGTH);
 
 const roleShape = {
@@ -58,7 +61,8 @@ export type Requirement = z.infer<typeof RequirementSchema>;
 const rubricShape = {
   rubricId: RubricIdSchema,
   roleId: RoleIdSchema,
-  version: rubricVersion,
+  version: PositiveIntegerSchema,
+  provenanceAuthorship: RubricAuthorshipSchema,
   createdAt: NonnegativeIntegerSchema
 };
 
@@ -76,6 +80,7 @@ const storedRubricDimensionShape = {
   required: z.boolean(),
   definition: rubricProse,
   jobRelatedJustification: rubricProse,
+  levelAnchors: LevelAnchorsSchema,
   ordinal: NonnegativeIntegerSchema,
   createdAt: NonnegativeIntegerSchema
 };
@@ -84,10 +89,38 @@ export const RubricDimensionDraftSchema = z
   .object({
     ...storedRubricDimensionShape,
     definition: z.string().min(1),
-    jobRelatedJustification: z.string().min(1)
+    jobRelatedJustification: z.string().min(1),
+    levelAnchors: z.object({
+      none: z.string().min(1),
+      weak: z.string().min(1),
+      partial: z.string().min(1),
+      strong: z.string().min(1)
+    })
   })
   .strict();
 export type RubricDimensionDraft = z.infer<typeof RubricDimensionDraftSchema>;
 
 export const StoredRubricDimensionSchema = z.object(storedRubricDimensionShape).strict();
 export type StoredRubricDimension = z.infer<typeof StoredRubricDimensionSchema>;
+
+const storedRubricProvenanceAssumptionShape = {
+  rubricProvenanceAssumptionId: RubricProvenanceAssumptionIdSchema,
+  rubricId: RubricIdSchema,
+  workflowAssumptionId: WorkflowAssumptionIdSchema,
+  ordinal: NonnegativeIntegerSchema,
+  createdAt: NonnegativeIntegerSchema
+};
+
+export const RubricProvenanceAssumptionDraftSchema = z
+  .object(storedRubricProvenanceAssumptionShape)
+  .strict();
+export type RubricProvenanceAssumptionDraft = z.infer<
+  typeof RubricProvenanceAssumptionDraftSchema
+>;
+
+export const StoredRubricProvenanceAssumptionSchema = z
+  .object(storedRubricProvenanceAssumptionShape)
+  .strict();
+export type StoredRubricProvenanceAssumption = z.infer<
+  typeof StoredRubricProvenanceAssumptionSchema
+>;

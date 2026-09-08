@@ -5,6 +5,7 @@ import {
   actors,
   attemptWorkItems,
   auditEvents,
+  candidateApplicationAnswers,
   candidateDemographics,
   candidateDocuments,
   candidateHeads,
@@ -50,6 +51,7 @@ import {
   reviewDecisions,
   roles,
   rubricDimensions,
+  rubricProvenanceAssumptions,
   rubrics,
   runInputSnapshots,
   scoreResults,
@@ -212,6 +214,7 @@ describe("runtime Drizzle schema", () => {
     const rubricConfig = getTableConfig(rubrics);
     expect(rubricConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
       "rubric_created_at",
+      "rubric_provenance_authorship",
       "rubric_version"
     ]);
     expect(rubricConfig.indexes.map((index) => index.config.name)).toEqual([
@@ -224,6 +227,10 @@ describe("runtime Drizzle schema", () => {
       "rubric_dimension_created_at",
       "rubric_dimension_definition",
       "rubric_dimension_job_related_justification",
+      "rubric_dimension_level_anchor_none",
+      "rubric_dimension_level_anchor_partial",
+      "rubric_dimension_level_anchor_strong",
+      "rubric_dimension_level_anchor_weak",
       "rubric_dimension_ordinal",
       "rubric_dimension_required",
       "rubric_dimension_weight"
@@ -233,6 +240,19 @@ describe("runtime Drizzle schema", () => {
       "rubric_dimension_rubric_ordinal_unique"
     ]);
     expect(dimensionConfig.foreignKeys).toHaveLength(1);
+
+    const assumptionConfig = getTableConfig(rubricProvenanceAssumptions);
+    expect(assumptionConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "rubric_provenance_assumption_created_at",
+      "rubric_provenance_assumption_ordinal",
+      "rubric_provenance_assumption_workflow_assumption_id"
+    ]);
+    expect(assumptionConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "rubric_provenance_assumption_rubric_assumption_unique",
+      "rubric_provenance_assumption_rubric_ordinal_unique"
+    ]);
+    expect(assumptionConfig.foreignKeys).toHaveLength(1);
+    expect(assumptionConfig.foreignKeys[0]!.onDelete).toBe("restrict");
   });
 
   it("exposes the immutable evidence and extraction constraints", () => {
@@ -846,7 +866,25 @@ describe("runtime Drizzle schema", () => {
     }
   });
 
-  it("exposes candidate demographics and demo session constraints", () => {
+  it("exposes candidate application answer, demographics, and demo session constraints", () => {
+    const answerConfig = getTableConfig(candidateApplicationAnswers);
+    expect(answerConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "candidate_application_answer_collected_at",
+      "candidate_application_answer_collected_by",
+      "candidate_application_answer_created_at",
+      "candidate_application_answer_form_id",
+      "candidate_application_answer_free_text",
+      "candidate_application_answer_question_id",
+      "candidate_application_answer_question_key",
+      "candidate_application_answer_selected_option_key"
+    ]);
+    expect(answerConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "candidate_application_answer_candidate",
+      "candidate_application_answer_candidate_question_unique"
+    ]);
+    expect(answerConfig.foreignKeys).toHaveLength(1);
+    expect(answerConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+
     const demographicsConfig = getTableConfig(candidateDemographics);
     expect(demographicsConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
       "candidate_demographics_created_at",

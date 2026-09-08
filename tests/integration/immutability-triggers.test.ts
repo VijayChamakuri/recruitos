@@ -153,7 +153,7 @@ describe("role and rubric immutability triggers", () => {
 
     expect(() =>
       database
-        .prepare("UPDATE rubric SET version = 'other' WHERE rubric_id = ?")
+        .prepare("UPDATE rubric SET version = 2 WHERE rubric_id = ?")
         .run("rubric-sample")
     ).toThrow(/rubric is immutable/u);
     expect(() =>
@@ -163,10 +163,10 @@ describe("role and rubric immutability triggers", () => {
       database
         .prepare(
           `INSERT OR REPLACE INTO rubric (
-            rubric_id, role_id, version, created_at
-          ) VALUES (?, ?, ?, ?)`
+            rubric_id, role_id, version, provenance_authorship, created_at
+          ) VALUES (?, ?, ?, ?, ?)`
         )
-        .run("rubric-sample", "role-applied-ai-engineer", "other", 1)
+        .run("rubric-sample", "role-applied-ai-engineer", 2, "product-authored", 1)
     ).toThrow(/rubric is immutable/u);
 
     expect(() =>
@@ -184,11 +184,42 @@ describe("role and rubric immutability triggers", () => {
         .prepare(
           `INSERT OR REPLACE INTO rubric_dimension (
             rubric_dimension_id, rubric_id, dimension_id, weight, required,
-            definition, job_related_justification, ordinal, created_at
-          ) VALUES (?, ?, ?, 1, 0, 'd', 'j', 0, 1)`
+            definition, job_related_justification,
+            level_anchor_none, level_anchor_weak, level_anchor_partial, level_anchor_strong,
+            ordinal, created_at
+          ) VALUES (?, ?, ?, 1, 0, 'd', 'j', 'n', 'w', 'p', 's', 0, 1)`
         )
         .run("rubric-dimension-sample", "rubric-sample", "sample_dimension")
     ).toThrow(/rubric_dimension is immutable/u);
+
+    expect(() =>
+      database
+        .prepare(
+          "UPDATE rubric_provenance_assumption SET ordinal = 9 WHERE rubric_provenance_assumption_id = ?"
+        )
+        .run("rubric-provenance-assumption-sample")
+    ).toThrow(/rubric_provenance_assumption is immutable/u);
+    expect(() =>
+      database
+        .prepare(
+          "DELETE FROM rubric_provenance_assumption WHERE rubric_provenance_assumption_id = ?"
+        )
+        .run("rubric-provenance-assumption-sample")
+    ).toThrow(/rubric_provenance_assumption is immutable/u);
+    expect(() =>
+      database
+        .prepare(
+          `INSERT OR REPLACE INTO rubric_provenance_assumption (
+            rubric_provenance_assumption_id, rubric_id, workflow_assumption_id,
+            ordinal, created_at
+          ) VALUES (?, ?, ?, 0, 1)`
+        )
+        .run(
+          "rubric-provenance-assumption-sample",
+          "rubric-sample",
+          "WA-05"
+        )
+    ).toThrow(/rubric_provenance_assumption is immutable/u);
 
     expect(connection.close().ok).toBe(true);
   });

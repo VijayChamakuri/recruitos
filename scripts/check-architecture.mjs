@@ -493,8 +493,94 @@ export function checkCoreArchitecture({
   return violations;
 }
 
+const retiredDraftRubricExport = ["DRAFT", "RUBRIC", "V1"].join("_");
+const retiredDraftRubricModule = ["draft", "v1"].join("-");
+const retiredDraftRubricFileName = `${retiredDraftRubricModule}.ts`;
+const skippedScanDirectoryNames = new Set([
+  ".git",
+  "architecture-fixtures",
+  "coverage",
+  "dist",
+  "node_modules"
+]);
+const retiredDraftRubricSourceExtension = /\.(?:cjs|cts|js|mjs|mts|ts|tsx)$/u;
+
+function sourceContainsRetiredDraftRubricImport(source) {
+  if (source.includes(retiredDraftRubricExport)) {
+    return true;
+  }
+  const modulePattern = new RegExp(
+    String.raw`(?:from|import\s*\(|require\s*\()\s*['"][^'"]*${retiredDraftRubricModule}(?:\.js)?['"]`,
+    "u"
+  );
+  const exportStarPattern = new RegExp(
+    String.raw`export\s+\*\s+from\s*['"][^'"]*${retiredDraftRubricModule}(?:\.js)?['"]`,
+    "u"
+  );
+  return modulePattern.test(source) || exportStarPattern.test(source);
+}
+
+function walkRetiredDraftRubricFiles(directory, displayRoot) {
+  const files = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isSymbolicLink() || lstatSync(path).isSymbolicLink()) {
+      continue;
+    }
+    if (entry.isDirectory()) {
+      if (skippedScanDirectoryNames.has(entry.name)) {
+        continue;
+      }
+      files.push(...walkRetiredDraftRubricFiles(path, displayRoot));
+      continue;
+    }
+    if (entry.isFile() && retiredDraftRubricSourceExtension.test(entry.name)) {
+      files.push(path);
+    }
+  }
+  return files;
+}
+
+export function checkRetiredDraftRubricImports({
+  sourceRoot = repositoryRoot,
+  displayRoot = repositoryRoot
+} = {}) {
+  const resolvedSourceRoot = resolve(sourceRoot);
+  const resolvedDisplayRoot = resolve(displayRoot);
+  const violations = [];
+  const scanRoots = ["packages", "tests", "apps", "bench", "scripts"].map((directory) =>
+    resolve(resolvedSourceRoot, directory)
+  );
+  const roots = scanRoots.filter((root) => {
+    try {
+      return lstatSync(root).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+  const files =
+    roots.length === 0
+      ? walkRetiredDraftRubricFiles(resolvedSourceRoot, resolvedDisplayRoot)
+      : roots.flatMap((root) =>
+          walkRetiredDraftRubricFiles(root, resolvedDisplayRoot)
+        );
+
+  for (const file of files) {
+    const relativeFile = displayPath(file, resolvedDisplayRoot);
+    if (file.endsWith(sep + retiredDraftRubricFileName) || file.endsWith(`/${retiredDraftRubricFileName}`)) {
+      violations.push(`${relativeFile}: retired draft rubric module is not allowed`);
+      continue;
+    }
+    const source = readFileSync(file, "utf8");
+    if (sourceContainsRetiredDraftRubricImport(source)) {
+      violations.push(`${relativeFile}: retired draft rubric import`);
+    }
+  }
+  return violations;
+}
+
 function run() {
-  const violations = checkCoreArchitecture();
+  const violations = [...checkCoreArchitecture(), ...checkRetiredDraftRubricImports()];
   if (violations.length > 0) {
     console.error(violations.join("\n"));
     process.exitCode = 1;

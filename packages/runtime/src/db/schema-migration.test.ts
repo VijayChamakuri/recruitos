@@ -9,6 +9,7 @@ import {
   actors,
   attemptWorkItems,
   auditEvents,
+  candidateApplicationAnswers,
   candidateDemographics,
   candidateDocuments,
   candidateHeads,
@@ -54,6 +55,7 @@ import {
   reviewDecisions,
   roles,
   rubricDimensions,
+  rubricProvenanceAssumptions,
   rubrics,
   runInputSnapshots,
   runtimeMigrationSmoke,
@@ -348,6 +350,7 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["requirement", requirements],
   ["rubric", rubrics],
   ["rubric_dimension", rubricDimensions],
+  ["rubric_provenance_assumption", rubricProvenanceAssumptions],
   ["extraction_run", extractionRuns],
   ["evidence_span", evidenceSpans],
   ["evidence_gap", evidenceGaps],
@@ -387,6 +390,7 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["triage_run_seal", triageRunSeals],
   ["triage_attempt", triageAttempts],
   ["attempt_work_item", attemptWorkItems],
+  ["candidate_application_answer", candidateApplicationAnswers],
   ["candidate_demographics", candidateDemographics],
   ["demo_session", demoSessions]
 ];
@@ -497,5 +501,49 @@ describe("Drizzle schema matches the committed migrations", () => {
     expect(sql).toContain("variant_run");
     expect(sql).toContain("attempt_work_item");
     expect(sql).toContain("reviewable_failure");
+  });
+
+  it("restores every trigger 0019 drops for the locked-rubric rebuild", () => {
+    const sql = readFileSync(
+      join(migrationsFolder, "0019_locked_rubric_persistence.sql"),
+      "utf8"
+    );
+    const dropped = [...sql.matchAll(/DROP TRIGGER IF EXISTS `([^`]+)`/gu)].map(
+      (match) => match[1]!
+    );
+    expect(dropped).toEqual([
+      "rubric_reject_replace",
+      "rubric_reject_update",
+      "rubric_reject_delete",
+      "rubric_dimension_reject_replace",
+      "rubric_dimension_reject_update",
+      "rubric_dimension_reject_delete"
+    ]);
+    const created = [...sql.matchAll(/CREATE TRIGGER `([^`]+)`/gu)].map((match) => match[1]!);
+    expect(created).toEqual(expect.arrayContaining(dropped));
+    expect(created).toEqual(
+      expect.arrayContaining([
+        "rubric_provenance_assumption_reject_replace",
+        "rubric_provenance_assumption_reject_update",
+        "rubric_provenance_assumption_reject_delete"
+      ])
+    );
+    const sql0005 = readFileSync(
+      join(migrationsFolder, "0005_role_rubric_foundation.sql"),
+      "utf8"
+    );
+    const from0005 = [...sql0005.matchAll(/CREATE TRIGGER `([^`]+)`/gu)].map(
+      (match) => match[1]!
+    );
+    for (const name of from0005) {
+      if (
+        name.startsWith("rubric_reject_") ||
+        name.startsWith("rubric_dimension_reject_")
+      ) {
+        expect(dropped).toContain(name);
+        continue;
+      }
+      expect(dropped).not.toContain(name);
+    }
   });
 });

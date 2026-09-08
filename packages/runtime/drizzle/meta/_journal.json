@@ -134,6 +134,20 @@
       "when": 1788820425670,
       "tag": "0018_demo_session_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1788822000000,
+      "tag": "0019_locked_rubric_persistence",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1788823000000,
+      "tag": "0020_candidate_application_answer_foundation",
+      "breakpoints": true
     }
   ]
 }

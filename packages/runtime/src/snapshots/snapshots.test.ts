@@ -102,7 +102,7 @@ function snapshotContent(overrides: Record<string, unknown> = {}) {
   return {
     frozenDate: "2026-09-07",
     roleId: "role-applied-ai-engineer",
-    rubricVersion: "draft-v1",
+    rubricVersion: "1",
     dimensions: [dimension(0), dimension(1)],
     scoringPolicy: {
       levelValues: { ...SCORING_POLICY_V1.levelValues },
@@ -190,7 +190,7 @@ describe("run input snapshot preparation", () => {
         extractorVersion: "extractor-v1",
         scoringPolicy: snapshotContent().scoringPolicy,
         dimensions: [dimension(1), dimension(0)],
-        rubricVersion: "draft-v1",
+        rubricVersion: "1",
         roleId: "role-applied-ai-engineer",
         frozenDate: "2026-09-07"
       })
@@ -417,7 +417,7 @@ describe("run input snapshot database constraints", () => {
           "[]",
           sha256Hex("[]"),
           "2026-09-07",
-          "draft-v1",
+          "1",
           "role-applied-ai-engineer",
           "extractor-v1",
           "prompt-v1",
@@ -438,7 +438,7 @@ describe("run input snapshot database constraints", () => {
           snapshot.contentJson,
           sha256Hex("other-hash-body"),
           "2026-9-7",
-          "draft-v1",
+          "1",
           "role-applied-ai-engineer",
           "extractor-v1",
           "prompt-v1",

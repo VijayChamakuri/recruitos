@@ -21,6 +21,12 @@ export type AuditEventId = z.infer<typeof AuditEventIdSchema>;
 export const CandidateIdSchema = printableAsciiId.brand<"CandidateId">();
 export type CandidateId = z.infer<typeof CandidateIdSchema>;
 
+export const CandidateApplicationAnswerIdSchema =
+  printableAsciiId.brand<"CandidateApplicationAnswerId">();
+export type CandidateApplicationAnswerId = z.infer<
+  typeof CandidateApplicationAnswerIdSchema
+>;
+
 export const CandidateDemographicsIdSchema =
   printableAsciiId.brand<"CandidateDemographicsId">();
 export type CandidateDemographicsId = z.infer<typeof CandidateDemographicsIdSchema>;
@@ -164,6 +170,12 @@ export type RubricDimensionId = z.infer<typeof RubricDimensionIdSchema>;
 
 export const RubricIdSchema = printableAsciiId.brand<"RubricId">();
 export type RubricId = z.infer<typeof RubricIdSchema>;
+
+export const RubricProvenanceAssumptionIdSchema =
+  printableAsciiId.brand<"RubricProvenanceAssumptionId">();
+export type RubricProvenanceAssumptionId = z.infer<
+  typeof RubricProvenanceAssumptionIdSchema
+>;
 
 export const ScoreResultIdSchema = printableAsciiId.brand<"ScoreResultId">();
 export type ScoreResultId = z.infer<typeof ScoreResultIdSchema>;
