@@ -6,8 +6,10 @@ import {
   createCompositionFromRuntime,
   createDefaultRuntimeComposition,
   createIncrementingIdGenerator,
+  createProcessUniqueIdGenerator,
   createRuntime,
   fixedClock,
+  RuntimeRecruitosComposition,
   type RuntimeComposition
 } from "./index.js";
 
@@ -73,6 +75,33 @@ describe("Runtime Composition Wiring in Apps", () => {
 
     const closeResult = runtime.close();
     expect(closeResult.ok).toBe(true);
+  });
+
+  it("namespaces file-backed ids so a second CLI process does not reuse command ids", async () => {
+    const filename = await databaseFilename();
+    const first = createDefaultRuntimeComposition({ database: { filename } });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.value).toBeInstanceOf(RuntimeRecruitosComposition);
+    const firstId = (first.value as RuntimeRecruitosComposition).runtime.idGenerator.next();
+    expect((first.value as RuntimeRecruitosComposition).runtime.close().ok).toBe(true);
+
+    const second = createDefaultRuntimeComposition({ database: { filename } });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    const secondId = (second.value as RuntimeRecruitosComposition).runtime.idGenerator.next();
+    expect(firstId).not.toBe(secondId);
+    expect((second.value as RuntimeRecruitosComposition).runtime.close().ok).toBe(true);
+  });
+
+  it("yields distinct process-scoped ids within one generator", () => {
+    const generator = createProcessUniqueIdGenerator("runtime");
+    const first = generator.next();
+    const second = generator.next();
+    expect(first).toMatch(/^runtime-[0-9a-f]{16}-0000000001$/u);
+    expect(second).toMatch(/^runtime-[0-9a-f]{16}-0000000002$/u);
+    expect(first.slice(0, 25)).toBe(second.slice(0, 25));
+    expect(first).not.toBe(second);
   });
 
   it("does not surface stub records through an explicitly configured runtime", async () => {

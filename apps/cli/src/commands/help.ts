@@ -111,7 +111,16 @@ export function formatHelp(targetCommand?: string): string {
         "",
         "Writes a system-only reextraction_completed action and a superseding",
         "correction result. The original packet stays inspectable. The task moves",
-        "to review_required, never resolved. Actor is always system:runtime."
+        "to review_required, never resolved. Actor is always system:runtime.",
+        "",
+        "Fixture-only sequence after demo:prepare --db <path>:",
+        "  packet <candidate> --db <path>",
+        "  review --candidate <candidate> --db <path>",
+        "  review --task <task> --action request_re_extraction --version-num 0 --candidate-version 1 --actor human:operator --db <path>",
+        "  triage:extract --attempt <attempt> --demo-fixtures --correction-overlay --db <path>",
+        "  triage:complete-correction --attempt <attempt> --version-num 1 --candidate-version 1 --db <path>",
+        "  packet <candidate> --db <path>",
+        "  packet <candidate> --result <original-result> --db <path>"
       ].join("\n");
 
     case "status":

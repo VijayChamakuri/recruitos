@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import {
   createRuntime,
   demoCompositionOptions,
   type CreateRuntimeOptions,
+  type IdGenerator,
   type RuntimeComposition
 } from "@recruitos/runtime/composition";
 
@@ -736,6 +738,22 @@ function createTempDbFilename(): string {
   return join(dir, "runtime.db");
 }
 
+/**
+ * File-backed CLI commands each start a new process. The default incrementing
+ * generator would reuse `runtime-0000000001` as a command id and trip
+ * command_identity_mismatch on the next write. Namespace each process.
+ */
+export function createProcessUniqueIdGenerator(prefix: string): IdGenerator {
+  const namespace = randomBytes(8).toString("hex");
+  let counter = 0;
+  return Object.freeze({
+    next: (): string => {
+      counter += 1;
+      return `${prefix}-${namespace}-${counter.toString().padStart(10, "0")}`;
+    }
+  });
+}
+
 export function createDefaultRuntimeComposition(
   options?: Partial<CreateRuntimeOptions>
 ): Result<RecruitosComposition, RuntimeError> {
@@ -750,11 +768,15 @@ export function createDefaultRuntimeComposition(
       : {})
   };
 
+  const idGenerator =
+    options?.idGenerator ??
+    (isMemory ? undefined : createProcessUniqueIdGenerator("runtime"));
+
   const runtimeResult = createRuntime({
     database,
     migrate: options?.migrate ?? true,
     ...(options?.clock ? { clock: options.clock } : {}),
-    ...(options?.idGenerator ? { idGenerator: options.idGenerator } : {}),
+    ...(idGenerator === undefined ? {} : { idGenerator }),
     ...(options?.extraction ? { extraction: options.extraction } : {}),
     ...(options?.candidateSource ? { candidateSource: options.candidateSource } : {})
   });
