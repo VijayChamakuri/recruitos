@@ -549,35 +549,40 @@ describe("readCandidatePacket Read Model", () => {
       }
 
       nativeDb.exec("DROP TRIGGER IF EXISTS score_result_reject_update");
-      nativeDb.prepare(
-        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6]}' WHERE score_result_id = 'score-valid'"
-      ).run();
-      const missingInput = readCandidatePacket(connection.database, "cand-1");
-      expect(missingInput.ok && missingInput.value.confidenceInput).toBeNull();
+      const validScoreJson =
+        '{"contributions":[1,2,3,4,5,6],"confidenceInput":{"contradictionCount":0,"dimensionsWithLocatedSpan":6,"requiredFieldsMissing":2,"spansLocated":6,"spansReturned":6,"totalDimensions":6,"totalRequiredFields":4}}';
+
+      function expectConfidenceIntegrityFailure(contentJson: string): void {
+        nativeDb.prepare(
+          "UPDATE score_result SET content_json = ? WHERE score_result_id = 'score-valid'"
+        ).run(contentJson);
+        const packet = readCandidatePacket(connection.database, "cand-1");
+        expect(packet.ok).toBe(false);
+        if (packet.ok) return;
+        expect(packet.error.code).toBe("persistence_failed");
+        expect(packet.error.message).toBe("Stored score confidence input failed integrity validation");
+      }
+
+      expectConfidenceIntegrityFailure('{"contributions":[1,2,3,4,5,6]}');
+      expectConfidenceIntegrityFailure('{"contributions":[1,2,3,4,5,6],"confidenceInput":null}');
+      expectConfidenceIntegrityFailure('{"contributions":[1,2,3,4,5,6],"confidenceInput":[]}');
+      expectConfidenceIntegrityFailure('{"contributions":[1,2,3,4,5,6],"confidenceInput":5}');
+      expectConfidenceIntegrityFailure(
+        '{"contributions":[1,2,3,4,5,6],"confidenceInput":{"contradictionCount":0}}'
+      );
+      expectConfidenceIntegrityFailure(
+        '{"contributions":[1,2,3,4,5,6],"confidenceInput":{"contradictionCount":-1,"dimensionsWithLocatedSpan":6,"requiredFieldsMissing":2,"spansLocated":6,"spansReturned":6,"totalDimensions":6,"totalRequiredFields":4}}'
+      );
+      expectConfidenceIntegrityFailure(
+        '{"contributions":[1,2,3,4,5,6],"confidenceInput":{"contradictionCount":0,"dimensionsWithLocatedSpan":6,"requiredFieldsMissing":2,"spansLocated":1.5,"spansReturned":6,"totalDimensions":6,"totalRequiredFields":4}}'
+      );
+      expectConfidenceIntegrityFailure(
+        '{"contributions":[1,2,3,4,5,6],"confidenceInput":{"contradictionCount":0,"dimensionsWithLocatedSpan":6,"requiredFieldsMissing":2,"spansLocated":7,"spansReturned":6,"totalDimensions":6,"totalRequiredFields":4}}'
+      );
 
       nativeDb.prepare(
-        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6],\"confidenceInput\":null}' WHERE score_result_id = 'score-valid'"
-      ).run();
-      const nullInput = readCandidatePacket(connection.database, "cand-1");
-      expect(nullInput.ok && nullInput.value.confidenceInput).toBeNull();
-
-      nativeDb.prepare(
-        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6],\"confidenceInput\":[]}' WHERE score_result_id = 'score-valid'"
-      ).run();
-      const arrayInput = readCandidatePacket(connection.database, "cand-1");
-      expect(arrayInput.ok && arrayInput.value.confidenceInput).toBeNull();
-
-      nativeDb.prepare(
-        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6],\"confidenceInput\":5}' WHERE score_result_id = 'score-valid'"
-      ).run();
-      const numberInput = readCandidatePacket(connection.database, "cand-1");
-      expect(numberInput.ok && numberInput.value.confidenceInput).toBeNull();
-
-      nativeDb.prepare(
-        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6],\"confidenceInput\":{\"contradictionCount\":0}}' WHERE score_result_id = 'score-valid'"
-      ).run();
-      const partialInput = readCandidatePacket(connection.database, "cand-1");
-      expect(partialInput.ok && partialInput.value.confidenceInput).toBeNull();
+        "UPDATE score_result SET content_json = ? WHERE score_result_id = 'score-valid'"
+      ).run(validScoreJson);
 
       nativeDb.prepare(`
         INSERT INTO candidate_result_reason (

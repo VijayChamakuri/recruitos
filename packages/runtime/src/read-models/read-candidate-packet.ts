@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "@recruitos/core";
+import { ConfidenceInputSchema, err, ok, type Result } from "@recruitos/core";
 
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
 import { getNativeDatabase } from "./native-db.js";
@@ -37,49 +37,39 @@ interface ReasonRow {
   reasonCode: string;
 }
 
-function readConfidenceInput(contentJson: string | undefined): CandidatePacketConfidenceInput | null {
-  if (contentJson === undefined) {
-    return null;
-  }
+function packetFailure(message: string): RuntimeError {
+  return createRuntimeError("persistence_failed", message, false);
+}
+
+function parseStoredConfidenceInput(
+  contentJson: string
+): Result<CandidatePacketConfidenceInput, RuntimeError> {
+  let decoded: unknown;
   try {
-    const decoded: unknown = JSON.parse(contentJson);
-    /* v8 ignore next 3 -- score_result CHECK requires a JSON object. */
-    if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) {
-      return null;
-    }
-    const confidenceInput = (decoded as { confidenceInput?: unknown }).confidenceInput;
-    if (confidenceInput === null || typeof confidenceInput !== "object" || Array.isArray(confidenceInput)) {
-      return null;
-    }
-    const record = confidenceInput as Record<string, unknown>;
-    const fields = [
-      "contradictionCount",
-      "dimensionsWithLocatedSpan",
-      "requiredFieldsMissing",
-      "spansLocated",
-      "spansReturned",
-      "totalDimensions",
-      "totalRequiredFields"
-    ] as const;
-    for (const field of fields) {
-      if (typeof record[field] !== "number") {
-        return null;
-      }
-    }
-    return {
-      contradictionCount: record.contradictionCount as number,
-      dimensionsWithLocatedSpan: record.dimensionsWithLocatedSpan as number,
-      requiredFieldsMissing: record.requiredFieldsMissing as number,
-      spansLocated: record.spansLocated as number,
-      spansReturned: record.spansReturned as number,
-      totalDimensions: record.totalDimensions as number,
-      totalRequiredFields: record.totalRequiredFields as number
-    };
-    /* v8 ignore start -- score_result CHECK requires json_valid content. */
+    decoded = JSON.parse(contentJson);
   } catch {
-    return null;
+    /* v8 ignore next 3 -- score_result CHECK requires json_valid content. */
+    return err(packetFailure("Stored score result content is not valid JSON"));
   }
-  /* v8 ignore stop */
+  /* v8 ignore next 3 -- score_result CHECK requires a JSON object. */
+  if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) {
+    return err(packetFailure("Stored score result content is not a JSON object"));
+  }
+  const parsed = ConfidenceInputSchema.safeParse(
+    (decoded as { confidenceInput?: unknown }).confidenceInput
+  );
+  if (!parsed.success) {
+    return err(packetFailure("Stored score confidence input failed integrity validation"));
+  }
+  return ok({
+    contradictionCount: parsed.data.contradictionCount,
+    dimensionsWithLocatedSpan: parsed.data.dimensionsWithLocatedSpan,
+    requiredFieldsMissing: parsed.data.requiredFieldsMissing,
+    spansLocated: parsed.data.spansLocated,
+    spansReturned: parsed.data.spansReturned,
+    totalDimensions: parsed.data.totalDimensions,
+    totalRequiredFields: parsed.data.totalRequiredFields
+  });
 }
 
 /**
@@ -195,6 +185,15 @@ export function readCandidatePacket(
     );
     const reasonRows = reasonStmt.all(candRow.currentResultId) as ReasonRow[];
 
+    let confidenceInput: CandidatePacketConfidenceInput | null = null;
+    if (scoreRow !== undefined) {
+      const parsedConfidence = parseStoredConfidenceInput(scoreRow.contentJson);
+      if (!parsedConfidence.ok) {
+        return parsedConfidence;
+      }
+      confidenceInput = parsedConfidence.value;
+    }
+
     return ok({
       candidateId: candRow.candidateId,
       sourceSystem: candRow.sourceSystem,
@@ -215,7 +214,7 @@ export function readCandidatePacket(
       scoreConfidenceText: scoreRow?.confidenceText ?? null,
       scoreAggregateBasisPoints: scoreRow?.aggregateBasisPoints ?? null,
       scoreConfidenceBasisPoints: scoreRow?.confidenceBasisPoints ?? null,
-      confidenceInput: readConfidenceInput(scoreRow?.contentJson),
+      confidenceInput,
       reasons: reasonRows.map((row) => row.reasonCode)
     });
   } catch (error) {
