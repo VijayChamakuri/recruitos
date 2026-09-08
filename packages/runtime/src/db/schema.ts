@@ -2040,6 +2040,10 @@ export const attemptWorkItems = sqliteTable(
       () => extractionFailures.extractionFailureId,
       { onDelete: "restrict" }
     ),
+    extractionRunId: text("extraction_run_id").references(
+      () => extractionRuns.extractionRunId,
+      { onDelete: "restrict" }
+    ),
     version: integer("version").notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull()
@@ -2085,6 +2089,7 @@ export const attemptWorkItems = sqliteTable(
         AND ${table.claimExpiresAt} IS NULL
         AND ${table.extractionArtifactId} IS NULL
         AND ${table.extractionFailureId} IS NULL
+        AND ${table.extractionRunId} IS NULL
       ) OR (
         ${table.state} = 'claimed'
         AND ${table.claimId} IS NOT NULL
@@ -2093,6 +2098,7 @@ export const attemptWorkItems = sqliteTable(
         AND ${table.claimExpiresAt} >= ${table.claimedAt}
         AND ${table.extractionArtifactId} IS NULL
         AND ${table.extractionFailureId} IS NULL
+        AND ${table.extractionRunId} IS NULL
       ) OR (
         ${table.state} = 'succeeded'
         AND ${table.extractionArtifactId} IS NOT NULL
