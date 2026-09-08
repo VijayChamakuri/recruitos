@@ -15,8 +15,9 @@ your own rows plus the log.
 | Field | Value |
 |---|---|
 | origin/main | 0998681 |
-| Migration lock held by | none. Nothing queued. File a schema request to Cursor to take the lock for one PR. |
+| Migration lock held by | none. Nothing queued. |
 | Rubric v1 | LOCKED (PR #47 merged at 0998681). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. |
+| Parked (Cursor, not started) | Persist the full locked rubric in the runtime role store (integer version, provenance, `levelAnchors`) so `DRAFT_RUBRIC_V1` can be deleted. Needs new columns and one drizzle PR. Not urgent. Take the migration lock only after it is greenlit. |
 
 ## Lanes and file locks
 
@@ -40,7 +41,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | (none) | Migration lane and rubric v1 lock complete. Follow-ups belong to runtime and pipeline. | idle-complete |
+| Cursor | (none) | Migration chain through step 7 plus rubric v1 lock. No schema work pending. | idle-complete |
 | Claude Code | b/core-shortlist-proposals | T9 part 2, step 6 of 6: shortlist_inclusion proposal derivation in `packages/core/src/pipeline/`. Last step of the pure decision pipeline. | ready PR |
 | Antigravity | (pending) | Wired eval span-matching and bench suites to real core matching and pipeline modules (PR #44 merged). Ready for next task. | idle |
 
@@ -117,3 +118,4 @@ your own rows plus the log.
 - 2026-09-07 Cursor: PR #46 merged to main at a9179da. Migration lock released. Starting `a/rubric-v1-lock` for Gate 2 rubric v1 lock from the signed RubricAssumptionRecord. Lane is `packages/core/src/rubric/` only.
 - 2026-09-07 Cursor: `a/rubric-v1-lock` ready on a9179da (PR #47). RUBRIC_V1_HASH `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. pnpm check 1214 plus 24 integration exit 0, test:coverage 1060 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Frozen structure untouched. Pipeline owner note for OQ-7 is in the PR body.
 - 2026-09-07 Cursor: PR #47 squash-merged to main at 0998681. Rubric v1 locked. Idle-complete. Follow-ups are not Cursor: migrate `DRAFT_RUBRIC_V1` imports to `RUBRIC_V1` and drop the shim (`scoring/`, `pipeline/`, `runtime/`); OQ-7 hard-requirement predicates in `packages/core/src/pipeline/hard-requirements.ts`. Migration lock stays released unless another lane files a schema request. Cleaning stale `cursor/*` branches whose PRs already merged.
+- 2026-09-08 Cursor: standing down idle-complete after #46 and #47 on 0998681. Nothing queued. No schema work pending. Parked only: when greenlit, one drizzle PR so the role store persists and reconstructs the full locked rubric (integer version, provenance, `levelAnchors`), which is what lets the `DRAFT_RUBRIC_V1` shim go away. Not started, not urgent, lock stays released until then.
