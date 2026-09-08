@@ -45,6 +45,22 @@ describe("CLI Parser", () => {
     const p2 = parseArgs(["review", "--task=task-1", "--version-num=2"]);
     expect(p2.options.task).toBe("task-1");
     expect(p2.options.versionNum).toBe(2);
+
+    const p3 = parseArgs([
+      "triage:finalize",
+      "--attempt=attempt-1",
+      "--run",
+      "run-1",
+      "--corpus-tag",
+      "variant",
+      "--kind=variant_run"
+    ]);
+    expect(p3.options).toMatchObject({
+      attempt: "attempt-1",
+      run: "run-1",
+      corpusTag: "variant",
+      kind: "variant_run"
+    });
   });
 
   it("records unknown options", () => {
@@ -176,6 +192,60 @@ describe("CLI Commands Execution", () => {
     });
   });
 
+  describe("Runtime Use-case Commands", () => {
+    it("requires a database path for migration", async () => {
+      const result = await runCli(["db:migrate"]);
+      expect(result.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(result.stderr).toContain("--db <path> is required");
+    });
+
+    it("prints the import receipt", async () => {
+      const result = await runCli(["corpus:import"], {
+        composition: createStubComposition()
+      });
+      expect(result.exitCode).toBe(EXIT_SUCCESS);
+      expect(result.stdout).toContain("RecruitOS Candidate Import");
+      expect(result.stdout).toContain("command-stub-import");
+    });
+
+    it("starts, extracts, and finalizes by their explicit command names", async () => {
+      const composition = createStubComposition();
+      const started = await runCli([
+        "triage:run",
+        "--role",
+        "role-1",
+        "--candidate",
+        "candidate-1,candidate-2"
+      ], { composition });
+      expect(started.exitCode).toBe(EXIT_SUCCESS);
+      expect(started.stdout).toContain("attempt-stub");
+
+      const extracted = await runCli(
+        ["triage:extract", "--attempt", "attempt-stub"],
+        { composition }
+      );
+      expect(extracted.exitCode).toBe(EXIT_SUCCESS);
+      expect(extracted.stdout).toContain("RecruitOS Fixture Extraction");
+
+      const finalized = await runCli(
+        ["triage:finalize", "--attempt", "attempt-stub"],
+        { composition }
+      );
+      expect(finalized.exitCode).toBe(EXIT_SUCCESS);
+      expect(finalized.stdout).toContain("RecruitOS Triage Run Finalized");
+    });
+
+    it("validates start and finalize inputs", async () => {
+      expect((await runCli(["triage:run", "--candidate", "candidate-1"])).exitCode).toBe(
+        EXIT_USAGE_ERROR
+      );
+      expect((await runCli(["triage:run", "--role", "role-1"])).exitCode).toBe(
+        EXIT_USAGE_ERROR
+      );
+      expect((await runCli(["triage:finalize"])).exitCode).toBe(EXIT_USAGE_ERROR);
+    });
+  });
+
   describe("Review Command", () => {
     it("lists review queue tasks and proposals", async () => {
       const res = await runCli(["review"]);
@@ -259,6 +329,9 @@ describe("CLI Commands Execution", () => {
       expect(res.exitCode).toBe(EXIT_SUCCESS);
       expect(res.stdout).toContain("RecruitOS Candidate Evaluation Packet: candidate-1");
       expect(res.stdout).toContain("Arithmetic Score Decomposition");
+      expect(res.stdout).toContain("Confidence Inputs");
+      expect(res.stdout).toContain("Quote resolution:   7/8");
+      expect(res.stdout).toContain("Reasons (0):");
       expect(res.stdout).toContain("Evidence Spans");
       expect(res.stdout).toContain("Source Documents");
     });
@@ -320,6 +393,10 @@ describe("CLI Commands Execution", () => {
   describe("Custom Composition / Error Handling", () => {
     it("handles composition runtime failure cleanly", async () => {
       const failingComposition: RecruitosComposition = {
+        importCandidates: async () => err({ code: "internal", message: "fail", retryable: false }),
+        startTriage: async () => err({ code: "internal", message: "fail", retryable: false }),
+        extractTriage: async () => err({ code: "internal", message: "fail", retryable: false }),
+        finalizeTriage: async () => err({ code: "internal", message: "fail", retryable: false }),
         listCandidates: async () =>
           err({
             code: "internal_error",

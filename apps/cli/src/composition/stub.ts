@@ -116,6 +116,18 @@ export class StubRecruitosComposition implements RecruitosComposition {
       status: "shortlisted",
       score: 84.5,
       confidence: 0.92,
+      scoreText: "169/200",
+      confidenceText: "23/25",
+      confidenceInput: {
+        contradictionCount: 0,
+        dimensionsWithLocatedSpan: 5,
+        requiredFieldsMissing: 0,
+        spansLocated: 7,
+        spansReturned: 8,
+        totalDimensions: 6,
+        totalRequiredFields: 4
+      },
+      reasons: [],
       contentHash: "8a4f91e0d37bc01fae2981329cbf7689104fa2bc018247df789123405abcde01",
       sealed: true,
       createdAt: BASE_TIMESTAMP,
@@ -231,6 +243,10 @@ export class StubRecruitosComposition implements RecruitosComposition {
       status: "escalated",
       score: null,
       confidence: null,
+      scoreText: null,
+      confidenceText: null,
+      confidenceInput: null,
+      reasons: ["assessment_unavailable"],
       contentHash: "1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef01",
       sealed: false,
       createdAt: BASE_TIMESTAMP + 1000,
@@ -263,6 +279,10 @@ export class StubRecruitosComposition implements RecruitosComposition {
       status: "reviewed",
       score: 68.0,
       confidence: 0.81,
+      scoreText: "17/25",
+      confidenceText: "81/100",
+      confidenceInput: null,
+      reasons: [],
       contentHash: "2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef012a",
       sealed: true,
       createdAt: BASE_TIMESTAMP + 2000,
@@ -343,6 +363,58 @@ export class StubRecruitosComposition implements RecruitosComposition {
         payloadHash: "fae2981329cbf7689104fa2bc018247df789123405abcde018a4f91e0d37bc01"
       }
     ];
+  }
+
+  async importCandidates(): Promise<
+    Result<import("./types.js").ImportCandidatesSummary, RuntimeError>
+  > {
+    return ok({
+      commandId: "command-stub-import",
+      imported: 0,
+      skipped: 0,
+      candidateIds: []
+    });
+  }
+
+  async startTriage(input: {
+    roleId: string;
+  }): Promise<Result<import("./types.js").StartTriageSummary, RuntimeError>> {
+    return ok({
+      commandId: "command-stub-start",
+      triageRunId: "run-stub",
+      triageAttemptId: "attempt-stub",
+      workItemCount: 0
+    });
+  }
+
+  async extractTriage(
+    triageAttemptId: string
+  ): Promise<Result<import("./types.js").ExtractionAttemptSummary, RuntimeError>> {
+    return ok({
+      triageAttemptId,
+      totalWorkItems: 0,
+      alreadySucceeded: 0,
+      processed: 0,
+      succeeded: 0,
+      reviewableFailures: 0,
+      blockedFailures: 0,
+      reusedArtifacts: 0,
+      spansReturned: 0,
+      spansLocated: 0,
+      droppedQuoteCount: 0
+    });
+  }
+
+  async finalizeTriage(input: {
+    triageAttemptId: string;
+  }): Promise<Result<import("./types.js").FinalizeTriageSummary, RuntimeError>> {
+    return ok({
+      commandId: "command-stub-finalize",
+      triageRunId: "run-stub",
+      triageAttemptId: input.triageAttemptId,
+      candidateCount: 0,
+      resultIds: []
+    });
   }
 
   async listCandidates(

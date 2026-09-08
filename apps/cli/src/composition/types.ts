@@ -8,6 +8,8 @@ export type RuntimeError = Readonly<{
 }>;
 
 export type CandidateTriageStatus =
+  | "scored"
+  | "rejected_hard_requirement"
   | "shortlisted"
   | "reviewed"
   | "escalated"
@@ -71,6 +73,18 @@ export type CandidatePacket = Readonly<{
   status: CandidateTriageStatus;
   score: number | null;
   confidence: number | null;
+  scoreText: string | null;
+  confidenceText: string | null;
+  confidenceInput: Readonly<{
+    contradictionCount: number;
+    dimensionsWithLocatedSpan: number;
+    requiredFieldsMissing: number;
+    spansLocated: number;
+    spansReturned: number;
+    totalDimensions: number;
+    totalRequiredFields: number;
+  }> | null;
+  reasons: readonly string[];
   contentHash: string;
   sealed: boolean;
   createdAt: number;
@@ -168,6 +182,42 @@ export type RunTriageOptions = Readonly<{
   dryRun?: boolean | undefined;
 }>;
 
+export type ImportCandidatesSummary = Readonly<{
+  commandId: string;
+  imported: number;
+  skipped: number;
+  candidateIds: readonly string[];
+}>;
+
+export type StartTriageSummary = Readonly<{
+  commandId: string;
+  triageRunId: string;
+  triageAttemptId: string;
+  workItemCount: number;
+}>;
+
+export type ExtractionAttemptSummary = Readonly<{
+  triageAttemptId: string;
+  totalWorkItems: number;
+  alreadySucceeded: number;
+  processed: number;
+  succeeded: number;
+  reviewableFailures: number;
+  blockedFailures: number;
+  reusedArtifacts: number;
+  spansReturned: number;
+  spansLocated: number;
+  droppedQuoteCount: number;
+}>;
+
+export type FinalizeTriageSummary = Readonly<{
+  commandId: string;
+  triageRunId: string;
+  triageAttemptId: string;
+  candidateCount: number;
+  resultIds: readonly string[];
+}>;
+
 export type ListResolutionTasksOptions = Readonly<{
   candidateId?: string | undefined;
   status?: ResolutionTaskStatus | undefined;
@@ -199,6 +249,28 @@ export type ListAuditEventsOptions = Readonly<{
 }>;
 
 export interface RecruitosComposition {
+  importCandidates(input: Readonly<{
+    actorId: string;
+    corpusTag?: "main" | "variant" | undefined;
+  }>): Promise<Result<ImportCandidatesSummary, RuntimeError>>;
+
+  startTriage(input: Readonly<{
+    actorId: string;
+    roleId: string;
+    candidateIds: readonly string[];
+    kind?: "main_run" | "variant_run" | undefined;
+  }>): Promise<Result<StartTriageSummary, RuntimeError>>;
+
+  extractTriage(
+    triageAttemptId: string
+  ): Promise<Result<ExtractionAttemptSummary, RuntimeError>>;
+
+  finalizeTriage(input: Readonly<{
+    actorId: string;
+    triageAttemptId: string;
+    triageRunId?: string | undefined;
+  }>): Promise<Result<FinalizeTriageSummary, RuntimeError>>;
+
   listCandidates(
     options?: ListCandidatesOptions
   ): Promise<Result<readonly CandidateSummary[], RuntimeError>>;

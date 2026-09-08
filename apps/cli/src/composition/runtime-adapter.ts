@@ -34,9 +34,13 @@ import type {
 import { StubRecruitosComposition } from "./stub.js";
 
 import {
+  finalizeTriageRun,
+  importCandidates,
   listCandidates,
   listResolutionTasks,
   readCandidatePacket,
+  runExtractionAttempt,
+  startTriageRun,
   type CandidatePacketModel,
   type CandidateSummaryItem,
   type ResolutionTaskItem
@@ -46,8 +50,12 @@ function toRuntimeCandidateStatus(
   status?: CandidateTriageStatus
 ): "scored" | "rejected_hard_requirement" | "escalated" | "pending" | undefined {
   if (!status) return undefined;
-  if (status === "shortlisted" || status === "reviewed") return "scored";
-  if (status === "rejected") return "rejected_hard_requirement";
+  if (status === "scored" || status === "shortlisted" || status === "reviewed") {
+    return "scored";
+  }
+  if (status === "rejected_hard_requirement" || status === "rejected") {
+    return "rejected_hard_requirement";
+  }
   if (status === "escalated") return "escalated";
   if (status === "pending") return "pending";
   return undefined;
@@ -56,10 +64,7 @@ function toRuntimeCandidateStatus(
 function toCliCandidateStatus(
   status: "scored" | "rejected_hard_requirement" | "escalated" | "pending"
 ): CandidateTriageStatus {
-  if (status === "scored") return "shortlisted";
-  if (status === "rejected_hard_requirement") return "rejected";
-  if (status === "escalated") return "escalated";
-  return "pending";
+  return status;
 }
 
 function toCandidateSummary(item: CandidateSummaryItem): CandidateSummary {
@@ -71,7 +76,8 @@ function toCandidateSummary(item: CandidateSummaryItem): CandidateSummary {
     roleTitle: "Staff Software Engineer",
     status: toCliCandidateStatus(item.status),
     score: item.scoreBasisPoints !== null ? item.scoreBasisPoints / 100 : null,
-    confidence: item.confidenceBasisPoints !== null ? item.confidenceBasisPoints / 100 : null,
+    confidence:
+      item.confidenceBasisPoints !== null ? item.confidenceBasisPoints / 10_000 : null,
     reasons: item.reasons,
     tasksCount: 0,
     sealed: item.isSealed,
@@ -102,8 +108,18 @@ function toCandidatePacket(packet: CandidatePacketModel): CandidatePacket {
     roleId: "role-default",
     roleTitle: "Staff Software Engineer",
     status: toCliCandidateStatus(packet.resultStatus),
-    score: null,
-    confidence: null,
+    score:
+      packet.scoreAggregateBasisPoints === null
+        ? null
+        : packet.scoreAggregateBasisPoints / 100,
+    confidence:
+      packet.scoreConfidenceBasisPoints === null
+        ? null
+        : packet.scoreConfidenceBasisPoints / 10_000,
+    scoreText: packet.scoreAggregateText,
+    confidenceText: packet.scoreConfidenceText,
+    confidenceInput: packet.confidenceInput,
+    reasons: packet.reasons,
     contentHash: packet.contentHash,
     sealed: packet.isSealed,
     createdAt: packet.createdAt,
@@ -152,6 +168,59 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       databasePath ??
       (typeof nativeClient?.name === "string" ? nativeClient.name : ":memory:");
     this.fallback = new StubRecruitosComposition();
+  }
+
+  async importCandidates(input: {
+    actorId: string;
+    corpusTag?: "main" | "variant" | undefined;
+  }): Promise<Result<import("./types.js").ImportCandidatesSummary, RuntimeError>> {
+    const result = await importCandidates(this.runtime, {
+      actorId: input.actorId,
+      ...(input.corpusTag === undefined ? {} : { corpusTag: input.corpusTag })
+    });
+    if (!result.ok) return result;
+    return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
+  }
+
+  async startTriage(input: {
+    actorId: string;
+    roleId: string;
+    candidateIds: readonly string[];
+    kind?: "main_run" | "variant_run" | undefined;
+  }): Promise<Result<import("./types.js").StartTriageSummary, RuntimeError>> {
+    const result = startTriageRun(this.runtime, {
+      actorId: input.actorId,
+      roleId: input.roleId,
+      candidateIds: input.candidateIds,
+      ...(input.kind === undefined ? {} : { kind: input.kind })
+    });
+    if (!result.ok) return result;
+    return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
+  }
+
+  async extractTriage(
+    triageAttemptId: string
+  ): Promise<Result<import("./types.js").ExtractionAttemptSummary, RuntimeError>> {
+    const result = await runExtractionAttempt(this.runtime, { triageAttemptId });
+    if (!result.ok) return result;
+    return ok({
+      ...result.value,
+      droppedQuoteCount: result.value.droppedQuotes.length
+    });
+  }
+
+  async finalizeTriage(input: {
+    actorId: string;
+    triageAttemptId: string;
+    triageRunId?: string | undefined;
+  }): Promise<Result<import("./types.js").FinalizeTriageSummary, RuntimeError>> {
+    const result = finalizeTriageRun(this.runtime, {
+      actorId: input.actorId,
+      triageAttemptId: input.triageAttemptId,
+      ...(input.triageRunId === undefined ? {} : { triageRunId: input.triageRunId })
+    });
+    if (!result.ok) return result;
+    return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
   }
 
   private hasCandidatesInDb(): boolean {

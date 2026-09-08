@@ -82,6 +82,8 @@ export async function runTriageCommand(
 
   // Otherwise list candidate triage queue
   const validStatuses: readonly CandidateTriageStatus[] = [
+    "scored",
+    "rejected_hard_requirement",
     "shortlisted",
     "reviewed",
     "escalated",

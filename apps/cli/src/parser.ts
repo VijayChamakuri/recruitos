@@ -23,6 +23,10 @@ export type ParsedArgs = Readonly<{
     status?: string;
     channel?: string;
     db?: string;
+    attempt?: string;
+    run?: string;
+    corpusTag?: string;
+    kind?: string;
   }>;
   unknownOptions: readonly string[];
 }>;
@@ -55,6 +59,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     status?: string;
     channel?: string;
     db?: string;
+    attempt?: string;
+    run?: string;
+    corpusTag?: string;
+    kind?: string;
   } = {};
 
   let index = 0;
@@ -133,6 +141,18 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         case "db":
           options.db = value;
+          break;
+        case "attempt":
+          options.attempt = value;
+          break;
+        case "run":
+          options.run = value;
+          break;
+        case "corpus-tag":
+          options.corpusTag = value;
+          break;
+        case "kind":
+          options.kind = value;
           break;
         default:
           unknownOptions.push(arg);
