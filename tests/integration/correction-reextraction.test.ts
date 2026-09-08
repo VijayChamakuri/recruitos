@@ -1,11 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { afterEach, describe, expect, it } from "vitest";
-
-import { type Result } from "@recruitos/core";
 
 import {
   createRuntime,
@@ -14,25 +10,17 @@ import {
 } from "../../packages/runtime/src/composition/index.js";
 import { DEMO_REVIEWABLE_FAILURE_SOURCE_KEY } from "../../packages/runtime/src/corpus/index.js";
 import { SYSTEM_ACTOR_ID } from "../../packages/runtime/src/entities/index.js";
-import type { RuntimeError } from "../../packages/runtime/src/errors/index.js";
 import { readCandidatePacket } from "../../packages/runtime/src/read-models/index.js";
 import { runExtractionAttempt } from "../../packages/runtime/src/scheduler/index.js";
 import { completeReExtraction } from "../../packages/runtime/src/use-cases/complete-re-extraction.js";
 import { demoPrepare, registerDemoCorrectionFixtures } from "../../packages/runtime/src/use-cases/demo-prepare.js";
 import { requestReExtraction } from "../../packages/runtime/src/use-cases/request-re-extraction.js";
+import { MIGRATIONS_FOLDER } from "./harness/database.js";
+import { unwrap } from "./harness/results.js";
 
-const migrationsFolder = fileURLToPath(
-  new URL("../../packages/runtime/drizzle", import.meta.url)
-);
+const migrationsFolder = MIGRATIONS_FOLDER;
 const temporaryDirectories: string[] = [];
 const HUMAN_ACTOR_ID = "human:operator";
-
-function unwrap<T>(result: Result<T, RuntimeError>): T {
-  if (!result.ok) {
-    throw new Error(result.error.message);
-  }
-  return result.value;
-}
 
 function nativeClient(runtime: RuntimeComposition): {
   prepare: (sql: string) => {

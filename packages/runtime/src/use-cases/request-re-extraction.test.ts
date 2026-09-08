@@ -125,17 +125,20 @@ afterEach(async () => {
 });
 
 describe("selectCorrectionWorkItems", () => {
-  const item = (
-    overrides: Partial<AttemptWorkItem> & Pick<AttemptWorkItem, "workItemKey" | "state">
-  ): AttemptWorkItem =>
+  const item = (overrides: {
+    workItemKey: string;
+    state: AttemptWorkItem["state"];
+    candidateId?: string;
+    dimensionId?: string;
+  }): AttemptWorkItem =>
     ({
       attemptWorkItemId: `item-${overrides.workItemKey}`,
       triageAttemptId: "attempt-origin",
       workItemKey: overrides.workItemKey,
       manifestOrdinal: 0,
-      candidateId: "cand-1",
+      candidateId: overrides.candidateId ?? "cand-1",
       candidateDocumentId: "doc-1",
-      dimensionId: "evaluation_and_measurement",
+      dimensionId: overrides.dimensionId ?? "evaluation_and_measurement",
       extractionSpecId: "spec-1",
       state: overrides.state,
       version: 1,
@@ -146,8 +149,7 @@ describe("selectCorrectionWorkItems", () => {
       claimExpiresAt: null,
       extractionArtifactId: null,
       extractionFailureId: null,
-      extractionRunId: null,
-      ...overrides
+      extractionRunId: null
     }) as AttemptWorkItem;
 
   it("prefers failed work items for the scoped candidate", () => {
