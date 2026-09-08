@@ -166,7 +166,7 @@ type CandidateGroup = Readonly<{
   candidateId: string;
   artifacts: ExtractionArtifact[];
   extractions: CandidateExtractionResultInput[];
-  resolutionSpanCounts: ResolutionSpanCounts | null;
+  resolutionSpanCounts: ResolutionSpanCounts;
 }>;
 
 type PlannedWorkItemIdentity = Readonly<{
@@ -186,7 +186,7 @@ type SnapshotCandidate = Readonly<{
   artifacts: readonly ExtractionArtifact[];
   extractions: readonly CandidateExtractionResultInput[];
   workAuthorization: CandidateApplicationAnswer | undefined;
-  resolutionSpanCounts: ResolutionSpanCounts | undefined;
+  resolutionSpanCounts: ResolutionSpanCounts;
 }>;
 
 type FinalizeSnapshot = Readonly<{
@@ -394,7 +394,7 @@ function snapshotFinalizeInputs(
         artifacts: group.artifacts,
         extractions: group.extractions,
         workAuthorization: workAuthResult.value,
-        resolutionSpanCounts: group.resolutionSpanCounts ?? undefined
+        resolutionSpanCounts: group.resolutionSpanCounts
       });
     }
 
@@ -911,8 +911,34 @@ type CandidateGroupAccumulator = {
   extractions: CandidateExtractionResultInput[];
   spansReturned: number;
   spansLocated: number;
-  runCount: number;
 };
+
+/**
+ * The confidence resolution term reads returned and located span totals per
+ * candidate. Each terminal work item contributes them from exactly one source,
+ * so a resumed attempt with mixed provenance never silently drops a subset:
+ *
+ * - linked `extraction_run`: its persisted returned and located counts;
+ * - unlinked but succeeded (finalized before extraction_run persistence): the
+ *   stored artifact holds only located spans and there is no drop record, so
+ *   every artifact span counts as both returned and located;
+ * - unlinked reviewable failure: no artifact and no run, so nothing to fold in.
+ */
+function foldResolutionSpans(
+  accumulator: CandidateGroupAccumulator,
+  item: HydratedWorkItem
+): void {
+  if (item.extractionRun !== null) {
+    accumulator.spansReturned += item.extractionRun.spansReturned;
+    accumulator.spansLocated += item.extractionRun.spansLocated;
+    return;
+  }
+  if (item.artifact !== null) {
+    const artifactSpans = item.artifact.acceptedOutput.spans.length;
+    accumulator.spansReturned += artifactSpans;
+    accumulator.spansLocated += artifactSpans;
+  }
+}
 
 function groupCandidates(hydrated: readonly HydratedWorkItem[]): CandidateGroup[] {
   const groups = new Map<string, CandidateGroupAccumulator>();
@@ -934,26 +960,22 @@ function groupCandidates(hydrated: readonly HydratedWorkItem[]): CandidateGroup[
     }
     const existing =
       groups.get(item.workItem.candidateId) ??
-      { artifacts: [], extractions: [], spansReturned: 0, spansLocated: 0, runCount: 0 };
+      { artifacts: [], extractions: [], spansReturned: 0, spansLocated: 0 };
     if (item.artifact !== null) {
       existing.artifacts.push(item.artifact);
     }
     existing.extractions.push(extraction);
-    if (item.extractionRun !== null) {
-      existing.spansReturned += item.extractionRun.spansReturned;
-      existing.spansLocated += item.extractionRun.spansLocated;
-      existing.runCount += 1;
-    }
+    foldResolutionSpans(existing, item);
     groups.set(item.workItem.candidateId, existing);
   }
   return [...groups.entries()].map(([candidateId, group]) => ({
     candidateId,
     artifacts: group.artifacts,
     extractions: group.extractions,
-    resolutionSpanCounts:
-      group.runCount === 0
-        ? null
-        : { spansReturned: group.spansReturned, spansLocated: group.spansLocated }
+    resolutionSpanCounts: {
+      spansReturned: group.spansReturned,
+      spansLocated: group.spansLocated
+    }
   }));
 }
 
