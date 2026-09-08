@@ -14,10 +14,10 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | e82b42d |
-| Migration lock held by | Cursor, for one PR: persist the full locked rubric and add `candidate_application_answer`. Greenlit 2026-09-07, expanded by #52. Blocks T10.4 and T10.5. |
-| Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. This PR deletes the `DRAFT_RUBRIC_V1` shim. |
-| T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import, scheduler, start-run, extraction bridge plus OQ-7 policy, finalize, correction. |
+| origin/main | c7ead35 |
+| Migration lock held by | Cursor, for extraction_run persistence schema request (T10.5 dependency). |
+| Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
+| T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import (MERGED #54), scheduler (MERGED #57), start-run, extraction bridge plus OQ-7 policy, finalize, correction. |
 
 ## Lanes and file locks
 
@@ -36,14 +36,15 @@ your own rows plus the log.
 5. `triage_run` + `triage_run_member` + `triage_run_seal` (MERGED #32)
 6. `triage_attempt` + `attempt_work_item` (MERGED #39)
 7. `demo_session` + `candidate_demographics` (MERGED #46)
+8. `locked_rubric` + `candidate_application_answer` (MERGED #53)
 
 ## Currently building
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | cursor/locked-rubric-persistence-c42c | One PR covering two additions from `docs/plans/t10-runtime-use-cases-plan.md` "Dependency on Cursor": (1) persist the full locked rubric so `readCoreRubric` `toEqual(RUBRIC_V1)`, delete `draft-v1.ts`, forbid that import; (2) `candidate_application_answer` table and store. | ready |
-| Claude Code | b/t10-import-candidates | T10.1 candidate import use-case (`packages/runtime/src/use-cases/import-candidates.ts`): pages the candidate source, normalizes documents, inserts candidate, source documents (raw-hash reuse), candidate-document links, and the structured work-auth answer, in one command transaction. Idempotent per `(source_system, source_key)`. No `candidate_head`. In the dedicated worktree `~/conductor/workspaces/recruitos/claude-t10`. | ready PR |
-| Antigravity | (idle) | c/e2e-playwright-harness MERGED #51. Real @playwright/test harness, isolated per-test server fixtures, six spec bodies behind test.fixme, testids and route contract in apps/web/src/testids.ts with aligned presenters and handlers. | idle |
+| Cursor | (migration lock) | Schema request for `extraction_run` persistence (store functions, nullable `extraction_run_id` FK on `attempt_work_item`, optional `extractionRunId` on work-item completion inputs). | starting |
+| Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). Next T10 tasks: T10.3 (start triage run use-case), T10.4 (extraction-to-pipeline bridge), T10.5 (finalize), T10.6 (correction). | paused |
+| Antigravity | (idle) | c/e2e-playwright-harness MERGED #51. Idle, ready to claim T10.3 or T11 (CLI/Makefile). | idle |
 
 ## Hard rules
 
@@ -130,3 +131,4 @@ your own rows plus the log.
 - 2026-09-08 Claude: T10.1 candidate import on `b/t10-import-candidates`, rebased on `a1999b5` (post #53). New `packages/runtime/src/use-cases/import-candidates.ts` and test, wired through `use-cases/index.ts`, `public-api.test.ts` regenerated. Adapter I/O before the writer lock; one command transaction for the inserts. `pnpm check` and `pnpm test:integration` exit 0, `test:coverage` 1108 exit 0 with All files 100 percent, diff-check clean, no em dashes. Working from the dedicated worktree `~/conductor/workspaces/recruitos/claude-t10`. Opening PR.
 - 2026-09-08 Claude: T10.2a on `b/t10-extraction-response-contract` off a1999b5. The provider output contract (`packages/runtime/src/extraction/response.ts`) that the extraction scheduler and the tier-1 corpus fixtures both depend on: `ExtractionResponseBodySchema` plus `parseExtractionResponseBody` and `locateResponseSpans`. Documented in the T10 plan under T10.2a. pnpm check and integration exit 0, test:coverage 1094 exit 0 with All files 100 percent, diff-check clean, no em dashes. Scheduler (T10.2) follows on its own branch.
 - 2026-09-08 Claude: T10.2 extraction scheduler on `b/t10-extraction-scheduler` off a1999b5 (post #53). `runExtractionAttempt` in `packages/runtime/src/scheduler/`: serial loop over an attempt's pending work items, claim in a short transaction, extract outside the lock, parse and locate the response, then write the content-addressed artifact or a typed failure and move the item to succeeded / reviewable_failure / blocked_failure. Composite request hash so per-candidate answers do not collide. Artifact and failure rows deduped by content hash. `extraction_run` persistence deferred to the filed schema request; span counts and dropped quotes come back in the summary. Serial only; concurrency, SIGINT grace, live retry deferred. pnpm check and integration exit 0, test:coverage 1153 exit 0 with All files 100 percent, diff-check clean, no em dashes.
+- 2026-09-08 Claude: SCHEMA REQUEST TO CURSOR (`extraction_run` persistence, needed before T10.5 finalize). The `extraction_run` table exists but has no store, no FK, and nothing references `extraction_run_id`. It holds `spans_returned` / `spans_located` / `dropped_quotes`, which feed the confidence `resolution` term. Unlocated quotes are known only at scheduler time (T10.2), so this must be persisted there. Requested: (1) an `extraction_run` store in `packages/runtime/src/extraction/` (`prepareExtractionRun` / `insertExtractionRun` / `readExtractionRun`) following the store pattern, canonicalizing `droppedQuotes` to the existing `dropped_quotes_json` / `dropped_quotes_hash` columns; the `ExtractionRunDraftSchema` / `ExtractionRunSchema` already live in `evidence/schemas.ts` and can move or be reused. (2) A nullable `extraction_run_id` column on `attempt_work_item`, FK to `extraction_run(extraction_run_id)` `onDelete: "restrict"`. (3) An optional `extractionRunId` on `CompleteAttemptWorkItemInput` and `FailAttemptWorkItemInput` so the scheduler attaches it in the same short transaction as the state move. T10.2 lands the scheduler without this and returns the span counts and dropped quotes in memory; a follow-up wires persistence once the schema is in. Not blocking T10.2, T10.3, or T10.4.
