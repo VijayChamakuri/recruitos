@@ -255,6 +255,34 @@ function parseMigrations(): Map<string, SqlTable> {
         continue;
       }
 
+      const addColumn =
+        /^ALTER TABLE `([^`]+)` ADD(?: COLUMN)? `([^`]+)`\s+(\w+)([\s\S]*)$/u.exec(
+          statement
+        );
+      if (addColumn !== null) {
+        const target = tables.get(addColumn[1]!);
+        expect(target, `ALTER ADD on unknown table ${addColumn[1]!}`).toBeDefined();
+        const rest = addColumn[4]!;
+        target!.columns.push({
+          name: addColumn[2]!,
+          type: addColumn[3]!,
+          notNull: /\bNOT NULL\b/u.test(rest),
+          primaryKey: /\bPRIMARY KEY\b/u.test(rest)
+        });
+        const inlineFk = /REFERENCES `([^`]+)`\(([^)]*)\)([\s\S]*)/u.exec(rest);
+        if (inlineFk !== null) {
+          const onDelete = /ON DELETE (\w+)/u.exec(inlineFk[3]!);
+          target!.foreignKeys.push({
+            columns: [addColumn[2]!],
+            foreignTable: inlineFk[1]!,
+            foreignColumns: backtickedList(inlineFk[2]!),
+            onDelete:
+              onDelete === null || onDelete[1] === "no" ? undefined : onDelete[1]!
+          });
+        }
+        continue;
+      }
+
       const dropTable = /^DROP TABLE(?: IF EXISTS)? `([^`]+)`\s*;?$/u.exec(statement);
       if (dropTable !== null) {
         tables.delete(dropTable[1]!);
@@ -545,5 +573,31 @@ describe("Drizzle schema matches the committed migrations", () => {
       }
       expect(dropped).not.toContain(name);
     }
+  });
+
+  it("restores every attempt_work_item trigger 0021 drops for the extraction_run FK rebuild", () => {
+    const sql = readFileSync(
+      join(migrationsFolder, "0021_extraction_run_work_item_fk.sql"),
+      "utf8"
+    );
+    const dropped = [...sql.matchAll(/DROP TRIGGER IF EXISTS `([^`]+)`/gu)].map(
+      (match) => match[1]!
+    );
+    expect(dropped).toEqual([
+      "attempt_work_item_reject_replace",
+      "attempt_work_item_reject_owner",
+      "attempt_work_item_reject_pinned_update",
+      "attempt_work_item_reject_illegal_transition",
+      "attempt_work_item_reject_terminal_reopen",
+      "attempt_work_item_reject_delete",
+      "attempt_work_item_reject_terminal_owner",
+      "triage_run_seal_reject_incomplete"
+    ]);
+    const created = [...sql.matchAll(/CREATE TRIGGER `([^`]+)`/gu)].map((match) => match[1]!);
+    expect(created).toEqual(expect.arrayContaining(dropped));
+    expect(sql).toContain("extraction_run_id");
+    expect(sql).toContain("ON DELETE restrict");
+    expect(sql).toContain("NEW.`extraction_run_id` IS NOT OLD.`extraction_run_id`");
+    expect(sql).not.toMatch(/PRAGMA foreign_keys/u);
   });
 });

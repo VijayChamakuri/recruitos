@@ -7,6 +7,7 @@ import {
   CorpusManifestIdSchema,
   ExtractionArtifactIdSchema,
   ExtractionFailureIdSchema,
+  ExtractionRunIdSchema,
   ExtractionSpecIdSchema,
   NonnegativeIntegerSchema,
   PositiveIntegerSchema,
@@ -113,6 +114,7 @@ const attemptWorkItemShape = {
   attemptCount: NonnegativeIntegerSchema,
   extractionArtifactId: ExtractionArtifactIdSchema.nullable(),
   extractionFailureId: ExtractionFailureIdSchema.nullable(),
+  extractionRunId: ExtractionRunIdSchema.nullable(),
   version: PositiveIntegerSchema,
   updatedAt: NonnegativeIntegerSchema
 };
@@ -135,6 +137,7 @@ export const CompleteAttemptWorkItemInputSchema = z
   .object({
     attemptWorkItemId: AttemptWorkItemIdSchema,
     extractionArtifactId: ExtractionArtifactIdSchema,
+    extractionRunId: ExtractionRunIdSchema.optional(),
     completedAt: NonnegativeIntegerSchema,
     expectedVersion: PositiveIntegerSchema
   })
@@ -146,6 +149,7 @@ export const FailAttemptWorkItemInputSchema = z
     attemptWorkItemId: AttemptWorkItemIdSchema,
     state: z.enum(["reviewable_failure", "retryable_failure", "blocked_failure"]),
     extractionFailureId: ExtractionFailureIdSchema,
+    extractionRunId: ExtractionRunIdSchema.optional(),
     failedAt: NonnegativeIntegerSchema,
     expectedVersion: PositiveIntegerSchema
   })

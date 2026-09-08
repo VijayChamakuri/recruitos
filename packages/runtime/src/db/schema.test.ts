@@ -812,7 +812,7 @@ describe("runtime Drizzle schema", () => {
     expect(itemIndexByName.attempt_work_item_active_claim_expiry?.config.where).toBeDefined();
     expect(itemIndexByName.attempt_work_item_attempt_key_unique?.config.where).toBeUndefined();
     expect(itemIndexByName.attempt_work_item_attempt_state_ordinal?.config.where).toBeUndefined();
-    expect(itemConfig.foreignKeys).toHaveLength(6);
+    expect(itemConfig.foreignKeys).toHaveLength(7);
     expect(itemConfig.foreignKeys.every((foreignKey) => foreignKey.onDelete === "restrict")).toBe(
       true
     );
