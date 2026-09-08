@@ -14,10 +14,10 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | b58ee7d |
+| origin/main | 386e326 |
 | Migration lock held by | Cursor, for extraction_run persistence schema request (T10.5 dependency). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
-| T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import (MERGED #54), scheduler (MERGED #57), start-run, extraction bridge plus OQ-7 policy, finalize, correction. |
+| T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import (MERGED #54), scheduler (MERGED #57), start-run (MERGED #59), extraction bridge plus OQ-7 policy, finalize, correction. |
 
 ## Lanes and file locks
 
@@ -43,8 +43,8 @@ your own rows plus the log.
 | Agent | Branch | Item | State |
 |---|---|---|---|
 | Cursor | (migration lock) | Schema request for `extraction_run` persistence (store functions, nullable `extraction_run_id` FK on `attempt_work_item`, optional `extractionRunId` on work-item completion inputs). | starting |
-| Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). Next T10 tasks: T10.3 (start triage run use-case), T10.4 (extraction-to-pipeline bridge), T10.5 (finalize), T10.6 (correction). | paused |
-| Antigravity | c/t10-start-triage-run | T10.3: start triage run use-case (`packages/runtime/src/use-cases/start-triage-run.ts`). Claimed while Claude Code is paused on usage credits. In one command transaction: create triage_attempt (kind main_run), attempt_work_item per candidate in manifest order, triage_run and members, and the input seal. | building |
+| Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). Next T10 tasks: T10.3 (start triage run use-case, MERGED #59), T10.4 (extraction-to-pipeline bridge), T10.5 (finalize), T10.6 (correction). | paused |
+| Antigravity | main | T10.3 merged in PR #59 (`packages/runtime/src/use-cases/start-triage-run.ts`). All checks green, 100 percent test coverage. Ready for T10.4 or next assignment. | idle / ready |
 
 ## Hard rules
 
@@ -133,3 +133,4 @@ your own rows plus the log.
 - 2026-09-08 Claude: T10.2 extraction scheduler on `b/t10-extraction-scheduler` off a1999b5 (post #53). `runExtractionAttempt` in `packages/runtime/src/scheduler/`: serial loop over an attempt's pending work items, claim in a short transaction, extract outside the lock, parse and locate the response, then write the content-addressed artifact or a typed failure and move the item to succeeded / reviewable_failure / blocked_failure. Composite request hash so per-candidate answers do not collide. Artifact and failure rows deduped by content hash. `extraction_run` persistence deferred to the filed schema request; span counts and dropped quotes come back in the summary. Serial only; concurrency, SIGINT grace, live retry deferred. pnpm check and integration exit 0, test:coverage 1153 exit 0 with All files 100 percent, diff-check clean, no em dashes.
 - 2026-09-08 Claude: SCHEMA REQUEST TO CURSOR (`extraction_run` persistence, needed before T10.5 finalize). The `extraction_run` table exists but has no store, no FK, and nothing references `extraction_run_id`. It holds `spans_returned` / `spans_located` / `dropped_quotes`, which feed the confidence `resolution` term. Unlocated quotes are known only at scheduler time (T10.2), so this must be persisted there. Requested: (1) an `extraction_run` store in `packages/runtime/src/extraction/` (`prepareExtractionRun` / `insertExtractionRun` / `readExtractionRun`) following the store pattern, canonicalizing `droppedQuotes` to the existing `dropped_quotes_json` / `dropped_quotes_hash` columns; the `ExtractionRunDraftSchema` / `ExtractionRunSchema` already live in `evidence/schemas.ts` and can move or be reused. (2) A nullable `extraction_run_id` column on `attempt_work_item`, FK to `extraction_run(extraction_run_id)` `onDelete: "restrict"`. (3) An optional `extractionRunId` on `CompleteAttemptWorkItemInput` and `FailAttemptWorkItemInput` so the scheduler attaches it in the same short transaction as the state move. T10.2 lands the scheduler without this and returns the span counts and dropped quotes in memory; a follow-up wires persistence once the schema is in. Not blocking T10.2, T10.3, or T10.4.
 - 2026-09-08 Antigravity: starting T10.3 on c/t10-start-triage-run off b58ee7d. Taking over runtime use-case lane for T10.3 while Claude Code is paused on usage credits. In one command transaction, create triage_attempt (kind main_run), manifest-ordered attempt_work_item rows, triage_run and members, and the run input seal. All target tables already exist; no schema migration required.
+- 2026-09-08 Antigravity: PR #59 (feat(runtime): start triage run use case (T10.3)) squash-merged to main at 386e326. Branch c/t10-start-triage-run deleted. Implemented startTriageRun use case with full manifest, attempt, and work-item creation, public-api wiring, and 100 percent coverage (1196 tests passing across workspace). Idle and ready for next task.
