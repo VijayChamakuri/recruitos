@@ -1,9 +1,3 @@
--- Attach a nullable extraction_run_id to attempt_work_item so T10.5 can
--- read spans_returned, spans_located, and dropped quotes for the confidence
--- resolution term. SQLite cannot ADD a foreign key in place, so the work
--- item table is rebuilt. Existing rows get a null extraction_run_id.
--- DROP TABLE drops the 0017 work-item triggers, so this file recreates them.
--- migrate() already sets foreign_keys=OFF around this file.
 CREATE TABLE `__new_attempt_work_item` (
 	`attempt_work_item_id` text PRIMARY KEY NOT NULL,
 	`triage_attempt_id` text NOT NULL,
@@ -74,6 +68,14 @@ CREATE TABLE `__new_attempt_work_item` (
       ))
 ) STRICT;
 --> statement-breakpoint
+-- Attach a nullable extraction_run_id to attempt_work_item so T10.5 can
+-- read spans_returned, spans_located, and dropped quotes for the confidence
+-- resolution term. SQLite cannot ADD a foreign key in place, so the work
+-- item table is rebuilt. Existing rows get a null extraction_run_id.
+-- DROP TABLE drops the 0017 work-item triggers and would leave
+-- triage_run_seal_reject_incomplete pointing at a missing table, so this
+-- file drops and recreates those triggers around the rebuild.
+-- migrate() already sets foreign_keys=OFF around this file.
 INSERT INTO `__new_attempt_work_item` (
 	`attempt_work_item_id`,
 	`triage_attempt_id`,
@@ -117,16 +119,6 @@ SELECT
 	`updated_at`
 FROM `attempt_work_item`;
 --> statement-breakpoint
-DROP TABLE `attempt_work_item`;
---> statement-breakpoint
-ALTER TABLE `__new_attempt_work_item` RENAME TO `attempt_work_item`;
---> statement-breakpoint
-CREATE UNIQUE INDEX `attempt_work_item_attempt_key_unique` ON `attempt_work_item` (`triage_attempt_id`,`work_item_key`);
---> statement-breakpoint
-CREATE INDEX `attempt_work_item_attempt_state_ordinal` ON `attempt_work_item` (`triage_attempt_id`,`state`,`manifest_ordinal`,`work_item_key`);
---> statement-breakpoint
-CREATE INDEX `attempt_work_item_active_claim_expiry` ON `attempt_work_item` (`claim_expires_at`,`attempt_work_item_id`) WHERE "attempt_work_item"."state" = 'claimed';
---> statement-breakpoint
 DROP TRIGGER IF EXISTS `attempt_work_item_reject_replace`;
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS `attempt_work_item_reject_owner`;
@@ -140,6 +132,18 @@ DROP TRIGGER IF EXISTS `attempt_work_item_reject_terminal_reopen`;
 DROP TRIGGER IF EXISTS `attempt_work_item_reject_delete`;
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS `attempt_work_item_reject_terminal_owner`;
+--> statement-breakpoint
+DROP TRIGGER IF EXISTS `triage_run_seal_reject_incomplete`;
+--> statement-breakpoint
+DROP TABLE `attempt_work_item`;
+--> statement-breakpoint
+ALTER TABLE `__new_attempt_work_item` RENAME TO `attempt_work_item`;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `attempt_work_item_attempt_key_unique` ON `attempt_work_item` (`triage_attempt_id`,`work_item_key`);
+--> statement-breakpoint
+CREATE INDEX `attempt_work_item_attempt_state_ordinal` ON `attempt_work_item` (`triage_attempt_id`,`state`,`manifest_ordinal`,`work_item_key`);
+--> statement-breakpoint
+CREATE INDEX `attempt_work_item_active_claim_expiry` ON `attempt_work_item` (`claim_expires_at`,`attempt_work_item_id`) WHERE "attempt_work_item"."state" = 'claimed';
 --> statement-breakpoint
 CREATE TRIGGER `attempt_work_item_reject_replace`
 BEFORE INSERT ON `attempt_work_item`
@@ -262,4 +266,168 @@ WHEN NEW.`state` = 'succeeded'
 	)
 BEGIN
 	SELECT RAISE(ABORT, 'attempt_work_item terminal fact must match the work item');
+END;
+--> statement-breakpoint
+-- Official-run finalization requires one matching official attempt whose work
+-- items are all succeeded or reviewable_failure. blocked_failure blocks the
+-- seal. Candidate corrections create no run and are ignored here.
+CREATE TRIGGER `triage_run_seal_reject_incomplete`
+BEFORE INSERT ON `triage_run_seal`
+BEGIN
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE (SELECT COUNT(*) FROM `triage_run` WHERE `triage_run_id` = NEW.`triage_run_id`) <> 1
+		OR (SELECT `seal_id` FROM `triage_run` WHERE `triage_run_id` = NEW.`triage_run_id`) IS NOT NEW.`triage_run_seal_id`;
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE NOT EXISTS (
+		SELECT 1
+		FROM `triage_run` AS run_row
+		JOIN `run_input_snapshot` AS snapshot_row
+			ON snapshot_row.`run_input_snapshot_id` = run_row.`snapshot_id`
+		JOIN `corpus_manifest` AS manifest_row
+			ON manifest_row.`corpus_manifest_id` = run_row.`corpus_manifest_id`
+		JOIN `corpus_manifest_seal` AS manifest_seal
+			ON manifest_seal.`manifest_id` = manifest_row.`corpus_manifest_id`
+		WHERE run_row.`triage_run_id` = NEW.`triage_run_id`
+			AND run_row.`kind` = manifest_row.`kind`
+	);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE (SELECT COUNT(*) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`) = 0
+		OR (SELECT COUNT(*) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`) > 200
+		OR (
+			(SELECT `kind` FROM `triage_run` WHERE `triage_run_id` = NEW.`triage_run_id`) = 'main'
+			AND (SELECT COUNT(*) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`) <> 140
+		);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE (SELECT COUNT(*) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`)
+		<> (
+			SELECT COUNT(*)
+			FROM `corpus_member`
+			WHERE `manifest_id` = (
+				SELECT `corpus_manifest_id` FROM `triage_run` WHERE `triage_run_id` = NEW.`triage_run_id`
+			)
+		);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE (SELECT MIN(`import_ordinal`) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`) <> 0
+		OR (SELECT MAX(`import_ordinal`) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`)
+			<> (SELECT COUNT(*) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`) - 1
+		OR (SELECT COUNT(*) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`)
+			<> (SELECT COUNT(DISTINCT `import_ordinal`) FROM `triage_run_member` WHERE `triage_run_id` = NEW.`triage_run_id`);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE EXISTS (
+		SELECT 1
+		FROM `triage_run_member` AS member_row
+		JOIN `triage_run` AS run_row ON run_row.`triage_run_id` = NEW.`triage_run_id`
+		WHERE member_row.`triage_run_id` = NEW.`triage_run_id`
+			AND NOT EXISTS (
+				SELECT 1
+				FROM `corpus_member` AS corpus_row
+				WHERE corpus_row.`manifest_id` = run_row.`corpus_manifest_id`
+					AND corpus_row.`candidate_id` = member_row.`candidate_id`
+					AND corpus_row.`import_ordinal` = member_row.`import_ordinal`
+			)
+	);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE EXISTS (
+		SELECT 1
+		FROM `corpus_member` AS corpus_row
+		JOIN `triage_run` AS run_row ON run_row.`triage_run_id` = NEW.`triage_run_id`
+		WHERE corpus_row.`manifest_id` = run_row.`corpus_manifest_id`
+			AND NOT EXISTS (
+				SELECT 1
+				FROM `triage_run_member` AS member_row
+				WHERE member_row.`triage_run_id` = NEW.`triage_run_id`
+					AND member_row.`candidate_id` = corpus_row.`candidate_id`
+					AND member_row.`import_ordinal` = corpus_row.`import_ordinal`
+			)
+	);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE EXISTS (
+		SELECT 1
+		FROM `triage_run_member` AS member_row
+		JOIN `candidate_triage_result` AS result_row
+			ON result_row.`candidate_triage_result_id` = member_row.`initial_result_id`
+		WHERE member_row.`triage_run_id` = NEW.`triage_run_id`
+			AND (
+				result_row.`kind` <> 'initial'
+				OR result_row.`candidate_id` IS NOT member_row.`candidate_id`
+				OR NOT EXISTS (
+					SELECT 1
+					FROM `candidate_result_seal` AS result_seal
+					WHERE result_seal.`candidate_result_id` = member_row.`initial_result_id`
+				)
+			)
+	);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE EXISTS (
+		SELECT 1
+		FROM `triage_run_member` AS member_row
+		WHERE member_row.`triage_run_id` = NEW.`triage_run_id`
+			AND (
+				SELECT `current_result_id`
+				FROM `candidate_head`
+				WHERE `candidate_id` = member_row.`candidate_id`
+			) IS NOT member_row.`initial_result_id`
+	);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE (
+		SELECT COUNT(*)
+		FROM `triage_attempt` AS attempt_row
+		JOIN `triage_run` AS run_row ON run_row.`triage_run_id` = NEW.`triage_run_id`
+		WHERE attempt_row.`snapshot_id` = run_row.`snapshot_id`
+			AND attempt_row.`corpus_manifest_id` = run_row.`corpus_manifest_id`
+			AND attempt_row.`kind` = CASE run_row.`kind`
+				WHEN 'main' THEN 'main_run'
+				WHEN 'variant' THEN 'variant_run'
+			END
+	) <> 1;
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE (
+		SELECT COUNT(*)
+		FROM `attempt_work_item` AS item_row
+		JOIN `triage_attempt` AS attempt_row
+			ON attempt_row.`triage_attempt_id` = item_row.`triage_attempt_id`
+		JOIN `triage_run` AS run_row ON run_row.`triage_run_id` = NEW.`triage_run_id`
+		WHERE attempt_row.`snapshot_id` = run_row.`snapshot_id`
+			AND attempt_row.`corpus_manifest_id` = run_row.`corpus_manifest_id`
+			AND attempt_row.`kind` = CASE run_row.`kind`
+				WHEN 'main' THEN 'main_run'
+				WHEN 'variant' THEN 'variant_run'
+			END
+	) = 0;
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE EXISTS (
+		SELECT 1
+		FROM `attempt_work_item` AS item_row
+		JOIN `triage_attempt` AS attempt_row
+			ON attempt_row.`triage_attempt_id` = item_row.`triage_attempt_id`
+		JOIN `triage_run` AS run_row ON run_row.`triage_run_id` = NEW.`triage_run_id`
+		WHERE attempt_row.`snapshot_id` = run_row.`snapshot_id`
+			AND attempt_row.`corpus_manifest_id` = run_row.`corpus_manifest_id`
+			AND attempt_row.`kind` = CASE run_row.`kind`
+				WHEN 'main' THEN 'main_run'
+				WHEN 'variant' THEN 'variant_run'
+			END
+			AND item_row.`state` NOT IN ('succeeded', 'reviewable_failure')
+	);
+	SELECT RAISE(ABORT, 'triage_run_seal requires a complete official run')
+	WHERE EXISTS (
+		SELECT 1
+		FROM `triage_run_member` AS member_row
+		JOIN `triage_run` AS run_row ON run_row.`triage_run_id` = NEW.`triage_run_id`
+		WHERE member_row.`triage_run_id` = NEW.`triage_run_id`
+			AND NOT EXISTS (
+				SELECT 1
+				FROM `attempt_work_item` AS item_row
+				JOIN `triage_attempt` AS attempt_row
+					ON attempt_row.`triage_attempt_id` = item_row.`triage_attempt_id`
+				WHERE attempt_row.`snapshot_id` = run_row.`snapshot_id`
+					AND attempt_row.`corpus_manifest_id` = run_row.`corpus_manifest_id`
+					AND attempt_row.`kind` = CASE run_row.`kind`
+						WHEN 'main' THEN 'main_run'
+						WHEN 'variant' THEN 'variant_run'
+					END
+					AND item_row.`candidate_id` = member_row.`candidate_id`
+					AND item_row.`state` IN ('succeeded', 'reviewable_failure')
+			)
+	);
 END;

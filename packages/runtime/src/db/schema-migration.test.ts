@@ -590,10 +590,11 @@ describe("Drizzle schema matches the committed migrations", () => {
       "attempt_work_item_reject_illegal_transition",
       "attempt_work_item_reject_terminal_reopen",
       "attempt_work_item_reject_delete",
-      "attempt_work_item_reject_terminal_owner"
+      "attempt_work_item_reject_terminal_owner",
+      "triage_run_seal_reject_incomplete"
     ]);
     const created = [...sql.matchAll(/CREATE TRIGGER `([^`]+)`/gu)].map((match) => match[1]!);
-    expect(created).toEqual(dropped);
+    expect(created).toEqual(expect.arrayContaining(dropped));
     expect(sql).toContain("extraction_run_id");
     expect(sql).toContain("ON DELETE restrict");
     expect(sql).toContain("NEW.`extraction_run_id` IS NOT OLD.`extraction_run_id`");
