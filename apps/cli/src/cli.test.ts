@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 import { err, ok } from "@recruitos/core";
+import { DEMO_REVIEWABLE_FAILURE_SOURCE_KEY } from "@recruitos/runtime";
 import { parseArgs } from "./parser.js";
 import { runCli } from "./cli.js";
 import {
@@ -15,6 +16,14 @@ import {
 } from "./exit-codes.js";
 import { createStubComposition } from "./composition/index.js";
 import type { RecruitosComposition } from "./composition/types.js";
+import type { CommandResult } from "./commands/index.js";
+
+function parseEnvelopeData<T>(result: CommandResult): T {
+  expect(result.exitCode).toBe(EXIT_SUCCESS);
+  const envelope = JSON.parse(result.stdout ?? "{}") as { data?: T };
+  expect(envelope.data).toBeDefined();
+  return envelope.data as T;
+}
 
 describe("CLI Parser", () => {
   it("parses empty arguments to default help command", () => {
@@ -269,6 +278,179 @@ describe("CLI Commands Execution", () => {
         const second = await runCli(["demo:prepare", "--db", database]);
         expect(second.exitCode).toBe(EXIT_RUNTIME_ERROR);
         expect(second.stderr).toContain("Demo corpus imported no candidates");
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it("requests, extracts, and completes a fixture correction across CLI invocations", async () => {
+      const directory = mkdtempSync(join(tmpdir(), "recruitos-cli-correction-"));
+      const database = join(directory, "runtime.db");
+      try {
+        const prepared = parseEnvelopeData<{ candidateIds: string[] }>(
+          await runCli(["demo:prepare", "--db", database, "--json"])
+        );
+
+        let candidateId: string | undefined;
+        let originalResultId: string | undefined;
+        let candidateVersion: number | undefined;
+        for (const id of prepared.candidateIds) {
+          const packet = parseEnvelopeData<{
+            sourceKey: string;
+            resultId?: string;
+            resultKind?: string;
+            headVersion?: number;
+            reasons: string[];
+          }>(await runCli(["packet", id, "--db", database, "--json"]));
+          if (packet.sourceKey !== DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) continue;
+          candidateId = id;
+          originalResultId = packet.resultId;
+          candidateVersion = packet.headVersion;
+          expect(packet.resultKind).toBe("initial");
+          expect(packet.reasons).toContain("assessment_unavailable");
+          break;
+        }
+        expect(candidateId).toMatch(/\S/);
+        expect(originalResultId).toMatch(/\S/);
+        expect(candidateVersion).toBe(1);
+
+        const listed = parseEnvelopeData<{
+          tasks: Array<{ resolutionTaskId: string; version: number; status: string }>;
+        }>(
+          await runCli([
+            "review",
+            "--candidate",
+            candidateId ?? "",
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        const task = listed.tasks[0];
+        expect(task?.status).toBe("open");
+        expect(task?.version).toBe(0);
+
+        const inspected = parseEnvelopeData<{ status: string; actions: unknown[] }>(
+          await runCli([
+            "review",
+            "--task",
+            task?.resolutionTaskId ?? "",
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        expect(inspected.status).toBe("open");
+        expect(inspected.actions).toEqual([]);
+
+        const requested = parseEnvelopeData<{
+          triageAttemptId: string;
+          newVersion: number;
+          derivedStatus: string;
+        }>(
+          await runCli([
+            "review",
+            "--task",
+            task?.resolutionTaskId ?? "",
+            "--action",
+            "request_re_extraction",
+            "--version-num",
+            "0",
+            "--candidate-version",
+            String(candidateVersion),
+            "--actor",
+            "human:operator",
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        expect(requested.derivedStatus).toBe("open");
+        expect(requested.newVersion).toBe(1);
+        expect(requested.triageAttemptId).toMatch(/\S/);
+
+        const extracted = parseEnvelopeData<{
+          succeeded: number;
+          blockedFailures: number;
+        }>(
+          await runCli([
+            "triage:extract",
+            "--attempt",
+            requested.triageAttemptId,
+            "--demo-fixtures",
+            "--correction-overlay",
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        expect(extracted.succeeded).toBeGreaterThan(0);
+        expect(extracted.blockedFailures).toBe(0);
+
+        const completed = parseEnvelopeData<{
+          resultId: string;
+          baseResultId: string;
+          candidateHeadVersion: number;
+          derivedStatus: string;
+        }>(
+          await runCli([
+            "triage:complete-correction",
+            "--attempt",
+            requested.triageAttemptId,
+            "--version-num",
+            "1",
+            "--candidate-version",
+            String(candidateVersion),
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        expect(completed.baseResultId).toBe(originalResultId);
+        expect(completed.derivedStatus).toBe("review_required");
+        expect(completed.candidateHeadVersion).toBe(2);
+
+        const current = parseEnvelopeData<{
+          resultId?: string;
+          resultKind?: string;
+          status: string;
+          headVersion?: number;
+        }>(await runCli(["packet", candidateId ?? "", "--db", database, "--json"]));
+        expect(current.resultId).toBe(completed.resultId);
+        expect(current.resultKind).toBe("correction");
+        expect(current.status).toBe("scored");
+        expect(current.headVersion).toBe(2);
+
+        const original = parseEnvelopeData<{
+          resultId?: string;
+          resultKind?: string;
+          reasons: string[];
+        }>(
+          await runCli([
+            "packet",
+            candidateId ?? "",
+            "--result",
+            originalResultId ?? "",
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        expect(original.resultId).toBe(originalResultId);
+        expect(original.resultKind).toBe("initial");
+        expect(original.reasons).toContain("assessment_unavailable");
+
+        const after = parseEnvelopeData<{ status: string }>(
+          await runCli([
+            "review",
+            "--task",
+            task?.resolutionTaskId ?? "",
+            "--db",
+            database,
+            "--json"
+          ])
+        );
+        expect(after.status).toBe("review_required");
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
