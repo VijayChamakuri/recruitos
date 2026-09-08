@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   computeAggregateScore,
   computeConfidence,
-  DRAFT_RUBRIC_V1,
+  RUBRIC_V1,
   formatRational,
   ok,
   type Result
@@ -64,7 +64,7 @@ const CREATED_AT = 1_788_700_000_000;
 const DOCUMENT_TEXT = "ABCDEFGHIJ";
 const TRANSACTION_REQUIRED =
   "Candidate result reason rows require an active command transaction";
-const RUBRIC_DIMENSIONS = DRAFT_RUBRIC_V1.dimensions.map((dimension) => dimension.dimensionId);
+const RUBRIC_DIMENSIONS = RUBRIC_V1.dimensions.map((dimension) => dimension.dimensionId);
 
 const CANDIDATE_RESULT_REASON_COLUMNS = `
   candidate_result_reason_id text PRIMARY KEY NOT NULL,
@@ -242,11 +242,11 @@ function zeroConfidenceInput() {
 function computedScoreDraft(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const computation = unwrap(
     computeAggregateScore(
-      DRAFT_RUBRIC_V1.dimensions.map((dimension) => ({
+      RUBRIC_V1.dimensions.map((dimension) => ({
         dimensionId: dimension.dimensionId,
         level: "none" as const
       })),
-      DRAFT_RUBRIC_V1
+      RUBRIC_V1
     )
   );
   const confidenceInput = zeroConfidenceInput();
@@ -463,7 +463,7 @@ function seedRichParents(context: ImmediateTransactionContext): void {
       )
     )
   );
-  for (const dimension of DRAFT_RUBRIC_V1.dimensions) {
+  for (const dimension of RUBRIC_V1.dimensions) {
     unwrap(
       insertEvidenceGap(
         context,

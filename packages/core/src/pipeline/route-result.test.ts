@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createRational, type Rational } from "../canonical/rational.js";
 import { formatReasonCode } from "../domain/reason-code.js";
-import { DRAFT_RUBRIC_V1 } from "../rubric/draft-v1.js";
+import { RUBRIC_V1 } from "../rubric/rubric-v1.js";
 import { T_ESCALATE } from "../scoring/constants.js";
 import type { DimensionAssessment, DimensionAssessmentDerivation } from "./assess-dimensions.js";
 import type { FactConsolidation } from "./consolidate-facts.js";
@@ -14,8 +14,8 @@ import {
   type RoutingInput
 } from "./route-result.js";
 
-const REQUIRED_DIMENSION = DRAFT_RUBRIC_V1.dimensions.find((entry) => entry.required)!.dimensionId;
-const OPTIONAL_DIMENSION = DRAFT_RUBRIC_V1.dimensions.find((entry) => !entry.required)!
+const REQUIRED_DIMENSION = RUBRIC_V1.dimensions.find((entry) => entry.required)!.dimensionId;
+const OPTIONAL_DIMENSION = RUBRIC_V1.dimensions.find((entry) => !entry.required)!
   .dimensionId;
 
 function rational(numerator: bigint, denominator: bigint): Rational {
@@ -119,7 +119,7 @@ function route(
   routingInput: RoutingInput = input(),
   signals: Record<string, unknown> = NO_SIGNALS
 ): CandidateRouting {
-  const result = routeCandidateResult(routingInput, DRAFT_RUBRIC_V1, signals);
+  const result = routeCandidateResult(routingInput, RUBRIC_V1, signals);
   if (!result.ok) {
     throw new Error(result.error.message);
   }
@@ -132,18 +132,18 @@ function reasonStrings(routing: CandidateRouting): readonly string[] {
 
 describe("routeCandidateResult input validation", () => {
   it("rejects signals that are not the committed shape", () => {
-    expect(routeCandidateResult(input(), DRAFT_RUBRIC_V1, "nope")).toMatchObject({
+    expect(routeCandidateResult(input(), RUBRIC_V1, "nope")).toMatchObject({
       ok: false,
       error: { code: "invalid_input", message: "Invalid routing signals" }
     });
     expect(
-      routeCandidateResult(input(), DRAFT_RUBRIC_V1, { ...NO_SIGNALS, extra: true }).ok
+      routeCandidateResult(input(), RUBRIC_V1, { ...NO_SIGNALS, extra: true }).ok
     ).toBe(false);
   });
 
   it("requires an available result to carry confidence", () => {
     expect(
-      routeCandidateResult(input({ confidence: null }), DRAFT_RUBRIC_V1, NO_SIGNALS)
+      routeCandidateResult(input({ confidence: null }), RUBRIC_V1, NO_SIGNALS)
     ).toMatchObject({
       ok: false,
       error: {
@@ -156,7 +156,7 @@ describe("routeCandidateResult input validation", () => {
     expect(
       routeCandidateResult(
         input({ derivation: derivation({ availability: "unavailable" }) }),
-        DRAFT_RUBRIC_V1,
+        RUBRIC_V1,
         NO_SIGNALS
       ).ok
     ).toBe(false);
@@ -164,7 +164,7 @@ describe("routeCandidateResult input validation", () => {
 
   it("rejects an ambiguity subject that is not a valid reason subject", () => {
     expect(
-      routeCandidateResult(input(), DRAFT_RUBRIC_V1, {
+      routeCandidateResult(input(), RUBRIC_V1, {
         ...NO_SIGNALS,
         ambiguousSubjectIds: ["two words"]
       })
@@ -363,7 +363,7 @@ describe("routeCandidateResult low confidence", () => {
   it("honours a policy threshold the caller supplies", () => {
     const result = routeCandidateResult(
       input({ confidence: rational(95n, 100n) }),
-      DRAFT_RUBRIC_V1,
+      RUBRIC_V1,
       NO_SIGNALS,
       { ...DEFAULT_ROUTING_POLICY, escalateThreshold: rational(99n, 100n) }
     );

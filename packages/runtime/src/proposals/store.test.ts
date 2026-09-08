@@ -7,7 +7,7 @@ import {
   computeAggregateScore,
   computeConfidence,
   createDomainError,
-  DRAFT_RUBRIC_V1,
+  RUBRIC_V1,
   err,
   formatRational,
   ok,
@@ -86,7 +86,7 @@ const PROPOSAL_TRANSACTION_REQUIRED = "Proposal rows require an active command t
 const DECISION_TRANSACTION_REQUIRED =
   "Review decision rows require an active command transaction";
 const HEAD_TRANSACTION_REQUIRED = "Proposal head rows require an active command transaction";
-const RUBRIC_DIMENSIONS = DRAFT_RUBRIC_V1.dimensions.map((dimension) => dimension.dimensionId);
+const RUBRIC_DIMENSIONS = RUBRIC_V1.dimensions.map((dimension) => dimension.dimensionId);
 
 const PROPOSAL_COLUMNS = `
   proposal_id text PRIMARY KEY NOT NULL,
@@ -404,11 +404,11 @@ function zeroConfidenceInput() {
 function computedScoreDraft(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const computation = unwrap(
     computeAggregateScore(
-      DRAFT_RUBRIC_V1.dimensions.map((dimension) => ({
+      RUBRIC_V1.dimensions.map((dimension) => ({
         dimensionId: dimension.dimensionId,
         level: "none" as const
       })),
-      DRAFT_RUBRIC_V1
+      RUBRIC_V1
     )
   );
   const confidenceInput = zeroConfidenceInput();
@@ -604,7 +604,7 @@ function seedRichParents(context: ImmediateTransactionContext): void {
       )
     )
   );
-  for (const dimension of DRAFT_RUBRIC_V1.dimensions) {
+  for (const dimension of RUBRIC_V1.dimensions) {
     unwrap(
       insertEvidenceGap(
         context,
