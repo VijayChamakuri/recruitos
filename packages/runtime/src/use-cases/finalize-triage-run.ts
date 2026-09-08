@@ -56,7 +56,8 @@ import {
   insertHardRequirementAssessment,
   insertStructuredFact,
   prepareHardRequirementAssessment,
-  prepareStructuredFact
+  prepareStructuredFact,
+  readStructuredFactByContentHash
 } from "../facts/index.js";
 import { createHardRequirementPolicyV1 } from "../policy/index.js";
 import { insertResolutionTask, prepareResolutionTask } from "../resolution/index.js";
@@ -1252,6 +1253,27 @@ function persistCompleteResult(args: {
     if (!preparedFact.ok) {
       return preparedFact;
     }
+    if (args.skipExistingSpans) {
+      const existingFact = readStructuredFactByContentHash(
+        args.context,
+        preparedFact.value.contentHash
+      );
+      /* v8 ignore next 3 -- store readers fail only on invalid stored rows */
+      if (!existingFact.ok) {
+        return existingFact;
+      }
+      if (existingFact.value !== undefined) {
+        /* v8 ignore next 5 -- fact content hash includes candidateId */
+        if (existingFact.value.candidateId !== args.candidateId) {
+          return err(
+            finalizeFailure("Structured fact content hash belongs to another candidate")
+          );
+        }
+        factIdsByKey.set(fact.factKey, existingFact.value.structuredFactId);
+        structuredFactIds.push(existingFact.value.structuredFactId);
+        continue;
+      }
+    }
     const insertedFact = insertStructuredFact(args.context, preparedFact.value);
     /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!insertedFact.ok) {
@@ -1308,6 +1330,17 @@ function persistCompleteResult(args: {
     /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!preparedRequirement.ok) {
       return preparedRequirement;
+    }
+    if (args.skipExistingSpans) {
+      const existingRequirement = args.context.nativeDatabase
+        .prepare(
+          "SELECT hard_requirement_assessment_id AS id FROM hard_requirement_assessment WHERE content_hash = ?"
+        )
+        .get(preparedRequirement.value.contentHash) as { id: string } | undefined;
+      if (existingRequirement !== undefined) {
+        requirementIds.push(existingRequirement.id);
+        continue;
+      }
     }
     const insertedRequirement = insertHardRequirementAssessment(args.context, preparedRequirement.value);
     /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
