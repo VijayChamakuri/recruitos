@@ -671,6 +671,34 @@ describe("finalizeTriageRun", () => {
     expect(taskCount.count).toBe(packet.reasons.length);
   });
 
+  it("finalizes a run whose work items predate extraction_run persistence", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+
+    // Simulate rows written before the scheduler linked an extraction_run.
+    const db = nativeDatabase(runtime);
+    for (const trigger of [
+      "attempt_work_item_reject_terminal_reopen",
+      "attempt_work_item_reject_terminal_owner",
+      "attempt_work_item_reject_pinned_update",
+      "attempt_work_item_reject_illegal_transition"
+    ]) {
+      db.exec(`DROP TRIGGER IF EXISTS ${trigger}`);
+    }
+    db.prepare("UPDATE attempt_work_item SET extraction_run_id = NULL").run();
+
+    const result = unwrap(
+      finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId })
+    );
+    expect(result.result.candidateCount).toBe(1);
+    const packet = unwrap(readCandidatePacket(runtime.connection.database, "cand-1"));
+    expect(packet.resultAvailability).toBe("complete");
+    // Fallback: every assessment span counts as both returned and located.
+    expect(packet.confidenceInput?.spansReturned).toBe(packet.confidenceInput?.spansLocated);
+    expect(packet.confidenceInput?.spansLocated).toBeGreaterThan(0);
+  });
+
   it("writes an unavailable packet for reviewable extraction failure", async () => {
     const { runtime, adapter } = await createTestRuntime();
     seedCandidates(runtime, ["cand-1"]);

@@ -619,6 +619,36 @@ describe("deriveCandidateDecision end-to-end", () => {
     expect(decision.proposals.proposals[0]?.payload.kind).toBe("shortlist_inclusion");
   });
 
+  it("drives the confidence resolution term from resolutionSpanCounts when provided", () => {
+    const extractions: CandidateExtractionResultInput[] = RUBRIC_V1.dimensions.map((dim) => ({
+      candidateDocumentId: "cdoc_1",
+      dimensionId: dim.dimensionId,
+      artifact: createFakeArtifact(dim.dimensionId, "strong")
+    }));
+    const base = {
+      candidateId: "cand_res",
+      documents: [SAMPLE_DOC],
+      extractions,
+      rubric: RUBRIC_V1,
+      hardRequirementPolicy
+    } as const;
+
+    const withoutCounts = deriveCandidateDecision({ ...base });
+    const withCounts = deriveCandidateDecision({
+      ...base,
+      resolutionSpanCounts: { spansReturned: 12, spansLocated: 3 }
+    });
+    expect(withoutCounts.ok && withCounts.ok).toBe(true);
+    if (!withoutCounts.ok || !withCounts.ok) return;
+
+    expect(withCounts.value.confidenceInput?.spansReturned).toBe(12);
+    expect(withCounts.value.confidenceInput?.spansLocated).toBe(3);
+    // A returned-but-unlocated quote lowers the resolution term, so confidence drops.
+    const a = withCounts.value.confidence!;
+    const b = withoutCounts.value.confidence!;
+    expect(a.numerator * b.denominator).toBeLessThan(b.numerator * a.denominator);
+  });
+
   it("derives decision when no structured facts exist (safe unknown escalation)", () => {
     // All dimensions have strong artifacts
     const extractions: CandidateExtractionResultInput[] = RUBRIC_V1.dimensions.map(

@@ -130,6 +130,16 @@ export type DeriveCandidateDecisionInput = CandidateBridgeInput &
     routingPolicy?: RoutingPolicy | undefined;
     isVariant?: boolean | undefined;
     duplicateSuppressed?: boolean | undefined;
+    /**
+     * Returned and located span totals aggregated from the candidate's
+     * `extraction_run` rows. When present these drive the confidence resolution
+     * term, so an unlocated extractor quote actually lowers confidence. When
+     * absent (a run finalized before extraction_run persistence) the term falls
+     * back to treating every assessment span as both returned and located.
+     */
+    resolutionSpanCounts?:
+      | Readonly<{ spansReturned: number; spansLocated: number }>
+      | undefined;
   }>;
 
 export type CandidateDecisionOutput = Readonly<{
@@ -462,12 +472,14 @@ export function deriveCandidateDecision(
     for (const a of dimensionDerivation.assessments) {
       spansLocated += a.supportingSpanIds.length + a.contradictingSpanIds.length;
     }
+    const resolutionLocated = input.resolutionSpanCounts?.spansLocated ?? spansLocated;
+    const resolutionReturned = input.resolutionSpanCounts?.spansReturned ?? spansLocated;
 
     confidenceInput = {
       dimensionsWithLocatedSpan: NonnegativeIntegerSchema.parse(dimensionsWithLocatedSpan),
       totalDimensions: PositiveIntegerSchema.parse(input.rubric.dimensions.length),
-      spansLocated: NonnegativeIntegerSchema.parse(spansLocated),
-      spansReturned: NonnegativeIntegerSchema.parse(spansLocated),
+      spansLocated: NonnegativeIntegerSchema.parse(resolutionLocated),
+      spansReturned: NonnegativeIntegerSchema.parse(resolutionReturned),
       contradictionCount: NonnegativeIntegerSchema.parse(
         dimensionDerivation.assessments.reduce((sum, a) => sum + a.contradictingSpanIds.length, 0)
       ),

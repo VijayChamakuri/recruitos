@@ -51,7 +51,8 @@ import {
   insertExtractionSpec,
   prepareExtractionSpec,
   readExtractionArtifact,
-  readExtractionFailure
+  readExtractionFailure,
+  readExtractionRun
 } from "../extraction/index.js";
 import { insertRole, prepareRole } from "../roles/index.js";
 import { insertRunInputSnapshot, prepareRunInputSnapshot } from "../snapshots/index.js";
@@ -479,6 +480,147 @@ describe("runExtractionAttempt", () => {
     expect(summary.droppedQuotes).toEqual([
       { quotedText: "led a team of fifty", dimensionId: DIMENSION, reason: "unlocated" }
     ]);
+    unwrap(runtime.close());
+  });
+
+  it("records and links an extraction_run on a completed work item", async () => {
+    const adapter = createFixtureExtractionAdapter();
+    adapter.registerFixture(
+      requestHash(specContentHash(), RESUME_TEXT),
+      responseBody({
+        spans: [
+          { quotedText: "ran holdout evaluations", polarity: "supporting" },
+          { quotedText: "led a team of fifty", polarity: "supporting" }
+        ]
+      })
+    );
+    const runtime = await seed([{ index: 0, rawText: RESUME_TEXT }], adapter);
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId: "triage-attempt-1" }));
+
+    const items = unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        readAttemptWorkItems(context, "triage-attempt-1")
+      )
+    );
+    expect(items[0]!.extractionRunId).not.toBeNull();
+    const run = unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        readExtractionRun(context, items[0]!.extractionRunId)
+      )
+    );
+    expect(run).toMatchObject({
+      spansReturned: 2,
+      spansLocated: 1,
+      modelId: "test-extractor",
+      fixtureKey: requestHash(specContentHash(), RESUME_TEXT)
+    });
+    expect(run!.droppedQuotes).toEqual([
+      { quotedText: "led a team of fifty", dimensionId: DIMENSION, reason: "unlocated" }
+    ]);
+    unwrap(runtime.close());
+  });
+
+  it("records and links an extraction_run on a reviewable failure", async () => {
+    const adapter = createFixtureExtractionAdapter();
+    adapter.registerFixture(
+      requestHash(specContentHash(), RESUME_TEXT),
+      responseBody({
+        proposedLevel: "strong",
+        spans: [{ quotedText: "absent from the resume", polarity: "supporting" }]
+      })
+    );
+    const runtime = await seed([{ index: 0, rawText: RESUME_TEXT }], adapter);
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId: "triage-attempt-1" }));
+
+    const items = unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        readAttemptWorkItems(context, "triage-attempt-1")
+      )
+    );
+    expect(items[0]!.state).toBe("reviewable_failure");
+    expect(items[0]!.extractionRunId).not.toBeNull();
+    const run = unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        readExtractionRun(context, items[0]!.extractionRunId)
+      )
+    );
+    expect(run).toMatchObject({ spansReturned: 1, spansLocated: 0 });
+    unwrap(runtime.close());
+  });
+
+  it("records an extraction_run with zero spans on a blocked provider failure", async () => {
+    const runtime = await seed(
+      [{ index: 0, rawText: RESUME_TEXT }],
+      failingAdapter("provider offline")
+    );
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId: "triage-attempt-1" }));
+    const items = unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        readAttemptWorkItems(context, "triage-attempt-1")
+      )
+    );
+    expect(items[0]!.extractionRunId).not.toBeNull();
+    const run = unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        readExtractionRun(context, items[0]!.extractionRunId)
+      )
+    );
+    expect(run).toMatchObject({ spansReturned: 0, spansLocated: 0, fixtureKey: null });
+    expect(run!.droppedQuotes).toEqual([]);
+    unwrap(runtime.close());
+  });
+
+  it("records a null fixture key when the adapter is in live mode", async () => {
+    const body = responseBody();
+    const liveAdapter: ExtractionAdapter = {
+      descriptor: { adapterId: "live-stub", mode: "live", contractVersion: 1 },
+      extract: () =>
+        Promise.resolve({
+          ok: true,
+          value: {
+            extractionSpecHash: requestHash(specContentHash(), RESUME_TEXT),
+            descriptor: { adapterId: "live-stub", mode: "live", contractVersion: 1 },
+            body,
+            bodyHash: sha256Hex(body)
+          }
+        })
+    };
+    const runtime = await seed([{ index: 0, rawText: RESUME_TEXT }], liveAdapter);
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId: "triage-attempt-1" }));
+    const items = unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        readAttemptWorkItems(context, "triage-attempt-1")
+      )
+    );
+    const run = unwrap(
+      runImmediateTransaction(runtime.connection, (context) =>
+        readExtractionRun(context, items[0]!.extractionRunId)
+      )
+    );
+    expect(run!.fixtureKey).toBeNull();
+    expect(run!.spansLocated).toBe(1);
+    unwrap(runtime.close());
+  });
+
+  it("propagates a failure inserting the extraction_run on completion", async () => {
+    const adapter = createFixtureExtractionAdapter();
+    adapter.registerFixture(requestHash(specContentHash(), RESUME_TEXT), responseBody());
+    const runtime = await seed([{ index: 0, rawText: RESUME_TEXT }], adapter);
+    const result = await runExtractionAttempt(
+      withFailingSql(runtime, "INSERT INTO extraction_run"),
+      { triageAttemptId: "triage-attempt-1" }
+    );
+    expect(result).toMatchObject({ ok: false });
+    unwrap(runtime.close());
+  });
+
+  it("propagates a failure inserting the extraction_run on a recorded failure", async () => {
+    const runtime = await seed([{ index: 0, rawText: RESUME_TEXT }], createFixtureExtractionAdapter());
+    const result = await runExtractionAttempt(
+      withFailingSql(runtime, "INSERT INTO extraction_run"),
+      { triageAttemptId: "triage-attempt-1" }
+    );
+    expect(result).toMatchObject({ ok: false });
     unwrap(runtime.close());
   });
 

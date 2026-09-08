@@ -47,9 +47,11 @@ import {
 import {
   readExtractionArtifact,
   readExtractionFailure,
+  readExtractionRun,
   type ExtractionArtifact,
   type ExtractionFailure
 } from "../extraction/index.js";
+import type { ExtractionRun } from "../evidence/index.js";
 import {
   insertHardRequirementAssessment,
   insertStructuredFact,
@@ -144,14 +146,27 @@ type CandidateDocumentRow = Readonly<{
   normalizedHash: string;
 }>;
 
+type ResolutionSpanCounts = Readonly<{ spansReturned: number; spansLocated: number }>;
+
 type HydratedWorkItem =
-  | Readonly<{ workItem: AttemptWorkItem; artifact: ExtractionArtifact; failure: null }>
-  | Readonly<{ workItem: AttemptWorkItem; artifact: null; failure: ExtractionFailure }>;
+  | Readonly<{
+      workItem: AttemptWorkItem;
+      artifact: ExtractionArtifact;
+      failure: null;
+      extractionRun: ExtractionRun | null;
+    }>
+  | Readonly<{
+      workItem: AttemptWorkItem;
+      artifact: null;
+      failure: ExtractionFailure;
+      extractionRun: ExtractionRun | null;
+    }>;
 
 type CandidateGroup = Readonly<{
   candidateId: string;
   artifacts: ExtractionArtifact[];
   extractions: CandidateExtractionResultInput[];
+  resolutionSpanCounts: ResolutionSpanCounts | null;
 }>;
 
 type PlannedWorkItemIdentity = Readonly<{
@@ -171,6 +186,7 @@ type SnapshotCandidate = Readonly<{
   artifacts: readonly ExtractionArtifact[];
   extractions: readonly CandidateExtractionResultInput[];
   workAuthorization: CandidateApplicationAnswer | undefined;
+  resolutionSpanCounts: ResolutionSpanCounts | undefined;
 }>;
 
 type FinalizeSnapshot = Readonly<{
@@ -377,7 +393,8 @@ function snapshotFinalizeInputs(
         documents,
         artifacts: group.artifacts,
         extractions: group.extractions,
-        workAuthorization: workAuthResult.value
+        workAuthorization: workAuthResult.value,
+        resolutionSpanCounts: group.resolutionSpanCounts ?? undefined
       });
     }
 
@@ -417,7 +434,8 @@ function deriveFinalizePlan(args: {
           : { workAuthorization: candidate.workAuthorization },
       rubric: args.rubric,
       hardRequirementPolicy: policyResult.value,
-      isVariant: args.snapshot.attempt.kind === "variant_run"
+      isVariant: args.snapshot.attempt.kind === "variant_run",
+      resolutionSpanCounts: candidate.resolutionSpanCounts
     });
     if (!decisionResult.ok) {
       return decisionResult;
@@ -813,12 +831,38 @@ function replayCommandId(idGenerator: IdGenerator, commandId: string): IdGenerat
   };
 }
 
+function hydrateWorkItemRun(
+  context: ImmediateTransactionContext,
+  workItem: AttemptWorkItem
+): Result<ExtractionRun | null, RuntimeError> {
+  if (workItem.extractionRunId === null) {
+    return ok(null);
+  }
+  const run = readExtractionRun(context, workItem.extractionRunId);
+  /* v8 ignore next 8 -- extraction_run_id is a non-null FK the scheduler always writes */
+  if (!run.ok) {
+    return run;
+  }
+  if (run.value === undefined) {
+    return err(
+      createRuntimeError("not_found", `Extraction run "${workItem.extractionRunId}" not found`, false)
+    );
+  }
+  return ok(run.value);
+}
+
 function hydrateWorkItems(
   context: ImmediateTransactionContext,
   workItems: readonly AttemptWorkItem[]
 ): Result<HydratedWorkItem[], RuntimeError> {
   const hydrated: HydratedWorkItem[] = [];
   for (const workItem of workItems) {
+    const runResult = hydrateWorkItemRun(context, workItem);
+    /* v8 ignore next 3 -- hydrateWorkItemRun only fails on unreachable DB-integrity faults. */
+    if (!runResult.ok) {
+      return runResult;
+    }
+    const extractionRun = runResult.value;
     if (workItem.state === "succeeded") {
       // attempt_work_item_state_shape requires a non-null artifact id on succeeded rows.
       /* v8 ignore next 5 -- CHECK attempt_work_item_state_shape */
@@ -837,7 +881,7 @@ function hydrateWorkItems(
           createRuntimeError("not_found", `Extraction artifact "${workItem.extractionArtifactId}" not found`, false)
         );
       }
-      hydrated.push({ workItem, artifact: artifact.value, failure: null });
+      hydrated.push({ workItem, artifact: artifact.value, failure: null, extractionRun });
       continue;
     }
     // attempt_work_item_state_shape requires a non-null failure id on reviewable_failure rows.
@@ -857,16 +901,21 @@ function hydrateWorkItems(
         createRuntimeError("not_found", `Extraction failure "${workItem.extractionFailureId}" not found`, false)
       );
     }
-    hydrated.push({ workItem, artifact: null, failure: failure.value });
+    hydrated.push({ workItem, artifact: null, failure: failure.value, extractionRun });
   }
   return ok(hydrated);
 }
 
+type CandidateGroupAccumulator = {
+  artifacts: ExtractionArtifact[];
+  extractions: CandidateExtractionResultInput[];
+  spansReturned: number;
+  spansLocated: number;
+  runCount: number;
+};
+
 function groupCandidates(hydrated: readonly HydratedWorkItem[]): CandidateGroup[] {
-  const groups = new Map<
-    string,
-    { artifacts: ExtractionArtifact[]; extractions: CandidateExtractionResultInput[] }
-  >();
+  const groups = new Map<string, CandidateGroupAccumulator>();
   for (const item of hydrated) {
     let extraction: CandidateExtractionResultInput;
     if (item.artifact !== null) {
@@ -883,23 +932,28 @@ function groupCandidates(hydrated: readonly HydratedWorkItem[]): CandidateGroup[
         reviewableFailure: true
       };
     }
-    const existing = groups.get(item.workItem.candidateId);
-    if (existing === undefined) {
-      groups.set(item.workItem.candidateId, {
-        artifacts: item.artifact === null ? [] : [item.artifact],
-        extractions: [extraction]
-      });
-      continue;
-    }
+    const existing =
+      groups.get(item.workItem.candidateId) ??
+      { artifacts: [], extractions: [], spansReturned: 0, spansLocated: 0, runCount: 0 };
     if (item.artifact !== null) {
       existing.artifacts.push(item.artifact);
     }
     existing.extractions.push(extraction);
+    if (item.extractionRun !== null) {
+      existing.spansReturned += item.extractionRun.spansReturned;
+      existing.spansLocated += item.extractionRun.spansLocated;
+      existing.runCount += 1;
+    }
+    groups.set(item.workItem.candidateId, existing);
   }
   return [...groups.entries()].map(([candidateId, group]) => ({
     candidateId,
     artifacts: group.artifacts,
-    extractions: group.extractions
+    extractions: group.extractions,
+    resolutionSpanCounts:
+      group.runCount === 0
+        ? null
+        : { spansReturned: group.spansReturned, spansLocated: group.spansLocated }
   }));
 }
 
