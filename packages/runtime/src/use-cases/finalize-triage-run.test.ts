@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { RUBRIC_V1, canonicalJsonStringify, sha256Hex, type Result } from "@recruitos/core";
-import type BetterSqlite3 from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import BetterSqlite3 from "better-sqlite3";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createFixtureExtractionAdapter,
@@ -42,6 +42,7 @@ import {
 } from "../entities/index.js";
 import type { RuntimeError } from "../errors/index.js";
 import { readCandidatePacket } from "../read-models/index.js";
+import * as candidateResults from "../results/index.js";
 import {
   insertResolutionAction,
   prepareResolutionAction
@@ -62,6 +63,7 @@ const ROLE_ID = "role-applied-ai-engineer";
 const ACTOR_ID = "actor-recruiter-1";
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   while (temporaryDirectories.length > 0) {
     const dir = temporaryDirectories.pop();
     if (dir !== undefined) {
@@ -303,6 +305,53 @@ function seedWorkAuthorization(
 function dropWorkItemTerminalTriggers(db: BetterSqlite3.Database): void {
   db.exec("DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_reopen");
   db.exec("DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_owner");
+}
+
+function dropCorpusMemberDeleteTriggers(db: BetterSqlite3.Database): void {
+  db.exec("DROP TRIGGER IF EXISTS corpus_member_document_reject_delete");
+  db.exec("DROP TRIGGER IF EXISTS corpus_member_reject_delete");
+}
+
+function deleteCorpusMembers(db: BetterSqlite3.Database, corpusManifestId: string): void {
+  dropCorpusMemberDeleteTriggers(db);
+  db.prepare(
+    `DELETE FROM corpus_member_document
+     WHERE corpus_member_id IN (
+       SELECT corpus_member_id FROM corpus_member WHERE manifest_id = ?
+     )`
+  ).run(corpusManifestId);
+  db.prepare("DELETE FROM corpus_member WHERE manifest_id = ?").run(corpusManifestId);
+}
+
+function tryBeginImmediate(
+  filename: string,
+  busyTimeoutMs: number
+): { acquired: true; database: BetterSqlite3.Database } | { acquired: false; code: string } {
+  const sqlite = new BetterSqlite3(filename);
+  sqlite.pragma(`busy_timeout = ${busyTimeoutMs}`);
+  try {
+    sqlite.exec("BEGIN IMMEDIATE");
+    return { acquired: true, database: sqlite };
+  } catch (error) {
+    sqlite.close();
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "unknown";
+    return { acquired: false, code };
+  }
+}
+
+function onFirstDerive(mutate: () => void): void {
+  const original = candidateResults.deriveCandidateDecision;
+  let first = true;
+  vi.spyOn(candidateResults, "deriveCandidateDecision").mockImplementation((input) => {
+    if (first) {
+      first = false;
+      mutate();
+    }
+    return original(input);
+  });
 }
 
 function rewriteStoredArtifacts(
@@ -1148,5 +1197,170 @@ describe("finalizeTriageRun", () => {
       )
       .get(packet.resultId) as { count: number };
     expect(gapCount.count).toBe(RUBRIC_V1.dimensions.length);
+  });
+
+  it("does not execute deriveCandidateDecision while a SQLite transaction is open", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    const original = candidateResults.deriveCandidateDecision;
+    const spy = vi.spyOn(candidateResults, "deriveCandidateDecision").mockImplementation((input) => {
+      expect(db.inTransaction).toBe(false);
+      return original(input);
+    });
+
+    unwrap(finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId }));
+    expect(spy).toHaveBeenCalled();
+    expect(db.inTransaction).toBe(false);
+  });
+
+  it("blocks a concurrent writer only during the short finalize commit", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    const original = candidateResults.deriveCandidateDecision;
+    vi.spyOn(candidateResults, "deriveCandidateDecision").mockImplementation((input) => {
+      expect(db.inTransaction).toBe(false);
+      const planningLock = tryBeginImmediate(db.name, 50);
+      expect(planningLock.acquired).toBe(true);
+      if (planningLock.acquired) {
+        planningLock.database.exec(
+          "CREATE TABLE finalize_plan_lock_probe (id INTEGER PRIMARY KEY NOT NULL) STRICT"
+        );
+        planningLock.database.exec("INSERT INTO finalize_plan_lock_probe (id) VALUES (1)");
+        planningLock.database.exec("COMMIT");
+        planningLock.database.close();
+      }
+      return original(input);
+    });
+
+    let commitBlocked = false;
+    const guarded = {
+      ...runtime,
+      idGenerator: {
+        next: () => {
+          if (db.inTransaction && !commitBlocked) {
+            const commitLock = tryBeginImmediate(db.name, 1);
+            expect(commitLock.acquired).toBe(false);
+            if (!commitLock.acquired) {
+              expect(commitLock.code).toMatch(/^SQLITE_(?:BUSY|LOCKED)/u);
+              commitBlocked = true;
+            }
+          }
+          return runtime.idGenerator.next();
+        }
+      }
+    };
+
+    unwrap(finalizeTriageRun(guarded, { actorId: ACTOR_ID, triageAttemptId }));
+    expect(commitBlocked).toBe(true);
+    expect(
+      db.prepare("SELECT COUNT(*) AS count FROM finalize_plan_lock_probe").get()
+    ).toEqual({ count: 1 });
+  });
+
+  it("refuses commit when work item identities change after planning", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    onFirstDerive(() => {
+      const workItem = db
+        .prepare(
+          `SELECT attempt_work_item_id AS id
+           FROM attempt_work_item
+           WHERE triage_attempt_id = ?
+           LIMIT 1`
+        )
+        .get(triageAttemptId) as { id: string };
+      db.prepare(
+        `UPDATE attempt_work_item
+         SET version = version + 1, updated_at = updated_at + 1
+         WHERE attempt_work_item_id = ?`
+      ).run(workItem.id);
+    });
+
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "command_conflict",
+        message: "Finalize plan is stale: work item identities changed"
+      })
+    });
+  });
+
+  it("refuses commit when corpus membership changes after planning", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    const attempt = db
+      .prepare(
+        `SELECT corpus_manifest_id AS corpusManifestId
+         FROM triage_attempt WHERE triage_attempt_id = ?`
+      )
+      .get(triageAttemptId) as { corpusManifestId: string };
+    onFirstDerive(() => {
+      deleteCorpusMembers(db, attempt.corpusManifestId);
+    });
+
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "command_conflict",
+        message: "Finalize plan is stale: corpus membership changed"
+      })
+    });
+  });
+
+  it("refuses commit when the attempt version changes after planning", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    onFirstDerive(() => {
+      db.prepare(
+        `UPDATE triage_attempt
+         SET version = version + 1, updated_at = updated_at + 1
+         WHERE triage_attempt_id = ?`
+      ).run(triageAttemptId);
+    });
+
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "version_conflict",
+        message: "Finalize plan is stale: attempt version changed"
+      })
+    });
+  });
+
+  it("refuses commit when another finalize seals the run after planning", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    onFirstDerive(() => {
+      unwrap(
+        finalizeTriageRun(runtime, {
+          actorId: ACTOR_ID,
+          triageAttemptId,
+          triageRunId: "competing-finalize-run"
+        })
+      );
+    });
+
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "command_conflict",
+        message: expect.stringContaining("A triage run already exists")
+      })
+    });
   });
 });
