@@ -511,6 +511,85 @@ describe("readCandidatePacket Read Model", () => {
       expect(packet.headVersion).toBe(1);
       expect(packet.resultStatus).toBe("scored");
       expect(packet.isSealed).toBe(false);
+      expect(packet.scoreAggregateText).toBeNull();
+      expect(packet.scoreConfidenceText).toBeNull();
+      expect(packet.scoreAggregateBasisPoints).toBeNull();
+      expect(packet.scoreConfidenceBasisPoints).toBeNull();
+      expect(packet.confidenceInput).toBeNull();
+      expect(packet.reasons).toEqual([]);
+
+      nativeDb.prepare(`
+        INSERT INTO score_result (
+          score_result_id, candidate_result_id, aggregate_text, confidence_text,
+          aggregate_basis_points, confidence_basis_points, content_json, content_hash, created_at
+        ) VALUES (
+          'score-valid', 'res-1', '1/2', '3/4', 5000, 7500,
+          '{"contributions":[1,2,3,4,5,6],"confidenceInput":{"contradictionCount":0,"dimensionsWithLocatedSpan":6,"requiredFieldsMissing":2,"spansLocated":6,"spansReturned":6,"totalDimensions":6,"totalRequiredFields":4}}',
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          1000
+        )
+      `).run();
+
+      const scoredPacket = readCandidatePacket(connection.database, "cand-1");
+      expect(scoredPacket.ok).toBe(true);
+      if (scoredPacket.ok) {
+        expect(scoredPacket.value.scoreAggregateText).toBe("1/2");
+        expect(scoredPacket.value.scoreConfidenceText).toBe("3/4");
+        expect(scoredPacket.value.scoreAggregateBasisPoints).toBe(5000);
+        expect(scoredPacket.value.scoreConfidenceBasisPoints).toBe(7500);
+        expect(scoredPacket.value.confidenceInput).toEqual({
+          contradictionCount: 0,
+          dimensionsWithLocatedSpan: 6,
+          requiredFieldsMissing: 2,
+          spansLocated: 6,
+          spansReturned: 6,
+          totalDimensions: 6,
+          totalRequiredFields: 4
+        });
+      }
+
+      nativeDb.exec("DROP TRIGGER IF EXISTS score_result_reject_update");
+      nativeDb.prepare(
+        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6]}' WHERE score_result_id = 'score-valid'"
+      ).run();
+      const missingInput = readCandidatePacket(connection.database, "cand-1");
+      expect(missingInput.ok && missingInput.value.confidenceInput).toBeNull();
+
+      nativeDb.prepare(
+        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6],\"confidenceInput\":null}' WHERE score_result_id = 'score-valid'"
+      ).run();
+      const nullInput = readCandidatePacket(connection.database, "cand-1");
+      expect(nullInput.ok && nullInput.value.confidenceInput).toBeNull();
+
+      nativeDb.prepare(
+        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6],\"confidenceInput\":[]}' WHERE score_result_id = 'score-valid'"
+      ).run();
+      const arrayInput = readCandidatePacket(connection.database, "cand-1");
+      expect(arrayInput.ok && arrayInput.value.confidenceInput).toBeNull();
+
+      nativeDb.prepare(
+        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6],\"confidenceInput\":5}' WHERE score_result_id = 'score-valid'"
+      ).run();
+      const numberInput = readCandidatePacket(connection.database, "cand-1");
+      expect(numberInput.ok && numberInput.value.confidenceInput).toBeNull();
+
+      nativeDb.prepare(
+        "UPDATE score_result SET content_json = '{\"contributions\":[1,2,3,4,5,6],\"confidenceInput\":{\"contradictionCount\":0}}' WHERE score_result_id = 'score-valid'"
+      ).run();
+      const partialInput = readCandidatePacket(connection.database, "cand-1");
+      expect(partialInput.ok && partialInput.value.confidenceInput).toBeNull();
+
+      nativeDb.prepare(`
+        INSERT INTO candidate_result_reason (
+          candidate_result_reason_id, candidate_result_id, reason_kind, subject_id,
+          reason_code, reason_ordinal, created_at
+        ) VALUES (
+          'reason-1', 'res-1', 'missing_evidence', 'years_experience',
+          'missing_evidence:years_experience', 0, 1000
+        )
+      `).run();
+      const withReasons = readCandidatePacket(connection.database, "cand-1");
+      expect(withReasons.ok && withReasons.value.reasons).toEqual(["missing_evidence:years_experience"]);
 
       // Now seal the result and verify isSealed is true
       nativeDb.prepare(`

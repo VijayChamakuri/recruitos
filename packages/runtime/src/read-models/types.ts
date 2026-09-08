@@ -82,6 +82,16 @@ export interface ListResolutionTasksOptions {
   readonly candidateId?: string | undefined;
 }
 
+export interface CandidatePacketConfidenceInput {
+  readonly contradictionCount: number;
+  readonly dimensionsWithLocatedSpan: number;
+  readonly requiredFieldsMissing: number;
+  readonly spansLocated: number;
+  readonly spansReturned: number;
+  readonly totalDimensions: number;
+  readonly totalRequiredFields: number;
+}
+
 export interface CandidatePacketModel {
   readonly candidateId: string;
   readonly sourceSystem: string;
@@ -98,6 +108,12 @@ export interface CandidatePacketModel {
   readonly contentHash: string;
   readonly sealId: string;
   readonly isSealed: boolean;
+  readonly scoreAggregateText: string | null;
+  readonly scoreConfidenceText: string | null;
+  readonly scoreAggregateBasisPoints: number | null;
+  readonly scoreConfidenceBasisPoints: number | null;
+  readonly confidenceInput: CandidatePacketConfidenceInput | null;
+  readonly reasons: readonly string[];
 }
 
 export interface IndexPlanStep {

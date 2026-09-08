@@ -2,7 +2,7 @@ import { err, ok, type Result } from "@recruitos/core";
 
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
 import { getNativeDatabase } from "./native-db.js";
-import type { CandidatePacketModel } from "./types.js";
+import type { CandidatePacketConfidenceInput, CandidatePacketModel } from "./types.js";
 
 interface CandidateHeadRow {
   candidateId: string;
@@ -23,6 +23,62 @@ interface ResultRow {
   resultStatus: "scored" | "rejected_hard_requirement" | "escalated";
   contentHash: string;
   sealId: string;
+}
+
+interface ScoreRow {
+  aggregateText: string;
+  confidenceText: string;
+  aggregateBasisPoints: number;
+  confidenceBasisPoints: number;
+  contentJson: string;
+}
+
+interface ReasonRow {
+  reasonCode: string;
+}
+
+function readConfidenceInput(contentJson: string | undefined): CandidatePacketConfidenceInput | null {
+  if (contentJson === undefined) {
+    return null;
+  }
+  try {
+    const decoded: unknown = JSON.parse(contentJson);
+    /* v8 ignore next 3 -- score_result CHECK requires a JSON object. */
+    if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) {
+      return null;
+    }
+    const confidenceInput = (decoded as { confidenceInput?: unknown }).confidenceInput;
+    if (confidenceInput === null || typeof confidenceInput !== "object" || Array.isArray(confidenceInput)) {
+      return null;
+    }
+    const record = confidenceInput as Record<string, unknown>;
+    const fields = [
+      "contradictionCount",
+      "dimensionsWithLocatedSpan",
+      "requiredFieldsMissing",
+      "spansLocated",
+      "spansReturned",
+      "totalDimensions",
+      "totalRequiredFields"
+    ] as const;
+    for (const field of fields) {
+      if (typeof record[field] !== "number") {
+        return null;
+      }
+    }
+    return {
+      contradictionCount: record.contradictionCount as number,
+      dimensionsWithLocatedSpan: record.dimensionsWithLocatedSpan as number,
+      requiredFieldsMissing: record.requiredFieldsMissing as number,
+      spansLocated: record.spansLocated as number,
+      spansReturned: record.spansReturned as number,
+      totalDimensions: record.totalDimensions as number,
+      totalRequiredFields: record.totalRequiredFields as number
+    };
+  } catch {
+    /* v8 ignore next -- score_result CHECK requires json_valid content. */
+    return null;
+  }
 }
 
 /**
@@ -118,6 +174,26 @@ export function readCandidatePacket(
     const sealRow = sealStmt.get(candRow.currentResultId) as { count: number };
     const isSealed = sealRow.count > 0;
 
+    const scoreStmt = client.prepare(
+      `SELECT
+        aggregate_text AS aggregateText,
+        confidence_text AS confidenceText,
+        aggregate_basis_points AS aggregateBasisPoints,
+        confidence_basis_points AS confidenceBasisPoints,
+        content_json AS contentJson
+      FROM score_result
+      WHERE candidate_result_id = ?`
+    );
+    const scoreRow = scoreStmt.get(candRow.currentResultId) as ScoreRow | undefined;
+
+    const reasonStmt = client.prepare(
+      `SELECT reason_code AS reasonCode
+       FROM candidate_result_reason
+       WHERE candidate_result_id = ?
+       ORDER BY reason_ordinal ASC`
+    );
+    const reasonRows = reasonStmt.all(candRow.currentResultId) as ReasonRow[];
+
     return ok({
       candidateId: candRow.candidateId,
       sourceSystem: candRow.sourceSystem,
@@ -133,7 +209,13 @@ export function readCandidatePacket(
       resultStatus: resultRow.resultStatus,
       contentHash: resultRow.contentHash,
       sealId: resultRow.sealId,
-      isSealed
+      isSealed,
+      scoreAggregateText: scoreRow?.aggregateText ?? null,
+      scoreConfidenceText: scoreRow?.confidenceText ?? null,
+      scoreAggregateBasisPoints: scoreRow?.aggregateBasisPoints ?? null,
+      scoreConfidenceBasisPoints: scoreRow?.confidenceBasisPoints ?? null,
+      confidenceInput: readConfidenceInput(scoreRow?.contentJson),
+      reasons: reasonRows.map((row) => row.reasonCode)
     });
   } catch (error) {
     return err(
