@@ -75,7 +75,7 @@ describe("Runtime Composition Wiring in Apps", () => {
     expect(closeResult.ok).toBe(true);
   });
 
-  it("lists candidates and gets packet through wired composition", async () => {
+  it("does not surface stub records through an explicitly configured runtime", async () => {
     const compositionResult = createDefaultRuntimeComposition({
       database: { filename: ":memory:" }
     });
@@ -87,9 +87,9 @@ describe("Runtime Composition Wiring in Apps", () => {
     expect(candidatesResult.ok).toBe(true);
     if (!candidatesResult.ok) return;
 
-    expect(candidatesResult.value.length).toBeGreaterThan(0);
+    expect(candidatesResult.value).toEqual([]);
 
     const packetResult = await composition.getCandidatePacket("candidate-1");
-    expect(packetResult.ok).toBe(true);
+    expect(packetResult).toMatchObject({ ok: false, error: { code: "not_found" } });
   });
 });

@@ -250,19 +250,32 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   readonly runtime: RuntimeComposition;
   readonly databasePath: string;
   private readonly fallback: StubRecruitosComposition;
+  private readonly allowStubFallback: boolean;
 
-  constructor(runtime: RuntimeComposition, databasePath?: string) {
+  constructor(
+    runtime: RuntimeComposition,
+    databasePath?: string,
+    allowStubFallback = false
+  ) {
     this.runtime = runtime;
     const nativeClient = getNativeClient(runtime.connection.database);
     this.databasePath =
       databasePath ??
       (typeof nativeClient?.name === "string" ? nativeClient.name : ":memory:");
     this.fallback = new StubRecruitosComposition();
+    this.allowStubFallback = allowStubFallback;
   }
 
   async prepareDemo(input: {
     actorId?: string;
   }): Promise<Result<import("./types.js").DemoPrepareSummary, RuntimeError>> {
+    if (this.hasCandidatesInDb()) {
+      return err({
+        code: "persistence_failed",
+        message: "Demo corpus imported no candidates",
+        retryable: false
+      });
+    }
     return demoPrepare(this.runtime, input);
   }
 
@@ -422,7 +435,11 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       }
 
       // If DB has data, report DB stats. If empty (in-memory test), merge with fallback.
-      if (candidateCount === 0 && openTasksCount === 0) {
+      if (
+        this.allowStubFallback &&
+        candidateCount === 0 &&
+        openTasksCount === 0
+      ) {
         const fallbackStatus = await this.fallback.getStatus();
         if (fallbackStatus.ok) {
           return ok({
@@ -456,7 +473,7 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   async listCandidates(
     options?: ListCandidatesOptions
   ): Promise<Result<readonly CandidateSummary[], RuntimeError>> {
-    if (this.hasCandidatesInDb()) {
+    if (this.hasCandidatesInDb() || !this.allowStubFallback) {
       const pageResult = await listCandidates(this.runtime.connection.database, {
         limit: options?.limit,
         channel: options?.channel,
@@ -484,7 +501,7 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
     if (packetResult.ok) {
       return ok(toCandidatePacket(packetResult.value, getNativeClient(this.runtime.connection.database)));
     }
-    if (!this.hasCandidatesInDb()) {
+    if (this.allowStubFallback && !this.hasCandidatesInDb()) {
       return this.fallback.getCandidatePacket(candidateId);
     }
     return err({
@@ -503,7 +520,7 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   async listResolutionTasks(
     options?: ListResolutionTasksOptions
   ): Promise<Result<readonly ResolutionTaskSummary[], RuntimeError>> {
-    if (this.hasTasksInDb()) {
+    if (this.hasTasksInDb() || !this.allowStubFallback) {
       const pageResult = await listResolutionTasks(this.runtime.connection.database, {
         candidateId: options?.candidateId,
         status: options?.status
@@ -604,7 +621,8 @@ export function createDefaultRuntimeComposition(
   return ok(
     new RuntimeRecruitosComposition(
       runtimeResult.value,
-      isMemory ? ":memory:" : filename
+      isMemory ? ":memory:" : filename,
+      options === undefined
     )
   );
 }

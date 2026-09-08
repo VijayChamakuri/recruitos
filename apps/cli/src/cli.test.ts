@@ -233,6 +233,26 @@ describe("CLI Commands Execution", () => {
         ]);
         expect(evaluated.exitCode).toBe(EXIT_SUCCESS);
         expect(evaluated.stdout).toContain("Passed:                    yes");
+
+        const second = await runCli(["demo:prepare", "--db", database]);
+        expect(second.exitCode).toBe(EXIT_RUNTIME_ERROR);
+        expect(second.stderr).toContain("Demo corpus imported no candidates");
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it("never returns a stub packet from an explicitly selected database", async () => {
+      const directory = mkdtempSync(join(tmpdir(), "recruitos-cli-empty-db-"));
+      try {
+        const result = await runCli([
+          "packet",
+          "candidate-1",
+          "--db",
+          join(directory, "runtime.db")
+        ]);
+        expect(result.exitCode).toBe(EXIT_DOMAIN_ERROR);
+        expect(result.stderr).toContain("Candidate packet not found");
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
