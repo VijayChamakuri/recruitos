@@ -309,8 +309,11 @@ export function deriveCandidateTriageInputs(
         }
       }
 
-      // Only emit grounded proposals (must have at least one located span)
-      if (evidenceSpanIds.length > 0) {
+      // Model and human proposals are only emitted once at least one quote
+      // located. Parsed proposals come from a deterministic producer and are
+      // grounded by it, so they are emitted with whatever spans located,
+      // including none.
+      if (evidenceSpanIds.length > 0 || rawProposal.provenance === "parsed") {
         structuredFactProposals.push({
           documentId: CandidateDocumentIdSchema.parse(rawProposal.documentId),
           provenance: rawProposal.provenance,

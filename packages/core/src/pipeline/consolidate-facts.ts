@@ -72,6 +72,12 @@ export const StructuredFactProposalSchema = z
       }
       return;
     }
+    if (value.provenance === "parsed") {
+      // Other parsed facts come from a deterministic producer (a machine
+      // readable resume block). They are grounded by that producer, so a
+      // document id and document spans are permitted but not required.
+      return;
+    }
     if (value.documentId === undefined) {
       context.addIssue({
         code: "custom",
@@ -199,9 +205,10 @@ type FactAccumulator = {
  * members, which is the input that resolves the affected hard requirements to
  * `unknown` later in the pipeline.
  *
- * Document-grounded proposals must carry at least one evidence span. Parsed
- * work-authorization statements are grounded in the structured application
- * answer instead, so they carry no document id and no document spans.
+ * Model and human proposals must carry a document id and at least one evidence
+ * span. Parsed work-authorization statements are grounded in the structured
+ * application answer instead, so they carry neither. Other parsed proposals
+ * come from a deterministic producer and may carry document grounding or not.
  */
 export function consolidateStructuredFacts(
   proposalsInput: unknown

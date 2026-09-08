@@ -202,7 +202,7 @@ describe("CLI Commands Execution", () => {
   });
 
   describe("Runtime Use-case Commands", () => {
-    it("prepares, prints, and evaluates the real one-candidate demo", async () => {
+    it("prepares, prints, and evaluates the real seven-route demo", async () => {
       const directory = mkdtempSync(join(tmpdir(), "recruitos-cli-demo-"));
       const database = join(directory, "runtime.db");
       try {
@@ -216,12 +216,14 @@ describe("CLI Commands Execution", () => {
         const envelope = JSON.parse(prepared.stdout ?? "{}") as {
           data?: { candidateIds?: string[] };
         };
+        // candidateIds[0] is the first corpus route, demo/route-1-scored.
         const candidateId = envelope.data?.candidateIds?.[0];
         expect(candidateId).toMatch(/\S/);
+        expect(envelope.data?.candidateIds).toHaveLength(7);
 
         const packet = await runCli(["packet", candidateId ?? "", "--db", database]);
         expect(packet.exitCode).toBe(EXIT_SUCCESS);
-        expect(packet.stdout).toContain("Status:       escalated");
+        expect(packet.stdout).toContain("Status:       scored");
         expect(packet.stdout).toContain("Sealed:       yes");
 
         const evaluated = await runCli([

@@ -387,6 +387,31 @@ describe("deriveCandidateTriageInputs", () => {
     ]);
   });
 
+  it("emits a parsed raw fact proposal that carries no grounding quotes or spans", () => {
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      rawFactProposals: [
+        {
+          documentId: "cdoc_1",
+          provenance: "parsed" as const,
+          payload: { kind: "current_title" as const, title: "Staff Engineer" }
+        }
+      ],
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.structuredFactProposals).toHaveLength(1);
+    expect(result.value.structuredFactProposals[0]).toMatchObject({
+      provenance: "parsed",
+      evidenceSpanIds: []
+    });
+    expect(result.value.locatedSpans).toHaveLength(0);
+  });
+
   it("returns a typed failure when a raw fact proposal cites an invalid span id", () => {
     const rawProposal = {
       documentId: "cdoc_1",
