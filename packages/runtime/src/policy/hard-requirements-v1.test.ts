@@ -179,14 +179,13 @@ describe("hard-requirements-v1 policy", () => {
         evidenceSpanIds: ["span_1"]
       },
       {
-        documentId: "doc_1",
         provenance: "parsed" as const,
         payload: {
           kind: "work_authorization_statement" as const,
           classification: "authorized" as const,
           statementText: "Legally authorized to work in the US without restriction."
         },
-        evidenceSpanIds: ["span_2"]
+        evidenceSpanIds: []
       },
       {
         documentId: "doc_1",
