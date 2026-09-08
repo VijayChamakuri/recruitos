@@ -113,18 +113,44 @@ The `workAuthorization` answer write is a small follow-up gated on Cursor's
 `candidate_application_answer` table: when the record carries an answer, insert one row
 with its `ApplicationAnswerProvenance`.
 
+**T10.2a  Provider output contract**  (precursor, lands first)
+`packages/runtime/src/extraction/response.ts`. The raw `body` an `ExtractionAdapter`
+returns is opaque to the adapter; this file is where meaning is assigned. Per work item
+(one dimension, one document) the body is strict JSON:
+
+```
+{
+  "dimensionId": "<rubric dimension id>",
+  "proposedLevel": "none" | "weak" | "partial" | "strong",
+  "spans": [ { "quotedText": "<verbatim, 1..240 chars>", "polarity": "supporting" | "contradicting" } ],
+  "rejectedClaims": [ { "kind": "unlocated_quote" | "fabricated_reference" | "unsupported_claim",
+                        "quotedText": "<verbatim>", "reason": "<short>" } ]
+}
+```
+
+No offsets from the model. The tier-1 corpus fixtures are authored against this shape and
+its SHA-256 is what `ExtractionSpecContent.schemaHash` commits to.
+`parseExtractionResponseBody` does JSON parse plus schema check and tags the failure
+(`malformed_json`, `schema_violation`, `unusable_quote`). `locateResponseSpans` relocates
+every quote against the stored normalized text with core `relocateQuote` (exact then folded
+tier; fuzzy deferred), returning the located `ExtractionAcceptedOutput`, pass-through
+`rejectedClaims`, the `droppedQuotes` for the extraction run, and the returned/located span
+counts. Structured facts (employment intervals, titles, work-authorization statements) are
+candidate-scoped, not dimension-scoped, so they are not in this body; T10.4 handles them.
+
 **T10.2  Extraction scheduler**
 `packages/runtime/src/scheduler/`.
 A single loop that serves one attempt's work items in manifest order. Per item: claim in a
 short transaction (`claimAttemptWorkItem`), then outside the transaction call
 `composition.extraction.extract` with the `extractionSpecHash` and normalized documents,
-then in a second short transaction validate the response
-(`validateExtractionSpecContent` and the artifact schema), write the content-addressed
-artifact or a typed failure, and move the item to `succeeded`, `reviewable_failure`, or
-`blocked_failure`. Reuse a completed artifact by hash before any adapter call. Fixture
-concurrency 8. Fixture miss and schema-validation failure are terminal and not retried.
-Live retry and backoff are out of scope for T10 and are left as a documented stub. `SIGINT`
-stops new claims and lets active artifact writes finish within a bounded grace period.
+then in a second short transaction parse and locate the response
+(`parseExtractionResponseBody`, `locateResponseSpans` from T10.2a), write the
+content-addressed artifact or a typed failure and the `extraction_run` row, and move the
+item to `succeeded`, `reviewable_failure` (non-none level with no located supporting span),
+or `blocked_failure` (fixture miss, malformed body, schema violation). Reuse a completed
+artifact by hash before any adapter call. Fixture miss and schema-validation failure are
+terminal and not retried. Serial for now; fixture concurrency 8, `SIGINT` grace, and live
+retry and backoff are out of scope for T10 and left as documented stubs.
 
 **T10.3  Start triage run use-case**
 `packages/runtime/src/use-cases/start-triage-run.ts`.
