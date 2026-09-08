@@ -14,9 +14,9 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | a9179da |
-| Migration lock held by | none (chain step 7 merged in #46) |
-| Rubric v1 | LOCKED on `a/rubric-v1-lock` (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. |
+| origin/main | 0998681 |
+| Migration lock held by | none. Follow-up: role store must persist the full locked rubric (integer version, provenance, anchors) before `draft-v1.ts` can be deleted. Needs a migration. |
+| Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `DRAFT_RUBRIC_V1` shim in `packages/core/src/rubric/draft-v1.ts` remains; one consumer left (`roles.test.ts`). |
 
 ## Lanes and file locks
 
@@ -40,8 +40,8 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | a/rubric-v1-lock | Gate 2: lock rubric v1 in `packages/core/src/rubric/` | ready PR |
-| Claude Code | b/core-shortlist-proposals | T9 part 2, step 6 of 6: shortlist_inclusion proposal derivation in `packages/core/src/pipeline/`. Last step of the pure decision pipeline. | ready PR |
+| Cursor | (idle-complete) | Migration chain done through step 7 plus rubric v1 lock (#47). Nothing queued. | idle |
+| Claude Code | b/migrate-draft-rubric-consumers | Migrated the 8 structure-only `DRAFT_RUBRIC_V1` consumers to `RUBRIC_V1` (PR #49). Shim isolated to `roles.test.ts`. | ready PR |
 | Antigravity | (pending) | Wired eval span-matching and bench suites to real core matching and pipeline modules (PR #44 merged). Ready for next task. | idle |
 
 ## Hard rules
@@ -116,3 +116,5 @@ your own rows plus the log.
 - 2026-09-07 Cursor: #46 ready on 12f667e. pnpm check 1200 plus 24 integration exit 0, test:coverage 1046 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Migration lock stays with Cursor.
 - 2026-09-07 Cursor: PR #46 merged to main at a9179da. Migration lock released. Starting `a/rubric-v1-lock` for Gate 2 rubric v1 lock from the signed RubricAssumptionRecord. Lane is `packages/core/src/rubric/` only.
 - 2026-09-07 Cursor: `a/rubric-v1-lock` ready on a9179da (PR #47). RUBRIC_V1_HASH `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. pnpm check 1214 plus 24 integration exit 0, test:coverage 1060 exit 0 with All files 100 percent, standalone integration 24, diff-check clean, em-dash scan clean. Frozen structure untouched. Pipeline owner note for OQ-7 is in the PR body.
+- 2026-09-07 Claude: PR #47 (rubric v1 lock) and PR #46 (demo session and demographics persistence) merged to main at 0998681. Cursor's migration lane is complete. Two follow-ups from the #47 review: (1) migrate `DRAFT_RUBRIC_V1` consumers to `RUBRIC_V1` and delete `draft-v1.ts`, mine; (2) OQ-7 hard-requirement predicates in `packages/core/src/pipeline/hard-requirements.ts`, pipeline owner.
+- 2026-09-07 Claude: PR #49 on b/migrate-draft-rubric-consumers. Migrated the 8 `DRAFT_RUBRIC_V1` import sites that read only dimension id, weight, and required (core scoring/routing/assess-dimensions tests, bench matching suite, four runtime store tests) to the locked `RUBRIC_V1`. Pure rename plus import-path fix on the three core files. `draft-v1.ts` stays: its one remaining consumer is `roles.test.ts`, which needs the role store to round-trip the full locked rubric first, which needs a migration. That plus an architecture rule against `draft-v1` imports is the remaining follow-up. test:types, check:architecture, and pnpm test (1214) green.
