@@ -1,9 +1,12 @@
 import {
+  ActorIdSchema,
   RUBRIC_V1,
+  TriageRunIdSchema,
   err,
   formatRational,
   formatReasonCode,
   ok,
+  type HardRequirementPolicy,
   type LockedRubric,
   type Result
 } from "@recruitos/core";
@@ -13,10 +16,18 @@ import { readCandidateApplicationAnswerByCandidateQuestion } from "../applicatio
 import {
   readAttemptWorkItems,
   readTriageAttempt,
-  type AttemptWorkItem
+  type AttemptWorkItem,
+  type TriageAttempt
 } from "../attempts/index.js";
-import { appendAuditEvent, prepareAuditEvent } from "../audit/index.js";
-import type { ImmediateTransactionContext } from "../commands/index.js";
+import {
+  appendAuditEvent,
+  prepareAuditEvent,
+  type AuditEvent
+} from "../audit/index.js";
+import {
+  runImmediateTransaction,
+  type ImmediateTransactionContext
+} from "../commands/index.js";
 import type { IdGenerator } from "../composition/index.js";
 import { MAIN_DEMO_CORPUS_MEMBER_COUNT } from "../corpus/index.js";
 import { createRuntimeError, type RuntimeError } from "../errors/index.js";
@@ -37,15 +48,12 @@ import {
   type ExtractionFailure
 } from "../extraction/index.js";
 import {
-  insertFactConflict,
   insertHardRequirementAssessment,
   insertStructuredFact,
-  prepareFactConflict,
   prepareHardRequirementAssessment,
   prepareStructuredFact
 } from "../facts/index.js";
 import { createHardRequirementPolicyV1 } from "../policy/index.js";
-import { insertProposal, prepareProposal } from "../proposals/index.js";
 import { insertResolutionTask, prepareResolutionTask } from "../resolution/index.js";
 import {
   deriveCandidateDecision,
@@ -78,8 +86,10 @@ import {
 /**
  * Finalizes a ready official triage attempt: one command transaction writes
  * sealed candidate results, candidate heads, the official triage run, and
- * audit events. A blocked work item refuses finalization. Reviewable failures
- * become unavailable results with exactly one `assessment_unavailable` reason.
+ * already-prepared audit events. Audit envelopes are hashed and timestamped
+ * before the writer lock. A blocked work item refuses finalization.
+ * Reviewable failures become unavailable results with exactly one
+ * `assessment_unavailable` reason.
  */
 
 export const FINALIZE_TRIAGE_RUN_COMMAND_NAME = "triage_run.finalize";
@@ -129,16 +139,32 @@ type CandidateDocumentRow = Readonly<{
   normalizedHash: string;
 }>;
 
-type HydratedWorkItem = Readonly<{
-  workItem: AttemptWorkItem;
-  artifact: ExtractionArtifact | null;
-  failure: ExtractionFailure | null;
-}>;
+type HydratedWorkItem =
+  | Readonly<{ workItem: AttemptWorkItem; artifact: ExtractionArtifact; failure: null }>
+  | Readonly<{ workItem: AttemptWorkItem; artifact: null; failure: ExtractionFailure }>;
 
 type CandidateGroup = Readonly<{
   candidateId: string;
   artifacts: ExtractionArtifact[];
   extractions: CandidateExtractionResultInput[];
+}>;
+
+type PlannedCandidate = Readonly<{
+  candidateId: string;
+  documents: readonly CandidateDocumentRow[];
+  artifacts: readonly ExtractionArtifact[];
+  decision: CandidateDecisionOutput;
+  resultId: string;
+}>;
+
+type FinalizePlan = Readonly<{
+  attempt: TriageAttempt;
+  extractorVersion: string;
+  policy: HardRequirementPolicy;
+  candidates: readonly PlannedCandidate[];
+  importOrdinalByCandidate: ReadonlyMap<string, number>;
+  triageRunId: string;
+  kind: "main" | "variant";
 }>;
 
 export function finalizeTriageRun(
@@ -163,26 +189,58 @@ export function finalizeTriageRun(
   if (typeof input.actorId !== "string" || input.actorId.trim().length === 0) {
     return err(finalizeFailure("Finalize triage run requires an actor id"));
   }
+  if (!ActorIdSchema.safeParse(input.actorId).success) {
+    return err(finalizeFailure("Finalize triage run requires a valid actor id"));
+  }
   if (typeof input.triageAttemptId !== "string" || input.triageAttemptId.trim().length === 0) {
     return err(finalizeFailure("Finalize triage run requires a triage attempt id"));
   }
-  if (input.triageRunId !== undefined && (typeof input.triageRunId !== "string" || input.triageRunId.trim().length === 0)) {
-    return err(finalizeFailure("triageRunId must be a non-empty string when provided"));
+  if (input.triageRunId !== undefined) {
+    if (typeof input.triageRunId !== "string" || input.triageRunId.trim().length === 0) {
+      return err(finalizeFailure("triageRunId must be a non-empty string when provided"));
+    }
+    if (!TriageRunIdSchema.safeParse(input.triageRunId).success) {
+      return err(finalizeFailure("triageRunId must be a valid identifier when provided"));
+    }
   }
   if (input.rubric !== undefined && input.rubric !== RUBRIC_V1) {
     return err(finalizeFailure("finalizeTriageRun requires RUBRIC_V1"));
   }
 
   const rubric = input.rubric ?? RUBRIC_V1;
-  const captured = captureFirstId(composition.idGenerator);
   const createdAt = composition.clock.now();
+  const commandId = composition.idGenerator.next();
   const payload: FinalizeTriageRunPayload = {
     triageAttemptId: input.triageAttemptId,
     ...(input.triageRunId === undefined ? {} : { triageRunId: input.triageRunId })
   };
 
+  const plan = planFinalize({
+    composition,
+    triageAttemptId: input.triageAttemptId,
+    requestedTriageRunId: input.triageRunId,
+    rubric,
+    createdAt
+  });
+  if (!plan.ok) {
+    return plan;
+  }
+
+  const audits = prepareFinalizeAuditEvents({
+    clock: composition.clock,
+    nextId: () => composition.idGenerator.next(),
+    commandId,
+    actorId: input.actorId,
+    createdAt,
+    plan: plan.value
+  });
+  if (!audits.ok) {
+    return audits;
+  }
+
+  const writingGenerator = replayCommandId(composition.idGenerator, commandId);
   return runUseCaseCommand(
-    { ...composition, idGenerator: captured.generator },
+    { ...composition, idGenerator: writingGenerator },
     {
       actorId: input.actorId,
       commandName: FINALIZE_TRIAGE_RUN_COMMAND_NAME,
@@ -191,43 +249,314 @@ export function finalizeTriageRun(
       payloadSchema: FinalizeTriageRunPayloadSchema,
       resultSchema: FinalizeTriageRunResultSchema,
       readVersion: () => ok(0),
-      mutate: (context) => {
-        const commandId = captured.firstId;
-        /* v8 ignore next 3 */
-        if (commandId === undefined) {
-          return err(finalizeFailure("Command id was not captured"));
-        }
-        return mutateFinalize({
-          composition: { ...composition, idGenerator: captured.generator },
+      mutate: (context) =>
+        commitFinalize({
+          composition: { ...composition, idGenerator: writingGenerator },
           context,
           actorId: input.actorId,
           createdAt,
           commandId,
-          triageAttemptId: input.triageAttemptId,
-          requestedTriageRunId: input.triageRunId,
-          rubric
-        });
-      }
+          plan: plan.value,
+          auditEvents: audits.value
+        })
     }
   );
 }
 
-function mutateFinalize(args: {
+function planFinalize(args: {
+  composition: UseCaseComposition;
+  triageAttemptId: string;
+  requestedTriageRunId: string | undefined;
+  rubric: LockedRubric;
+  createdAt: number;
+}): Result<FinalizePlan, RuntimeError> {
+  return runImmediateTransaction(args.composition.connection, (context) => {
+    const nextId = () => args.composition.idGenerator.next();
+    const loaded = loadReadyAttempt(context, args.triageAttemptId);
+    if (!loaded.ok) {
+      return loaded;
+    }
+    const { attempt, workItems } = loaded.value;
+    const snapshotResult = readRunInputSnapshot(context, attempt.snapshotId);
+    /* v8 ignore next 3 -- startTriageRun writes the snapshot the attempt references. */
+    if (!snapshotResult.ok) {
+      return snapshotResult;
+    }
+    /* v8 ignore next 3 -- startTriageRun writes the snapshot the attempt references. */
+    if (snapshotResult.value === undefined) {
+      return err(createRuntimeError("not_found", `Run input snapshot "${attempt.snapshotId}" not found`, false));
+    }
+    const snapshot = snapshotResult.value;
+    const policyResult = createHardRequirementPolicyV1(snapshot.frozenDate.slice(0, 7));
+    /* v8 ignore next 3 -- frozenDate from a stored snapshot is a valid year-month prefix. */
+    if (!policyResult.ok) {
+      return policyResult;
+    }
+
+    const hydratedResult = hydrateWorkItems(context, workItems);
+    if (!hydratedResult.ok) {
+      return hydratedResult;
+    }
+    const groups = groupCandidates(hydratedResult.value);
+    const importOrdinalByCandidate = loadImportOrdinals(context, attempt.corpusManifestId);
+    for (const group of groups) {
+      if (!importOrdinalByCandidate.has(group.candidateId)) {
+        return err(
+          finalizeFailure(
+            `Candidate "${group.candidateId}" is missing from corpus snapshot ${attempt.corpusManifestId}`
+          )
+        );
+      }
+    }
+    const orderedGroups = [...groups].sort((left, right) => {
+      return (
+        (importOrdinalByCandidate.get(left.candidateId) ?? 0) -
+        (importOrdinalByCandidate.get(right.candidateId) ?? 0)
+      );
+    });
+
+    const candidates: PlannedCandidate[] = [];
+    for (const group of orderedGroups) {
+      const documents = loadCandidateDocuments(context, group.candidateId);
+      if (documents.length === 0) {
+        return err(finalizeFailure(`Candidate "${group.candidateId}" has no documents`));
+      }
+      const workAuthResult = readCandidateApplicationAnswerByCandidateQuestion(
+        context,
+        group.candidateId,
+        WORK_AUTHORIZATION_QUESTION_KEY
+      );
+      /* v8 ignore next 3 -- reader fails only on invalid stored application-answer rows. */
+      if (!workAuthResult.ok) {
+        return workAuthResult;
+      }
+      const decisionResult = deriveCandidateDecision({
+        candidateId: group.candidateId,
+        documents: documents.map(toBridgeDocument),
+        extractions: group.extractions,
+        applicationAnswers:
+          workAuthResult.value === undefined
+            ? undefined
+            : { workAuthorization: workAuthResult.value },
+        rubric: args.rubric,
+        hardRequirementPolicy: policyResult.value,
+        isVariant: attempt.kind === "variant_run"
+      });
+      if (!decisionResult.ok) {
+        return decisionResult;
+      }
+      candidates.push({
+        candidateId: group.candidateId,
+        documents,
+        artifacts: group.artifacts,
+        decision: decisionResult.value,
+        resultId: nextId()
+      });
+    }
+
+    return ok({
+      attempt,
+      extractorVersion: snapshot.extractorVersion,
+      policy: policyResult.value,
+      candidates,
+      importOrdinalByCandidate,
+      triageRunId: args.requestedTriageRunId ?? nextId(),
+      kind: resolveOfficialTriageRunKind(attempt.kind, candidates.length)
+    });
+  });
+}
+
+function commitFinalize(args: {
   composition: UseCaseComposition;
   context: ImmediateTransactionContext;
   actorId: string;
   createdAt: number;
   commandId: string;
-  triageAttemptId: string;
-  requestedTriageRunId: string | undefined;
-  rubric: LockedRubric;
+  plan: FinalizePlan;
+  auditEvents: readonly AuditEvent[];
 }): Result<FinalizeTriageRunResult, RuntimeError> {
-  const { composition, context, actorId, createdAt, commandId, triageAttemptId, requestedTriageRunId, rubric } =
-    args;
+  const { composition, context, createdAt, plan } = args;
   const nextId = () => composition.idGenerator.next();
 
+  const loaded = loadReadyAttempt(context, plan.attempt.triageAttemptId);
+  if (!loaded.ok) {
+    return loaded;
+  }
+  const existingRun = readExistingTriageRun(
+    context,
+    plan.attempt.snapshotId,
+    plan.attempt.corpusManifestId
+  );
+  if (existingRun !== undefined) {
+    return err(
+      createRuntimeError(
+        "command_conflict",
+        `A triage run already exists for this snapshot and manifest (${existingRun.id})`,
+        false
+      )
+    );
+  }
+
+  const resultIds: string[] = [];
+  for (const candidate of plan.candidates) {
+    const persisted = persistCandidateResult({
+      context,
+      nextId,
+      createdAt,
+      candidateId: candidate.candidateId,
+      documents: candidate.documents,
+      artifacts: candidate.artifacts,
+      extractorVersion: plan.extractorVersion,
+      decision: candidate.decision,
+      resultId: candidate.resultId
+    });
+    if (!persisted.ok) {
+      return persisted;
+    }
+    resultIds.push(persisted.value);
+  }
+
+  const runSealId = nextId();
+  const preparedRun = prepareTriageRun({
+    triageRunId: plan.triageRunId,
+    kind: plan.kind,
+    snapshotId: plan.attempt.snapshotId,
+    corpusManifestId: plan.attempt.corpusManifestId,
+    sealId: runSealId,
+    createdAt
+  });
+  /* v8 ignore next 3 -- caller-supplied ids pass TriageRunIdSchema; minted ids are printable ASCII. */
+  if (!preparedRun.ok) {
+    return preparedRun;
+  }
+  const insertedRun = insertTriageRun(context, preparedRun.value);
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
+  if (!insertedRun.ok) {
+    return insertedRun;
+  }
+
+  for (const [index, candidate] of plan.candidates.entries()) {
+    const importOrdinal = plan.importOrdinalByCandidate.get(candidate.candidateId);
+    /* v8 ignore start -- planFinalize refuses candidates missing from the corpus. */
+    if (importOrdinal === undefined) {
+      return err(
+        finalizeFailure(
+          `Candidate "${candidate.candidateId}" is missing from corpus snapshot ${plan.attempt.corpusManifestId}`
+        )
+      );
+    }
+    /* v8 ignore stop */
+    const preparedMember = prepareTriageRunMember({
+      triageRunMemberId: nextId(),
+      triageRunId: plan.triageRunId,
+      candidateId: candidate.candidateId,
+      importOrdinal,
+      initialResultId: resultIds[index]!,
+      createdAt
+    });
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
+    if (!preparedMember.ok) {
+      return preparedMember;
+    }
+    const insertedMember = insertTriageRunMember(context, preparedMember.value);
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
+    if (!insertedMember.ok) {
+      return insertedMember;
+    }
+  }
+
+  const preparedRunSeal = prepareTriageRunSeal({
+    triageRunSealId: runSealId,
+    triageRunId: plan.triageRunId,
+    createdAt
+  });
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
+  if (!preparedRunSeal.ok) {
+    return preparedRunSeal;
+  }
+  const insertedRunSeal = insertTriageRunSeal(context, preparedRunSeal.value);
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
+  if (!insertedRunSeal.ok) {
+    return insertedRunSeal;
+  }
+
+  for (const event of args.auditEvents) {
+    const appended = appendAuditEvent(context, event);
+    /* v8 ignore next 3 -- appendAuditEvent only inserts a prepared envelope. */
+    if (!appended.ok) {
+      return appended;
+    }
+  }
+
+  return ok({
+    triageRunId: plan.triageRunId,
+    triageAttemptId: plan.attempt.triageAttemptId,
+    candidateCount: plan.candidates.length,
+    resultIds
+  });
+}
+
+function prepareFinalizeAuditEvents(args: {
+  clock: UseCaseComposition["clock"];
+  nextId: () => string;
+  commandId: string;
+  actorId: string;
+  createdAt: number;
+  plan: FinalizePlan;
+}): Result<AuditEvent[], RuntimeError> {
+  const events: AuditEvent[] = [];
+  let eventOrdinal = 0;
+  for (const candidate of args.plan.candidates) {
+    const prepared = prepareAuditEvent(args.clock, {
+      auditEventId: args.nextId(),
+      commandId: args.commandId,
+      eventOrdinal,
+      actorId: args.actorId,
+      actorDisplayName: args.actorId,
+      eventName: "candidate.result.published",
+      eventVersion: 1,
+      occurredAt: args.createdAt,
+      payload: {
+        candidateId: candidate.candidateId,
+        resultId: candidate.resultId,
+        status: candidate.decision.routing.status,
+        availability: candidate.decision.routing.availability
+      }
+    });
+    if (!prepared.ok) {
+      return prepared;
+    }
+    events.push(prepared.value);
+    eventOrdinal += 1;
+  }
+  const sealed = prepareAuditEvent(args.clock, {
+    auditEventId: args.nextId(),
+    commandId: args.commandId,
+    eventOrdinal,
+    actorId: args.actorId,
+    actorDisplayName: args.actorId,
+    eventName: "triage_run.sealed",
+    eventVersion: 1,
+    occurredAt: args.createdAt,
+    payload: {
+      triageRunId: args.plan.triageRunId,
+      triageAttemptId: args.plan.attempt.triageAttemptId,
+      candidateCount: args.plan.candidates.length
+    }
+  });
+  if (!sealed.ok) {
+    return sealed;
+  }
+  events.push(sealed.value);
+  return ok(events);
+}
+
+function loadReadyAttempt(
+  context: ImmediateTransactionContext,
+  triageAttemptId: string
+): Result<{ attempt: TriageAttempt; workItems: readonly AttemptWorkItem[] }, RuntimeError> {
   const attemptResult = readTriageAttempt(context, triageAttemptId);
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!attemptResult.ok) {
     return attemptResult;
   }
@@ -246,7 +575,7 @@ function mutateFinalize(args: {
   }
 
   const workItemsResult = readAttemptWorkItems(context, triageAttemptId);
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!workItemsResult.ok) {
     return workItemsResult;
   }
@@ -268,15 +597,7 @@ function mutateFinalize(args: {
       finalizeFailure(`Cannot finalize while work item ${unfinished.attemptWorkItemId} is ${unfinished.state}`)
     );
   }
-
-  const existingRun = context.nativeDatabase
-    .prepare(
-      `SELECT triage_run_id AS id
-       FROM triage_run
-       WHERE snapshot_id = ? AND corpus_manifest_id = ?
-       LIMIT 1`
-    )
-    .get(attempt.snapshotId, attempt.corpusManifestId) as { id: string } | undefined;
+  const existingRun = readExistingTriageRun(context, attempt.snapshotId, attempt.corpusManifestId);
   if (existingRun !== undefined) {
     return err(
       createRuntimeError(
@@ -286,29 +607,28 @@ function mutateFinalize(args: {
       )
     );
   }
+  return ok({ attempt, workItems });
+}
 
-  const snapshotResult = readRunInputSnapshot(context, attempt.snapshotId);
-  /* v8 ignore next 3 */
-  if (!snapshotResult.ok) {
-    return snapshotResult;
-  }
-  /* v8 ignore next 3 */
-  if (snapshotResult.value === undefined) {
-    return err(createRuntimeError("not_found", `Run input snapshot "${attempt.snapshotId}" not found`, false));
-  }
-  const snapshot = snapshotResult.value;
-  const policyResult = createHardRequirementPolicyV1(snapshot.frozenDate.slice(0, 7));
-  /* v8 ignore next 3 */
-  if (!policyResult.ok) {
-    return policyResult;
-  }
+function readExistingTriageRun(
+  context: ImmediateTransactionContext,
+  snapshotId: string,
+  corpusManifestId: string
+): { id: string } | undefined {
+  return context.nativeDatabase
+    .prepare(
+      `SELECT triage_run_id AS id
+       FROM triage_run
+       WHERE snapshot_id = ? AND corpus_manifest_id = ?
+       LIMIT 1`
+    )
+    .get(snapshotId, corpusManifestId) as { id: string } | undefined;
+}
 
-  const hydratedResult = hydrateWorkItems(context, workItems);
-  /* v8 ignore next 3 */
-  if (!hydratedResult.ok) {
-    return hydratedResult;
-  }
-  const groups = groupCandidates(hydratedResult.value);
+function loadImportOrdinals(
+  context: ImmediateTransactionContext,
+  corpusManifestId: string
+): Map<string, number> {
   const corpusMembers = context.nativeDatabase
     .prepare(
       `SELECT candidate_id AS candidateId, import_ordinal AS importOrdinal
@@ -316,187 +636,32 @@ function mutateFinalize(args: {
        WHERE manifest_id = ?
        ORDER BY import_ordinal ASC`
     )
-    .all(attempt.corpusManifestId) as Array<{ candidateId: string; importOrdinal: number }>;
-  const importOrdinalByCandidate = new Map(
-    corpusMembers.map((member) => [member.candidateId, member.importOrdinal] as const)
-  );
-  const orderedGroups = [...groups].sort((left, right) => {
-    return (
-      corpusOrdinal(importOrdinalByCandidate, left.candidateId) -
-      corpusOrdinal(importOrdinalByCandidate, right.candidateId)
-    );
-  });
+    .all(corpusManifestId) as Array<{ candidateId: string; importOrdinal: number }>;
+  return new Map(corpusMembers.map((member) => [member.candidateId, member.importOrdinal] as const));
+}
 
-  const resultIds: string[] = [];
-  let eventOrdinal = 0;
-  for (const group of orderedGroups) {
-    const documents = loadCandidateDocuments(context, group.candidateId);
-    /* v8 ignore next 3 */
-    if (documents.length === 0) {
-      return err(finalizeFailure(`Candidate "${group.candidateId}" has no documents`));
-    }
-    const workAuthResult = readCandidateApplicationAnswerByCandidateQuestion(
-      context,
-      group.candidateId,
-      WORK_AUTHORIZATION_QUESTION_KEY
-    );
-    /* v8 ignore next 3 */
-    if (!workAuthResult.ok) {
-      return workAuthResult;
-    }
-    const decisionResult = deriveCandidateDecision({
-      candidateId: group.candidateId,
-      documents: documents.map(toBridgeDocument),
-      extractions: group.extractions,
-      applicationAnswers:
-        workAuthResult.value === undefined
-          ? undefined
-          : { workAuthorization: workAuthResult.value },
-      rubric,
-      hardRequirementPolicy: policyResult.value,
-      isVariant: attempt.kind === "variant_run"
-    });
-    /* v8 ignore next 3 */
-    if (!decisionResult.ok) {
-      return decisionResult;
-    }
-    const persisted = persistCandidateResult({
-      context,
-      nextId,
-      createdAt,
-      commandId,
-      actorId,
-      candidateId: group.candidateId,
-      documents,
-      artifacts: group.artifacts,
-      extractorVersion: snapshot.extractorVersion,
-      decision: decisionResult.value,
-      rubric
-    });
-    /* v8 ignore next 3 */
-    if (!persisted.ok) {
-      return persisted;
-    }
-    resultIds.push(persisted.value);
-    const published = appendNamedAuditEvent({
-      context,
-      clock: composition.clock,
-      auditEventId: nextId(),
-      commandId,
-      eventOrdinal,
-      actorId,
-      eventName: "candidate.result.published",
-      occurredAt: createdAt,
-      payload: {
-        candidateId: group.candidateId,
-        resultId: persisted.value,
-        status: decisionResult.value.routing.status,
-        availability: decisionResult.value.routing.availability
-      }
-    });
-    /* v8 ignore next 3 */
-    if (!published.ok) {
-      return published;
-    }
-    eventOrdinal += 1;
-  }
-
-  const triageRunId = requestedTriageRunId ?? nextId();
-  const runSealId = nextId();
-  let kind: "main" | "variant" = "variant";
+function resolveOfficialTriageRunKind(
+  attemptKind: TriageAttempt["kind"],
+  memberCount: number
+): "main" | "variant" {
   /* v8 ignore next 3 -- a main run is 140 members; tests use variant corpora. */
-  if (attempt.kind === "main_run" && orderedGroups.length === MAIN_DEMO_CORPUS_MEMBER_COUNT) {
-    kind = "main";
+  if (attemptKind === "main_run" && memberCount === MAIN_DEMO_CORPUS_MEMBER_COUNT) {
+    return "main";
   }
-  const preparedRun = prepareTriageRun({
-    triageRunId,
-    kind,
-    snapshotId: attempt.snapshotId,
-    corpusManifestId: attempt.corpusManifestId,
-    sealId: runSealId,
-    createdAt
-  });
-  /* v8 ignore next 3 */
-  if (!preparedRun.ok) {
-    return preparedRun;
-  }
-  const insertedRun = insertTriageRun(context, preparedRun.value);
-  /* v8 ignore next 3 */
-  if (!insertedRun.ok) {
-    return insertedRun;
-  }
+  return "variant";
+}
 
-  for (const [index, group] of orderedGroups.entries()) {
-    const importOrdinal = importOrdinalByCandidate.get(group.candidateId);
-    /* v8 ignore start -- startTriageRun writes matching corpus members. */
-    if (importOrdinal === undefined) {
-      return err(
-        finalizeFailure(
-          `Candidate "${group.candidateId}" is missing from corpus snapshot ${attempt.corpusManifestId}`
-        )
-      );
+function replayCommandId(idGenerator: IdGenerator, commandId: string): IdGenerator {
+  let replayed = false;
+  return {
+    next: () => {
+      if (!replayed) {
+        replayed = true;
+        return commandId;
+      }
+      return idGenerator.next();
     }
-    /* v8 ignore stop */
-    const preparedMember = prepareTriageRunMember({
-      triageRunMemberId: nextId(),
-      triageRunId,
-      candidateId: group.candidateId,
-      importOrdinal,
-      initialResultId: resultIds[index]!,
-      createdAt
-    });
-    /* v8 ignore next 3 */
-    if (!preparedMember.ok) {
-      return preparedMember;
-    }
-    const insertedMember = insertTriageRunMember(context, preparedMember.value);
-    /* v8 ignore next 3 */
-    if (!insertedMember.ok) {
-      return insertedMember;
-    }
-  }
-
-  const preparedRunSeal = prepareTriageRunSeal({
-    triageRunSealId: runSealId,
-    triageRunId,
-    createdAt
-  });
-  /* v8 ignore next 3 */
-  if (!preparedRunSeal.ok) {
-    return preparedRunSeal;
-  }
-  const insertedRunSeal = insertTriageRunSeal(context, preparedRunSeal.value);
-  /* v8 ignore next 3 */
-  if (!insertedRunSeal.ok) {
-    return insertedRunSeal;
-  }
-
-  const sealed = appendNamedAuditEvent({
-    context,
-    clock: composition.clock,
-    auditEventId: nextId(),
-    commandId,
-    eventOrdinal,
-    actorId,
-    eventName: "triage_run.sealed",
-    occurredAt: createdAt,
-    payload: {
-      triageRunId,
-      triageAttemptId,
-      candidateCount: orderedGroups.length
-    }
-  });
-  /* v8 ignore next 3 */
-  if (!sealed.ok) {
-    return sealed;
-  }
-
-  return ok({
-    triageRunId,
-    triageAttemptId,
-    candidateCount: orderedGroups.length,
-    resultIds
-  });
+  };
 }
 
 function hydrateWorkItems(
@@ -506,18 +671,18 @@ function hydrateWorkItems(
   const hydrated: HydratedWorkItem[] = [];
   for (const workItem of workItems) {
     if (workItem.state === "succeeded") {
-      /* v8 ignore next 5 */
+      // attempt_work_item_state_shape requires a non-null artifact id on succeeded rows.
+      /* v8 ignore next 5 -- CHECK attempt_work_item_state_shape */
       if (workItem.extractionArtifactId === null) {
         return err(
           finalizeFailure(`Succeeded work item ${workItem.attemptWorkItemId} is missing an artifact`)
         );
       }
       const artifact = readExtractionArtifact(context, workItem.extractionArtifactId);
-      /* v8 ignore next 3 */
+      /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
       if (!artifact.ok) {
         return artifact;
       }
-      /* v8 ignore next 5 */
       if (artifact.value === undefined) {
         return err(
           createRuntimeError("not_found", `Extraction artifact "${workItem.extractionArtifactId}" not found`, false)
@@ -526,18 +691,18 @@ function hydrateWorkItems(
       hydrated.push({ workItem, artifact: artifact.value, failure: null });
       continue;
     }
-    /* v8 ignore next 5 */
+    // attempt_work_item_state_shape requires a non-null failure id on reviewable_failure rows.
+    /* v8 ignore next 5 -- CHECK attempt_work_item_state_shape */
     if (workItem.extractionFailureId === null) {
       return err(
         finalizeFailure(`Failed work item ${workItem.attemptWorkItemId} is missing a failure record`)
       );
     }
     const failure = readExtractionFailure(context, workItem.extractionFailureId);
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!failure.ok) {
       return failure;
     }
-    /* v8 ignore next 5 */
     if (failure.value === undefined) {
       return err(
         createRuntimeError("not_found", `Extraction failure "${workItem.extractionFailureId}" not found`, false)
@@ -561,18 +726,14 @@ function groupCandidates(hydrated: readonly HydratedWorkItem[]): CandidateGroup[
         dimensionId: item.workItem.dimensionId,
         artifact: item.artifact
       };
-    } else if (item.failure !== null) {
+    } else {
       extraction = {
         candidateDocumentId: item.workItem.candidateDocumentId,
         dimensionId: item.workItem.dimensionId,
         failure: item.failure,
         reviewableFailure: true
       };
-    /* v8 ignore start -- hydrateWorkItems always supplies an artifact or a failure. */
-    } else {
-      continue;
     }
-    /* v8 ignore stop */
     const existing = groups.get(item.workItem.candidateId);
     if (existing === undefined) {
       groups.set(item.workItem.candidateId, {
@@ -622,32 +783,56 @@ function toBridgeDocument(row: CandidateDocumentRow): CandidateDocumentBridgeInp
   };
 }
 
+/**
+ * Persist one planned candidate result. Remaining v8 ignore regions here are
+ * schema-unreachable: prepare/insert checks after drafts built from planned
+ * IDs and deriveCandidateDecision output; CHECK attempt_work_item_state_shape;
+ * persistArtifactSpans fails closed, so fact and dimension span lookups cannot
+ * miss; complete availability always carries score; duplicate span ids cannot
+ * collide because each work item owns a unique artifact id.
+ */
 function persistCandidateResult(args: {
   context: ImmediateTransactionContext;
   nextId: () => string;
   createdAt: number;
-  commandId: string;
-  actorId: string;
   candidateId: string;
   documents: readonly CandidateDocumentRow[];
   artifacts: readonly ExtractionArtifact[];
   extractorVersion: string;
   decision: CandidateDecisionOutput;
-  rubric: LockedRubric;
+  resultId: string;
 }): Result<string, RuntimeError> {
-  const resultId = args.nextId();
   const sealId = args.nextId();
   if (args.decision.dimensionDerivation.availability === "unavailable") {
-    return persistUnavailableResult({ ...args, resultId, sealId });
+    return persistUnavailableResult({
+      context: args.context,
+      nextId: args.nextId,
+      createdAt: args.createdAt,
+      candidateId: args.candidateId,
+      documents: args.documents,
+      decision: args.decision,
+      resultId: args.resultId,
+      sealId
+    });
   }
-  return persistCompleteResult({ ...args, resultId, sealId });
+  return persistCompleteResult({
+    context: args.context,
+    nextId: args.nextId,
+    createdAt: args.createdAt,
+    candidateId: args.candidateId,
+    documents: args.documents,
+    artifacts: args.artifacts,
+    extractorVersion: args.extractorVersion,
+    decision: args.decision,
+    resultId: args.resultId,
+    sealId
+  });
 }
 
 function persistUnavailableResult(args: {
   context: ImmediateTransactionContext;
   nextId: () => string;
   createdAt: number;
-  actorId: string;
   candidateId: string;
   documents: readonly CandidateDocumentRow[];
   decision: CandidateDecisionOutput;
@@ -657,7 +842,8 @@ function persistUnavailableResult(args: {
   const sourceDocumentIds = uniqueSourceIds(args.documents);
   const gapRows: Array<{ evidenceGapId: string; dimensionId: string }> = [];
   const gapDimensions = new Map<string, readonly string[]>();
-  /* v8 ignore start -- reviewable failure reports unavailable dims, not gaps. */
+  // assessDimension records all-document reviewable failure as unavailable, not as a gap.
+  /* v8 ignore start -- assess-dimensions.ts: all-document failure is unavailable */
   for (const gap of args.decision.dimensionDerivation.gaps) {
     gapDimensions.set(gap.dimensionId, gap.documentsSearched);
   }
@@ -681,12 +867,12 @@ function persistUnavailableResult(args: {
       documentsSearched: mapped,
       createdAt: args.createdAt
     });
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!preparedGap.ok) {
       return preparedGap;
     }
     const insertedGap = insertEvidenceGap(args.context, preparedGap.value);
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!insertedGap.ok) {
       return insertedGap;
     }
@@ -714,12 +900,12 @@ function persistUnavailableResult(args: {
     sealId: args.sealId,
     createdAt: args.createdAt
   });
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!preparedResult.ok) {
     return preparedResult;
   }
   const insertedResult = insertCandidateTriageResult(args.context, preparedResult.value);
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!insertedResult.ok) {
     return insertedResult;
   }
@@ -730,7 +916,7 @@ function persistUnavailableResult(args: {
     resultId: args.resultId,
     reasonCodes: ["assessment_unavailable"]
   });
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!reasons.ok) {
     return reasons;
   }
@@ -741,7 +927,7 @@ function persistUnavailableResult(args: {
     resultId: args.resultId,
     sealId: args.sealId
   });
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!sealed.ok) {
     return sealed;
   }
@@ -752,26 +938,21 @@ function persistCompleteResult(args: {
   context: ImmediateTransactionContext;
   nextId: () => string;
   createdAt: number;
-  actorId: string;
   candidateId: string;
   documents: readonly CandidateDocumentRow[];
   artifacts: readonly ExtractionArtifact[];
   extractorVersion: string;
   decision: CandidateDecisionOutput;
-  rubric: LockedRubric;
   resultId: string;
   sealId: string;
 }): Result<string, RuntimeError> {
-  /* v8 ignore next 3 */
+  // deriveCandidateDecision only scores when availability is complete.
+  /* v8 ignore next 3 -- complete availability always carries score and confidence */
   if (args.decision.score === null || args.decision.confidence === null || args.decision.confidenceInput === null) {
     return err(finalizeFailure("Complete candidate decision is missing score or confidence"));
   }
 
   const persistedSpanIds = new Set<string>();
-  const documentByCandidateId = new Map(
-    args.documents.map((document) => [document.candidateDocumentId, document] as const)
-  );
-
   const artifactSpans = persistArtifactSpans({
     context: args.context,
     candidateId: args.candidateId,
@@ -781,37 +962,28 @@ function persistCompleteResult(args: {
     createdAt: args.createdAt,
     persistedSpanIds
   });
-  /* v8 ignore next 3 */
   if (!artifactSpans.ok) {
     return artifactSpans;
-  }
-  const locatedSpans = persistLocatedSpans({
-    context: args.context,
-    documents: documentByCandidateId,
-    extractorVersion: args.extractorVersion,
-    createdAt: args.createdAt,
-    locatedSpans: args.decision.triageInputs.locatedSpans,
-    persistedSpanIds
-  });
-  /* v8 ignore next 3 */
-  if (!locatedSpans.ok) {
-    return locatedSpans;
   }
 
   const factIdsByKey = new Map<string, string>();
   const structuredFactIds: string[] = [];
   for (const fact of args.decision.consolidation.facts) {
-    const grounding = fact.evidenceSpanIds.filter((spanId) => persistedSpanIds.has(spanId));
-    /* v8 ignore next 3 -- work-auth facts are emitted only with a located span. */
-    if (grounding.length === 0) {
-      continue;
+    const missingSpans = fact.evidenceSpanIds.filter((spanId) => !persistedSpanIds.has(spanId));
+    // T10.5 facts are parsed work-auth with empty span ids. persistArtifactSpans
+    // fails closed, so a document-grounded fact cannot reach here with missing spans.
+    /* v8 ignore next 5 -- persistArtifactSpans fails closed for trusted extraction spans */
+    if (missingSpans.length > 0) {
+      return err(
+        finalizeFailure("Structured fact is missing persisted grounding spans")
+      );
     }
     const structuredFactId = args.nextId();
     const preparedFact = prepareStructuredFact({
       structuredFactId,
       candidateId: args.candidateId,
       payload: fact.payload,
-      evidenceSpans: grounding.map((spanId) => ({
+      evidenceSpans: fact.evidenceSpanIds.map((spanId) => ({
         structuredFactEvidenceSpanId: args.nextId(),
         evidenceSpanId: spanId
       })),
@@ -822,12 +994,12 @@ function persistCompleteResult(args: {
       })),
       createdAt: args.createdAt
     });
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!preparedFact.ok) {
       return preparedFact;
     }
     const insertedFact = insertStructuredFact(args.context, preparedFact.value);
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!insertedFact.ok) {
       return insertedFact;
     }
@@ -835,56 +1007,32 @@ function persistCompleteResult(args: {
     structuredFactIds.push(structuredFactId);
   }
 
-  const conflictIds: string[] = [];
-  /* v8 ignore start -- T10.5 persist does not receive raw fact proposals, so conflicts do not arise. */
-  for (const conflict of args.decision.consolidation.conflicts) {
-    const members = conflict.memberFactKeys
-      .map((key) => factIdsByKey.get(key))
-      .filter((id): id is string => id !== undefined);
-    if (members.length < 2) {
-      continue;
-    }
-    const factConflictId = args.nextId();
-    const preparedConflict = prepareFactConflict({
-      factConflictId,
-      members: members.map((structuredFactId) => ({
-        factConflictMemberId: args.nextId(),
-        structuredFactId
-      })),
-      createdAt: args.createdAt
-    });
-    /* v8 ignore next 3 */
-    if (!preparedConflict.ok) {
-      return preparedConflict;
-    }
-    const insertedConflict = insertFactConflict(args.context, preparedConflict.value);
-    /* v8 ignore next 3 */
-    if (!insertedConflict.ok) {
-      return insertedConflict;
-    }
-    conflictIds.push(factConflictId);
-  }
-  /* v8 ignore stop */
-
   const requirementIds: string[] = [];
   for (const assessment of args.decision.hardRequirements.assessments) {
     const facts: Array<{ structuredFactId: string; polarity: "supporting" | "contradicting" }> = [];
     for (const key of assessment.supportingFactKeys) {
       const structuredFactId = factIdsByKey.get(key);
-      if (structuredFactId !== undefined) {
-        facts.push({ structuredFactId, polarity: "supporting" });
+      /* v8 ignore next 5 -- supporting keys are factKeys from the facts just persisted */
+      if (structuredFactId === undefined) {
+        return err(
+          finalizeFailure("Hard-requirement cites a structured fact that was not persisted")
+        );
       }
+      facts.push({ structuredFactId, polarity: "supporting" });
     }
-    /* v8 ignore start -- hard-requirement contradicting facts are not produced on the T10.5 path. */
     for (const key of assessment.contradictingFactKeys) {
       const structuredFactId = factIdsByKey.get(key);
-      if (structuredFactId !== undefined) {
-        facts.push({ structuredFactId, polarity: "contradicting" });
+      /* v8 ignore next 5 -- contradicting keys are factKeys from the facts just persisted */
+      if (structuredFactId === undefined) {
+        return err(
+          finalizeFailure("Hard-requirement cites a structured fact that was not persisted")
+        );
       }
+      facts.push({ structuredFactId, polarity: "contradicting" });
     }
-    /* v8 ignore stop */
     const outcome = assessment.outcome;
-    /* v8 ignore next 6 */
+    // resolveHardRequirements lists the facts that produced pass or fail.
+    /* v8 ignore next 6 -- pass/fail assessments always cite persisted fact keys */
     if ((outcome === "pass" || outcome === "fail") && facts.length === 0) {
       return err(
         finalizeFailure(`Hard-requirement ${assessment.requirementId} cannot persist ${outcome} without facts`)
@@ -903,12 +1051,12 @@ function persistCompleteResult(args: {
       })),
       createdAt: args.createdAt
     });
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!preparedRequirement.ok) {
       return preparedRequirement;
     }
     const insertedRequirement = insertHardRequirementAssessment(args.context, preparedRequirement.value);
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!insertedRequirement.ok) {
       return insertedRequirement;
     }
@@ -926,21 +1074,23 @@ function persistCompleteResult(args: {
       actorId: null,
       createdAt: args.createdAt
     });
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!preparedAssessment.ok) {
       return preparedAssessment;
     }
     const insertedAssessment = insertDimensionAssessment(args.context, preparedAssessment.value);
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!insertedAssessment.ok) {
       return insertedAssessment;
     }
     let ordinal = 0;
     const spanIds = [...assessment.supportingSpanIds, ...assessment.contradictingSpanIds];
     for (const spanId of spanIds) {
-      /* v8 ignore next 3 -- dimension spans are the artifact spans already persisted. */
+      /* v8 ignore next 5 -- dimension span IDs are the artifact span IDs persistArtifactSpans just wrote */
       if (!persistedSpanIds.has(spanId)) {
-        continue;
+        return err(
+          finalizeFailure("Dimension assessment cites an evidence span that was not persisted")
+        );
       }
       const preparedRef = prepareDimensionAssessmentEvidenceSpan({
         dimensionAssessmentEvidenceSpanId: args.nextId(),
@@ -949,12 +1099,12 @@ function persistCompleteResult(args: {
         spanOrdinal: ordinal,
         createdAt: args.createdAt
       });
-      /* v8 ignore next 3 */
+      /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
       if (!preparedRef.ok) {
         return preparedRef;
       }
       const insertedRef = insertDimensionAssessmentEvidenceSpan(args.context, preparedRef.value);
-      /* v8 ignore next 3 */
+      /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
       if (!insertedRef.ok) {
         return insertedRef;
       }
@@ -965,7 +1115,6 @@ function persistCompleteResult(args: {
 
   const sourceDocumentIds = uniqueSourceIds(args.documents);
   const gapRows: Array<{ evidenceGapId: string; dimensionId: string }> = [];
-  /* v8 ignore start -- located fixtures cover every rubric dimension, so complete results have no gaps. */
   for (const gap of args.decision.dimensionDerivation.gaps) {
     const mapped = mapSearchedDocuments(gap.documentsSearched, args.documents, sourceDocumentIds);
     const evidenceGapId = args.nextId();
@@ -976,18 +1125,17 @@ function persistCompleteResult(args: {
       documentsSearched: mapped,
       createdAt: args.createdAt
     });
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!preparedGap.ok) {
       return preparedGap;
     }
     const insertedGap = insertEvidenceGap(args.context, preparedGap.value);
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!insertedGap.ok) {
       return insertedGap;
     }
     gapRows.push({ evidenceGapId, dimensionId: gap.dimensionId });
   }
-  /* v8 ignore stop */
 
   const scoreId = args.nextId();
   const preparedResult = prepareCandidateTriageResult({
@@ -1001,7 +1149,11 @@ function persistCompleteResult(args: {
       candidateResultEvidenceSpanId: args.nextId(),
       evidenceSpanId
     })),
-    evidenceGaps: [],
+    evidenceGaps: gapRows.map((gap) => ({
+      candidateResultEvidenceGapId: args.nextId(),
+      evidenceGapId: gap.evidenceGapId,
+      dimensionId: gap.dimensionId
+    })),
     dimensionAssessments: assessmentIds.map((assessment) => ({
       candidateResultDimensionAssessmentId: args.nextId(),
       dimensionAssessmentId: assessment.dimensionAssessmentId,
@@ -1032,12 +1184,12 @@ function persistCompleteResult(args: {
     sealId: args.sealId,
     createdAt: args.createdAt
   });
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!preparedResult.ok) {
     return preparedResult;
   }
   const insertedResult = insertCandidateTriageResult(args.context, preparedResult.value);
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!insertedResult.ok) {
     return insertedResult;
   }
@@ -1050,28 +1202,10 @@ function persistCompleteResult(args: {
     resultId: args.resultId,
     reasonCodes
   });
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!reasons.ok) {
     return reasons;
   }
-
-  /* v8 ignore start -- scored shortlist proposals need all four hard requirements
-   * to resolve; finalize does not invent employment facts from resume prose. */
-  if (args.decision.routing.status === "scored") {
-    const proposals = persistShortlistProposals({
-      context: args.context,
-      nextId: args.nextId,
-      createdAt: args.createdAt,
-      resultId: args.resultId,
-      persistedSpanIds,
-      proposals: args.decision.proposals.proposals
-    });
-    /* v8 ignore next 3 */
-    if (!proposals.ok) {
-      return proposals;
-    }
-  }
-  /* v8 ignore stop */
 
   const sealed = sealResultAndHead({
     context: args.context,
@@ -1080,7 +1214,7 @@ function persistCompleteResult(args: {
     resultId: args.resultId,
     sealId: args.sealId
   });
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!sealed.ok) {
     return sealed;
   }
@@ -1099,15 +1233,18 @@ function persistArtifactSpans(args: {
   const documentBySource = new Map(args.documents.map((document) => [document.sourceDocumentId, document] as const));
   for (const artifact of args.artifacts) {
     const document = documentBySource.get(artifact.sourceDocumentId);
-    /* v8 ignore next 3 -- scheduler artifacts always point at a candidate document. */
     if (document === undefined) {
-      continue;
+      return err(
+        finalizeFailure("Trusted extraction span is missing its source document")
+      );
     }
     for (const [spanIdx, span] of artifact.acceptedOutput.spans.entries()) {
       const spanId = `span_${args.candidateId}_${artifact.extractionArtifactId}_${spanIdx}`;
-      /* v8 ignore next 3 -- artifact span ids include the artifact id and index. */
+      /* v8 ignore next 5 -- span ids include artifact id and index; each work item has its own artifact */
       if (args.persistedSpanIds.has(spanId)) {
-        continue;
+        return err(
+          finalizeFailure("Trusted extraction produced a duplicate evidence span id")
+        );
       }
       const prepared = prepareEvidenceSpan({
         evidenceSpanId: spanId,
@@ -1122,67 +1259,15 @@ function persistArtifactSpans(args: {
         extractorVersion: args.extractorVersion,
         createdAt: args.createdAt
       });
-      /* v8 ignore next 3 -- scheduler already located these spans against stored text. */
       if (!prepared.ok) {
-        continue;
+        return prepared;
       }
       const inserted = insertEvidenceSpan(args.context, prepared.value);
-      /* v8 ignore next 3 */
       if (!inserted.ok) {
         return inserted;
       }
       args.persistedSpanIds.add(spanId);
     }
-  }
-  return ok(undefined);
-}
-
-function persistLocatedSpans(args: {
-  context: ImmediateTransactionContext;
-  documents: Map<string, CandidateDocumentRow>;
-  extractorVersion: string;
-  createdAt: number;
-  locatedSpans: CandidateDecisionOutput["triageInputs"]["locatedSpans"];
-  persistedSpanIds: Set<string>;
-}): Result<void, RuntimeError> {
-  for (const span of args.locatedSpans) {
-    /* v8 ignore next 3 -- work-auth span ids do not collide with artifact spans. */
-    if (args.persistedSpanIds.has(span.evidenceSpanId)) {
-      continue;
-    }
-    const document = args.documents.get(span.documentId);
-    /* v8 ignore next 3 -- located spans are keyed by the candidate document id. */
-    if (document === undefined) {
-      continue;
-    }
-    let matchQuality: "exact" | "normalized" = "exact";
-    /* v8 ignore next 3 -- T10.5 work-auth quotes relocate as exact matches. */
-    if (span.matchQuality === "normalized") {
-      matchQuality = "normalized";
-    }
-    const prepared = prepareEvidenceSpan({
-      evidenceSpanId: span.evidenceSpanId,
-      documentId: document.sourceDocumentId,
-      start: span.start,
-      end: span.end,
-      quotedText: span.quotedText,
-      dimensionId: FALLBACK_DIMENSION_ID,
-      polarity: span.polarity,
-      source: "extracted",
-      matchQuality,
-      extractorVersion: args.extractorVersion,
-      createdAt: args.createdAt
-    });
-    /* v8 ignore next 3 -- located quotes already passed relocateQuote. */
-    if (!prepared.ok) {
-      continue;
-    }
-    const inserted = insertEvidenceSpan(args.context, prepared.value);
-    /* v8 ignore next 3 -- evidence_span insert fails only on constraint errors. */
-    if (!inserted.ok) {
-      return inserted;
-    }
-    args.persistedSpanIds.add(span.evidenceSpanId);
   }
   return ok(undefined);
 }
@@ -1203,12 +1288,12 @@ function persistReasonsAndTasks(args: {
       reasonOrdinal: index,
       createdAt: args.createdAt
     });
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!preparedReason.ok) {
       return preparedReason;
     }
     const insertedReason = insertCandidateResultReason(args.context, preparedReason.value);
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!insertedReason.ok) {
       return insertedReason;
     }
@@ -1219,56 +1304,18 @@ function persistReasonsAndTasks(args: {
       taskOrdinal: index,
       createdAt: args.createdAt
     });
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!preparedTask.ok) {
       return preparedTask;
     }
     const insertedTask = insertResolutionTask(args.context, preparedTask.value);
-    /* v8 ignore next 3 */
+    /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
     if (!insertedTask.ok) {
       return insertedTask;
     }
   }
   return ok(undefined);
 }
-
-/* v8 ignore start -- reached only for scored results; see persistCompleteResult. */
-function persistShortlistProposals(args: {
-  context: ImmediateTransactionContext;
-  nextId: () => string;
-  createdAt: number;
-  resultId: string;
-  persistedSpanIds: Set<string>;
-  proposals: CandidateDecisionOutput["proposals"]["proposals"];
-}): Result<void, RuntimeError> {
-  for (const [index, proposal] of args.proposals.entries()) {
-    const evidenceSpans = proposal.evidenceSpanIds
-      .filter((spanId) => args.persistedSpanIds.has(spanId))
-      .map((spanId) => ({
-        proposalEvidenceSpanId: args.nextId(),
-        evidenceSpanId: spanId
-      }));
-    const prepared = prepareProposal({
-      proposalId: args.nextId(),
-      candidateResultId: args.resultId,
-      proposalOrdinal: index,
-      payload: proposal.payload,
-      evidenceSpans,
-      createdAt: args.createdAt
-    });
-    /* v8 ignore next 3 */
-    if (!prepared.ok) {
-      return prepared;
-    }
-    const inserted = insertProposal(args.context, prepared.value);
-    /* v8 ignore next 3 */
-    if (!inserted.ok) {
-      return inserted;
-    }
-  }
-  return ok(undefined);
-}
-/* v8 ignore stop */
 
 function sealResultAndHead(args: {
   context: ImmediateTransactionContext;
@@ -1282,12 +1329,12 @@ function sealResultAndHead(args: {
     candidateResultId: args.resultId,
     createdAt: args.createdAt
   });
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!preparedSeal.ok) {
     return preparedSeal;
   }
   const insertedSeal = insertCandidateResultSeal(args.context, preparedSeal.value);
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!insertedSeal.ok) {
     return insertedSeal;
   }
@@ -1296,43 +1343,9 @@ function sealResultAndHead(args: {
     { candidateId: args.candidateId, currentResultId: args.resultId },
     0
   );
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!head.ok) {
     return head;
-  }
-  return ok(undefined);
-}
-
-function appendNamedAuditEvent(args: {
-  context: ImmediateTransactionContext;
-  clock: UseCaseComposition["clock"];
-  auditEventId: string;
-  commandId: string;
-  eventOrdinal: number;
-  actorId: string;
-  eventName: string;
-  occurredAt: number;
-  payload: unknown;
-}): Result<void, RuntimeError> {
-  const prepared = prepareAuditEvent(args.clock, {
-    auditEventId: args.auditEventId,
-    commandId: args.commandId,
-    eventOrdinal: args.eventOrdinal,
-    actorId: args.actorId,
-    actorDisplayName: args.actorId,
-    eventName: args.eventName,
-    eventVersion: 1,
-    occurredAt: args.occurredAt,
-    payload: args.payload
-  });
-  /* v8 ignore next 3 */
-  if (!prepared.ok) {
-    return prepared;
-  }
-  const appended = appendAuditEvent(args.context, prepared.value);
-  /* v8 ignore next 3 */
-  if (!appended.ok) {
-    return appended;
   }
   return ok(undefined);
 }
@@ -1350,34 +1363,9 @@ function mapSearchedDocuments(
   const mapped = searched
     .map((documentId) => byCandidateId.get(documentId) ?? documentId)
     .filter((documentId, index, all) => all.indexOf(documentId) === index);
-  /* v8 ignore next 3 */
+  /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (mapped.length === 0) {
     return [...fallback];
   }
   return mapped;
-}
-
-function corpusOrdinal(map: Map<string, number>, candidateId: string): number {
-  const ordinal = map.get(candidateId);
-  /* v8 ignore next 3 -- startTriageRun writes a corpus member for every grouped candidate. */
-  if (ordinal === undefined) {
-    return Number.MAX_SAFE_INTEGER;
-  }
-  return ordinal;
-}
-
-function captureFirstId(idGenerator: IdGenerator): { generator: IdGenerator; firstId: string | undefined } {
-  const captured: { generator: IdGenerator; firstId: string | undefined } = {
-    generator: {
-      next: () => {
-        const id = idGenerator.next();
-        if (captured.firstId === undefined) {
-          captured.firstId = id;
-        }
-        return id;
-      }
-    },
-    firstId: undefined
-  };
-  return captured;
 }
