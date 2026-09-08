@@ -216,6 +216,19 @@ function noneLevelBody(dimensionId: string): string {
   });
 }
 
+/** One span that locates, one that does not: run returned 2, located 1. */
+function partiallyLocatedBody(dimensionId: string, locatableQuote: string): string {
+  return JSON.stringify({
+    dimensionId,
+    proposedLevel: "partial",
+    spans: [
+      { quotedText: locatableQuote, polarity: "supporting" },
+      { quotedText: "this phrase does not appear in the stored document", polarity: "supporting" }
+    ],
+    rejectedClaims: []
+  });
+}
+
 function registerFixturesForAttempt(
   runtime: RuntimeComposition,
   adapter: FixtureExtractionAdapter,
@@ -694,9 +707,57 @@ describe("finalizeTriageRun", () => {
     expect(result.result.candidateCount).toBe(1);
     const packet = unwrap(readCandidatePacket(runtime.connection.database, "cand-1"));
     expect(packet.resultAvailability).toBe("complete");
-    // Fallback: every assessment span counts as both returned and located.
+    // Fallback: every stored artifact span counts as both returned and located.
     expect(packet.confidenceInput?.spansReturned).toBe(packet.confidenceInput?.spansLocated);
     expect(packet.confidenceInput?.spansLocated).toBeGreaterThan(0);
+  });
+
+  it("folds legacy artifact spans into the resolution term on a mixed-coverage attempt", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"], (dimensionId) =>
+      partiallyLocatedBody(dimensionId, "document 0 text")
+    );
+
+    // One succeeded work item finalized before extraction_run persistence: keep
+    // its artifact, drop only its run link. The other five keep linked runs
+    // whose returned (2) exceeds located (1).
+    const db = nativeDatabase(runtime);
+    for (const trigger of [
+      "attempt_work_item_reject_terminal_reopen",
+      "attempt_work_item_reject_terminal_owner",
+      "attempt_work_item_reject_pinned_update",
+      "attempt_work_item_reject_illegal_transition"
+    ]) {
+      db.exec(`DROP TRIGGER IF EXISTS ${trigger}`);
+    }
+    db.prepare(
+      `UPDATE attempt_work_item SET extraction_run_id = NULL
+       WHERE attempt_work_item_id = (
+         SELECT attempt_work_item_id FROM attempt_work_item
+         WHERE triage_attempt_id = ? ORDER BY manifest_ordinal ASC LIMIT 1
+       )`
+    ).run(triageAttemptId);
+
+    const result = unwrap(
+      finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId })
+    );
+    expect(result.result.candidateCount).toBe(1);
+
+    const packet = unwrap(readCandidatePacket(runtime.connection.database, "cand-1"));
+    expect(packet.resultAvailability).toBe("complete");
+    // Five linked runs at returned 2 / located 1, plus one legacy item folded
+    // from its single stored artifact span at returned 1 / located 1.
+    expect(packet.confidenceInput).toEqual({
+      dimensionsWithLocatedSpan: 6,
+      totalDimensions: 6,
+      spansLocated: 6,
+      spansReturned: 11,
+      contradictionCount: 0,
+      requiredFieldsMissing: 4,
+      totalRequiredFields: 4
+    });
+    expect(packet.scoreConfidenceText).toBe("107/220");
   });
 
   it("writes an unavailable packet for reviewable extraction failure", async () => {
