@@ -494,6 +494,7 @@ describe("runtime public API", () => {
         "rubricDimensions",
         "rubricProvenanceAssumptions",
         "rubrics",
+        "runDeferredTransaction",
         "runExtractionAttempt",
         "runImmediateTransaction",
         "runInputSnapshots",
