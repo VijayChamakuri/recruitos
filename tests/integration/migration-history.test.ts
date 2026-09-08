@@ -142,4 +142,30 @@ describe("committed migrations against a real database file", () => {
 
     expect(connection.close().ok).toBe(true);
   });
+
+  it("creates the candidate application answer table and trigger exactly once", async () => {
+    const connection = await openMigratedDatabase("migration-application-answers");
+    const database = nativeDatabase(connection);
+
+    expect(connection.migrate()).toEqual({ ok: true, value: undefined });
+    expect(
+      countRow(
+        database,
+        `SELECT COUNT(*) AS total
+         FROM sqlite_schema
+         WHERE type = 'table' AND name = 'candidate_application_answer'`
+      )
+    ).toBe(1);
+    expect(
+      countRow(
+        database,
+        `SELECT COUNT(*) AS total
+         FROM sqlite_schema
+         WHERE type = 'trigger'
+           AND tbl_name = 'candidate_application_answer'`
+      )
+    ).toBe(3);
+
+    expect(connection.close().ok).toBe(true);
+  });
 });

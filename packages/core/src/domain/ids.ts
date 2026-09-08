@@ -21,6 +21,12 @@ export type AuditEventId = z.infer<typeof AuditEventIdSchema>;
 export const CandidateIdSchema = printableAsciiId.brand<"CandidateId">();
 export type CandidateId = z.infer<typeof CandidateIdSchema>;
 
+export const CandidateApplicationAnswerIdSchema =
+  printableAsciiId.brand<"CandidateApplicationAnswerId">();
+export type CandidateApplicationAnswerId = z.infer<
+  typeof CandidateApplicationAnswerIdSchema
+>;
+
 export const CandidateDemographicsIdSchema =
   printableAsciiId.brand<"CandidateDemographicsId">();
 export type CandidateDemographicsId = z.infer<typeof CandidateDemographicsIdSchema>;

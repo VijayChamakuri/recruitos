@@ -1,4 +1,5 @@
 export * from "./adapters/index.js";
+export * from "./application-answers/index.js";
 export * from "./attempts/index.js";
 export * from "./audit/index.js";
 export * from "./commands/index.js";

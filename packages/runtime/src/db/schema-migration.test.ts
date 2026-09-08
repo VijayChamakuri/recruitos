@@ -9,6 +9,7 @@ import {
   actors,
   attemptWorkItems,
   auditEvents,
+  candidateApplicationAnswers,
   candidateDemographics,
   candidateDocuments,
   candidateHeads,
@@ -389,6 +390,7 @@ const tableCases: ReadonlyArray<readonly [string, SQLiteTable]> = [
   ["triage_run_seal", triageRunSeals],
   ["triage_attempt", triageAttempts],
   ["attempt_work_item", attemptWorkItems],
+  ["candidate_application_answer", candidateApplicationAnswers],
   ["candidate_demographics", candidateDemographics],
   ["demo_session", demoSessions]
 ];

@@ -5,6 +5,7 @@ import {
   actors,
   attemptWorkItems,
   auditEvents,
+  candidateApplicationAnswers,
   candidateDemographics,
   candidateDocuments,
   candidateHeads,
@@ -865,7 +866,25 @@ describe("runtime Drizzle schema", () => {
     }
   });
 
-  it("exposes candidate demographics and demo session constraints", () => {
+  it("exposes candidate application answer, demographics, and demo session constraints", () => {
+    const answerConfig = getTableConfig(candidateApplicationAnswers);
+    expect(answerConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
+      "candidate_application_answer_collected_at",
+      "candidate_application_answer_collected_by",
+      "candidate_application_answer_created_at",
+      "candidate_application_answer_form_id",
+      "candidate_application_answer_free_text",
+      "candidate_application_answer_question_id",
+      "candidate_application_answer_question_key",
+      "candidate_application_answer_selected_option_key"
+    ]);
+    expect(answerConfig.indexes.map((index) => index.config.name).sort()).toEqual([
+      "candidate_application_answer_candidate",
+      "candidate_application_answer_candidate_question_unique"
+    ]);
+    expect(answerConfig.foreignKeys).toHaveLength(1);
+    expect(answerConfig.foreignKeys[0]!.onDelete).toBe("restrict");
+
     const demographicsConfig = getTableConfig(candidateDemographics);
     expect(demographicsConfig.checks.map((constraint) => constraint.name).sort()).toEqual([
       "candidate_demographics_created_at",
