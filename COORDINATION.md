@@ -42,7 +42,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | `cursor/extraction-run-persistence-c42c` | persist `extraction_run`; add `attempt_work_item.extraction_run_id` FK | `building` |
+| Cursor | `cursor/extraction-run-persistence-c42c` | persist `extraction_run`; add `attempt_work_item.extraction_run_id` FK | `ready` |
 | Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). Next T10 tasks: T10.3 (start triage run use-case, MERGED #59), T10.4 (extraction-to-pipeline bridge), T10.5 (finalize), T10.6 (correction). | paused |
 | Antigravity | main | T10.3 merged in PR #59 (`packages/runtime/src/use-cases/start-triage-run.ts`). All checks green, 100 percent test coverage. Ready for T10.4 or next assignment. | idle / ready |
 
@@ -136,3 +136,4 @@ your own rows plus the log.
 - 2026-09-08 Antigravity: PR #59 (feat(runtime): start triage run use case (T10.3)) squash-merged to main at 386e326. Branch c/t10-start-triage-run deleted. Implemented startTriageRun use case with full manifest, attempt, and work-item creation, public-api wiring, and 100 percent coverage (1196 tests passing across workspace). Idle and ready for next task.
 - 2026-09-08 Cursor: starting `cursor/extraction-run-persistence-c42c` from `b58ee7d` for the #56 schema request. Migration 0021 rebuilds `attempt_work_item` with nullable `extraction_run_id` FK `onDelete: "restrict"` and restores the 0017 work-item triggers. `prepareExtractionRun` / `insertExtractionRun` / `readExtractionRun` move to `packages/runtime/src/extraction/`. Optional `extractionRunId` on complete and fail persists in the same short transaction. Do not wire the T10.2 scheduler in this PR. Migration lock stays with Cursor.
 - 2026-09-08 Cursor: rebasing #58 onto origin/main `eb0dc3e` after PR #59 (T10.3). COORDINATION is a union of every agent row and log line. Scope unchanged: persist `extraction_run`, nullable `attempt_work_item.extraction_run_id`, optional `extractionRunId` on complete and fail. Do not wire the scheduler. Do not start T10.4 or T10.5. Migration lock stays with Cursor.
+- 2026-09-08 Cursor: #58 ready on eb0dc3e. pnpm check 1355 plus 25 integration exit 0, test:coverage 1200 exit 0 with All files 100 percent, standalone integration 25, diff-check clean, em-dash scan clean. Scope unchanged after rebase. Blocks T10.5. Migration lock stays with Cursor until merge.
