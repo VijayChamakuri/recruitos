@@ -156,7 +156,7 @@ describe("deriveCandidateTriageInputs", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("bridges application answer into work_authorization_statement proposal", () => {
+  it("bridges application answer into work_authorization_statement proposal without resume relocation", () => {
     const appAnswer: CandidateApplicationAnswer = {
       candidateApplicationAnswerId: "ans_1" as any,
       candidateId: "cand_1" as any,
@@ -187,15 +187,11 @@ describe("deriveCandidateTriageInputs", () => {
       classification: "authorized",
       statementText: "Alice Smith"
     });
-    expect(prop.evidenceSpanIds).toEqual(["span_app_ans_cand_1_ans_1"]);
-    expect(result.value.locatedSpans).toEqual([
-      expect.objectContaining({
-        evidenceSpanId: "span_app_ans_cand_1_ans_1",
-        documentId: "cdoc_1",
-        quotedText: "Alice Smith",
-        polarity: "supporting"
-      })
-    ]);
+    expect(prop.provenance).toBe("parsed");
+    expect(prop.documentId).toBeUndefined();
+    expect(prop.evidenceSpanIds).toEqual([]);
+    expect(result.value.locatedSpans).toEqual([]);
+    expect(result.value.droppedQuotes).toEqual([]);
   });
 
   it("uses the selected option key when work authorization free text is absent", () => {
@@ -222,16 +218,20 @@ describe("deriveCandidateTriageInputs", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.structuredFactProposals).toHaveLength(0);
-    expect(result.value.droppedQuotes).toEqual([
-      expect.objectContaining({
-        quotedText: "Application answer: authorized_no_sponsorship",
-        reason: "unlocated"
-      })
-    ]);
+    expect(result.value.structuredFactProposals).toHaveLength(1);
+    expect(result.value.structuredFactProposals[0]).toMatchObject({
+      provenance: "parsed",
+      evidenceSpanIds: [],
+      payload: {
+        kind: "work_authorization_statement",
+        classification: "authorized",
+        statementText: "Application answer: authorized_no_sponsorship"
+      }
+    });
+    expect(result.value.droppedQuotes).toEqual([]);
   });
 
-  it("drops an unlocated work_authorization quote instead of emitting a fact", () => {
+  it("preserves a work_authorization answer that is not duplicated in resume text", () => {
     const appAnswer: CandidateApplicationAnswer = {
       candidateApplicationAnswerId: "ans_unlocated" as any,
       candidateId: "cand_1" as any,
@@ -255,14 +255,38 @@ describe("deriveCandidateTriageInputs", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.structuredFactProposals).toHaveLength(0);
+    expect(result.value.structuredFactProposals).toHaveLength(1);
+    const prop = result.value.structuredFactProposals[0]!;
+    expect(prop.provenance).toBe("parsed");
+    expect(prop.documentId).toBeUndefined();
+    expect(prop.evidenceSpanIds).toEqual([]);
+    expect(prop.payload).toEqual({
+      kind: "work_authorization_statement",
+      classification: "authorized",
+      statementText: "Citizen"
+    });
     expect(result.value.locatedSpans).toHaveLength(0);
-    expect(result.value.droppedQuotes).toEqual([
-      expect.objectContaining({
-        quotedText: "Citizen",
-        reason: "unlocated"
-      })
-    ]);
+    expect(result.value.droppedQuotes).toEqual([]);
+  });
+
+  it("returns a typed failure when an extraction span id is not a valid identifier", () => {
+    const longCandidateId = `cand_${"x".repeat(120)}`;
+    const result = deriveCandidateTriageInputs({
+      candidateId: longCandidateId,
+      documents: [SAMPLE_DOC],
+      extractions: [
+        {
+          candidateDocumentId: "cdoc_1",
+          dimensionId: RUBRIC_V1.dimensions[0]!.dimensionId,
+          artifact: createFakeArtifact(RUBRIC_V1.dimensions[0]!.dimensionId)
+        }
+      ],
+      rubric: RUBRIC_V1
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("persistence_failed");
+    expect(result.error.message).toContain("Invalid evidence span id");
   });
 
   it("bridges raw fact proposals with quote relocation", () => {
@@ -583,7 +607,7 @@ describe("deriveCandidateDecision end-to-end", () => {
       candidateId: "cand_unauth" as any,
       questionKey: "work_authorization",
       selectedOptionKey: "not_authorized",
-      freeText: "Alice Smith",
+      freeText: "Not authorized to work and this sentence is not in the resume",
       collectedBy: "greenhouse",
       formId: "form_1",
       questionId: "q_1",

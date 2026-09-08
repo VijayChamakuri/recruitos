@@ -55,8 +55,10 @@ import type { ExtractionArtifact, ExtractionFailure } from "../extraction/index.
  * Translates candidate documents, extraction scheduler artifacts, failures,
  * and candidate application answers into inputs consumed by pure core pipeline
  * functions:
- * 1. Structured fact proposals for consolidateStructuredFacts, with quotes
- *    relocated against stored normalized text via core relocateQuote.
+ * 1. Structured fact proposals for consolidateStructuredFacts. Work
+ *    authorization is parsed from the structured application answer and is
+ *    never relocated against resume text. Other fact quotes are relocated
+ *    against stored normalized text via core relocateQuote.
  * 2. Per-dimension evidence for deriveDimensionAssessments across all rubric dimensions.
  * 3. End-to-end execution through scoring, confidence, routing, and proposals.
  */
@@ -147,6 +149,14 @@ function bridgeFailure(message: string): RuntimeError {
   return createRuntimeError("persistence_failed", message, false);
 }
 
+function parseEvidenceSpanId(rawSpanId: string): Result<EvidenceSpanId, RuntimeError> {
+  const parsed = EvidenceSpanIdSchema.safeParse(rawSpanId);
+  if (!parsed.success) {
+    return { ok: false, error: bridgeFailure(`Invalid evidence span id "${rawSpanId}"`) };
+  }
+  return { ok: true, value: parsed.data };
+}
+
 /**
  * Maps a candidate application answer selected option key to a work authorization
  * classification per OQ-7.
@@ -214,53 +224,24 @@ export function deriveCandidateTriageInputs(
   const locatedSpans: LocatedBridgeSpan[] = [];
   const droppedQuotes: DroppedQuote[] = [];
 
-  // 1. Process candidate application answers (OQ-7: work_authorization only)
+  // 1. Process candidate application answers (OQ-7: work_authorization only).
+  // The structured answer is the fact. It is never relocated into a resume.
   const workAuthAnswer = input.applicationAnswers?.workAuthorization;
-  if (
-    workAuthAnswer !== undefined &&
-    workAuthAnswer.questionKey === "work_authorization" &&
-    input.documents.length > 0
-  ) {
+  if (workAuthAnswer !== undefined && workAuthAnswer.questionKey === "work_authorization") {
     const classification = mapWorkAuthorizationOptionKey(workAuthAnswer.selectedOptionKey);
     const statementText =
-      workAuthAnswer.freeText ?? `Application answer: ${workAuthAnswer.selectedOptionKey}`;
-    const primaryDoc = input.documents[0]!;
-    const relocation = relocateQuote(primaryDoc.normalizedText, statementText);
-    if (relocation.ok) {
-      const primaryDocId = CandidateDocumentIdSchema.parse(primaryDoc.candidateDocumentId);
-      const spanId = EvidenceSpanIdSchema.parse(
-        `span_app_ans_${input.candidateId}_${workAuthAnswer.candidateApplicationAnswerId}`
-      );
-      locatedSpans.push(
-        Object.freeze({
-          evidenceSpanId: spanId,
-          documentId: primaryDoc.candidateDocumentId,
-          start: relocation.value.start,
-          end: relocation.value.end,
-          quotedText: relocation.value.quotedText,
-          polarity: "supporting" as const,
-          matchQuality: relocation.value.matchQuality
-        })
-      );
-      structuredFactProposals.push({
-        documentId: primaryDocId,
-        provenance: "parsed",
-        payload: {
-          kind: "work_authorization_statement" as const,
-          classification,
-          statementText
-        },
-        evidenceSpanIds: [spanId]
-      });
-    } else {
-      droppedQuotes.push(
-        Object.freeze({
-          quotedText: statementText,
-          dimensionId: input.rubric.dimensions[0]!.dimensionId,
-          reason: "unlocated"
-        })
-      );
-    }
+      workAuthAnswer.freeText !== null && workAuthAnswer.freeText.trim().length > 0
+        ? workAuthAnswer.freeText
+        : `Application answer: ${workAuthAnswer.selectedOptionKey}`;
+    structuredFactProposals.push({
+      provenance: "parsed",
+      payload: {
+        kind: "work_authorization_statement" as const,
+        classification,
+        statementText
+      },
+      evidenceSpanIds: []
+    });
   }
 
   // 2. Process raw fact proposals and relocate grounding quotes
@@ -275,7 +256,11 @@ export function deriveCandidateTriageInputs(
       const evidenceSpanIds: EvidenceSpanId[] = [];
       if (Array.isArray(rawProposal.evidenceSpanIds)) {
         for (const id of rawProposal.evidenceSpanIds) {
-          evidenceSpanIds.push(EvidenceSpanIdSchema.parse(id));
+          const parsedSpanId = parseEvidenceSpanId(id);
+          if (!parsedSpanId.ok) {
+            return parsedSpanId;
+          }
+          evidenceSpanIds.push(parsedSpanId.value);
         }
       }
 
@@ -285,11 +270,14 @@ export function deriveCandidateTriageInputs(
           const relocation = relocateQuote(doc.normalizedText, quote.quotedText);
           if (relocation.ok) {
             const rawSpanId = `span_fact_${input.candidateId}_${doc.candidateDocumentId}_${quoteOrdinal}`;
-            const spanId = EvidenceSpanIdSchema.parse(rawSpanId);
-            evidenceSpanIds.push(spanId);
+            const parsedSpanId = parseEvidenceSpanId(rawSpanId);
+            if (!parsedSpanId.ok) {
+              return parsedSpanId;
+            }
+            evidenceSpanIds.push(parsedSpanId.value);
             locatedSpans.push(
               Object.freeze({
-                evidenceSpanId: spanId,
+                evidenceSpanId: parsedSpanId.value,
                 documentId: doc.candidateDocumentId,
                 start: relocation.value.start,
                 end: relocation.value.end,
@@ -348,15 +336,19 @@ export function deriveCandidateTriageInputs(
           level: artifact.acceptedOutput.proposedLevel
         });
 
-        artifact.acceptedOutput.spans.forEach((span, spanIdx) => {
+        for (const [spanIdx, span] of artifact.acceptedOutput.spans.entries()) {
           const rawSpanId = `span_${input.candidateId}_${artifact.extractionArtifactId}_${spanIdx}`;
+          const parsedSpanId = parseEvidenceSpanId(rawSpanId);
+          if (!parsedSpanId.ok) {
+            return parsedSpanId;
+          }
           spans.push({
-            evidenceSpanId: EvidenceSpanIdSchema.parse(rawSpanId),
+            evidenceSpanId: parsedSpanId.value,
             documentId: docId,
             polarity: span.polarity,
             source: "extracted" as const
           });
-        });
+        }
       } else if (
         ext !== undefined &&
         (ext.failure !== undefined || ext.reviewableFailure === true)
