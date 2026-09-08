@@ -730,4 +730,64 @@ describe("readCandidatePacket Read Model", () => {
       expect(missingResultRes.error.code).toBe("not_found");
     }
   });
+
+  it("reads a historical result for the same candidate and rejects a foreign result", async () => {
+    const connection = await openMigratedDatabase();
+    const nativeDb = getNativeClient(connection);
+    try {
+      nativeDb.exec(`
+        PRAGMA foreign_keys = OFF;
+        DROP TRIGGER IF EXISTS candidate_result_seal_reject_incomplete;
+      `);
+      nativeDb.prepare(`
+        INSERT INTO candidate (candidate_id, source_system, source_key, channel, corpus_tag, is_synthetic, created_at)
+        VALUES ('cand-hist', 'system', 'kh', 'inbound', 'main', 1, 1000),
+               ('cand-other', 'system', 'ko', 'inbound', 'main', 1, 1000)
+      `).run();
+      nativeDb.prepare(`
+        INSERT INTO candidate_triage_result (
+          candidate_triage_result_id, candidate_id, kind, availability, status,
+          supersedes_result_id, content_json, content_hash, seal_id, created_at
+        )
+        VALUES
+          ('res-original', 'cand-hist', 'initial', 'unavailable', 'escalated', NULL, '{"summary":"original"}', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'seal-orig', 1000),
+          ('res-correction', 'cand-hist', 'correction', 'complete', 'scored', 'res-original', '{"summary":"correction"}', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'seal-corr', 1100),
+          ('res-foreign', 'cand-other', 'initial', 'complete', 'scored', NULL, '{"summary":"other"}', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'seal-other', 1000)
+      `).run();
+      nativeDb.prepare(`
+        INSERT INTO candidate_head (candidate_id, current_result_id, version)
+        VALUES ('cand-hist', 'res-correction', 1)
+      `).run();
+
+      const current = readCandidatePacket(connection.database, "cand-hist");
+      expect(current.ok).toBe(true);
+      if (current.ok) {
+        expect(current.value.resultId).toBe("res-correction");
+        expect(current.value.resultKind).toBe("correction");
+        expect(current.value.headVersion).toBe(1);
+      }
+
+      const original = readCandidatePacket(connection.database, "cand-hist", {
+        resultId: "res-original"
+      });
+      expect(original.ok).toBe(true);
+      if (original.ok) {
+        expect(original.value.resultId).toBe("res-original");
+        expect(original.value.resultKind).toBe("initial");
+        expect(original.value.resultAvailability).toBe("unavailable");
+        expect(original.value.headVersion).toBe(1);
+      }
+
+      const foreign = readCandidatePacket(connection.database, "cand-hist", {
+        resultId: "res-foreign"
+      });
+      expect(foreign.ok).toBe(false);
+      if (!foreign.ok) {
+        expect(foreign.error.code).toBe("not_found");
+        expect(foreign.error.message).toContain("does not belong to candidate");
+      }
+    } finally {
+      connection.close();
+    }
+  });
 });

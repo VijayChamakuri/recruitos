@@ -68,6 +68,22 @@ describe("CLI Parser", () => {
 
     const p4 = parseArgs(["eval:class1", "--candidate-id=candidate-1"]);
     expect(p4.options.candidateId).toBe("candidate-1");
+
+    const p5 = parseArgs([
+      "triage:extract",
+      "--attempt",
+      "attempt-1",
+      "--demo-fixtures",
+      "--correction-overlay",
+      "--candidate-version",
+      "1",
+      "--result",
+      "result-original"
+    ]);
+    expect(p5.flags.demoFixtures).toBe(true);
+    expect(p5.flags.correctionOverlay).toBe(true);
+    expect(p5.options.candidateVersion).toBe(1);
+    expect(p5.options.result).toBe("result-original");
   });
 
   it("records unknown options", () => {
@@ -108,12 +124,26 @@ describe("CLI Commands Execution", () => {
       expect(res.stdout).toContain("status");
       expect(res.stdout).toContain("demo:prepare");
       expect(res.stdout).toContain("eval:class1");
+      expect(res.stdout).toContain("triage:complete-correction");
     });
 
     it("displays command-specific help", async () => {
       const res = await runCli(["help", "packet"]);
       expect(res.exitCode).toBe(EXIT_SUCCESS);
       expect(res.stdout).toContain("recruitos packet <candidate-id>");
+      expect(res.stdout).toContain("--result");
+
+      const reviewHelp = await runCli(["help", "review"]);
+      expect(reviewHelp.stdout).toContain("request_re_extraction");
+      expect(reviewHelp.stdout).toContain("--candidate-version");
+
+      const extractHelp = await runCli(["help", "triage:extract"]);
+      expect(extractHelp.stdout).toContain("--demo-fixtures");
+      expect(extractHelp.stdout).toContain("--correction-overlay");
+
+      const completeHelp = await runCli(["help", "triage:complete-correction"]);
+      expect(completeHelp.stdout).toContain("reextraction_completed");
+      expect(completeHelp.stdout).toContain("review_required");
     });
 
     it("emits help as structured JSON when requested", async () => {
@@ -300,6 +330,28 @@ describe("CLI Commands Execution", () => {
       );
       expect(finalized.exitCode).toBe(EXIT_SUCCESS);
       expect(finalized.stdout).toContain("RecruitOS Triage Run Finalized");
+
+      const extractedWithFixtures = await runCli(
+        ["triage:extract", "--attempt", "attempt-stub", "--demo-fixtures", "--correction-overlay"],
+        { composition }
+      );
+      expect(extractedWithFixtures.exitCode).toBe(EXIT_SUCCESS);
+
+      const completed = await runCli(
+        [
+          "triage:complete-correction",
+          "--attempt",
+          "attempt-stub",
+          "--version-num",
+          "1",
+          "--candidate-version",
+          "1"
+        ],
+        { composition }
+      );
+      expect(completed.exitCode).toBe(EXIT_SUCCESS);
+      expect(completed.stdout).toContain("RecruitOS Correction Completed");
+      expect(completed.stdout).toContain("review_required");
     });
 
     it("validates start and finalize inputs", async () => {
@@ -312,6 +364,51 @@ describe("CLI Commands Execution", () => {
       expect((await runCli(["triage:finalize"])).exitCode).toBe(EXIT_USAGE_ERROR);
       expect((await runCli(["demo:prepare"])).exitCode).toBe(EXIT_USAGE_ERROR);
       expect((await runCli(["eval:class1"])).exitCode).toBe(EXIT_USAGE_ERROR);
+      expect((await runCli(["triage:complete-correction"])).exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(
+        (await runCli(["triage:complete-correction", "--attempt", "attempt-1"])).exitCode
+      ).toBe(EXIT_USAGE_ERROR);
+      expect(
+        (
+          await runCli([
+            "triage:complete-correction",
+            "--attempt",
+            "attempt-1",
+            "--version-num",
+            "1"
+          ])
+        ).exitCode
+      ).toBe(EXIT_USAGE_ERROR);
+
+      const noComplete = createStubComposition();
+      (noComplete as { completeReExtraction?: unknown }).completeReExtraction = undefined;
+      expect(
+        (
+          await runCli(
+            [
+              "triage:complete-correction",
+              "--attempt",
+              "attempt-1",
+              "--version-num",
+              "1",
+              "--candidate-version",
+              "1"
+            ],
+            { composition: noComplete }
+          )
+        ).stderr
+      ).toContain("does not support correction completion");
+
+      const noFixtures = createStubComposition();
+      (noFixtures as { registerExtractionFixtures?: unknown }).registerExtractionFixtures = undefined;
+      expect(
+        (
+          await runCli(
+            ["triage:extract", "--attempt", "attempt-1", "--demo-fixtures"],
+            { composition: noFixtures }
+          )
+        ).stderr
+      ).toContain("does not support fixture registration");
     });
   });
 
@@ -343,6 +440,83 @@ describe("CLI Commands Execution", () => {
       const res = await runCli(["review", "--task", "task-1", "--action", "resolve"]);
       expect(res.exitCode).toBe(EXIT_USAGE_ERROR);
       expect(res.stderr).toContain("--version-num is required");
+    });
+
+    it("rejects a human reextraction_completed action", async () => {
+      const text = await runCli([
+        "review",
+        "--task",
+        "task-1",
+        "--action",
+        "reextraction_completed",
+        "--version-num",
+        "1"
+      ]);
+      expect(text.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(text.stderr).toContain("reextraction_completed is a system-only action");
+
+      const json = await runCli([
+        "review",
+        "--task",
+        "task-1",
+        "--action",
+        "reextraction_completed",
+        "--version-num",
+        "1",
+        "--json"
+      ]);
+      expect(json.exitCode).toBe(EXIT_USAGE_ERROR);
+      const env = JSON.parse(json.stderr ?? "{}");
+      expect(env.error.code).toBe("command_conflict");
+    });
+
+    it("requires --candidate-version when requesting re-extraction", async () => {
+      const res = await runCli([
+        "review",
+        "--task",
+        "task-1",
+        "--action",
+        "request_re_extraction",
+        "--version-num",
+        "0"
+      ]);
+      expect(res.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(res.stderr).toContain("--candidate-version is required");
+
+      const json = await runCli([
+        "review",
+        "--task",
+        "task-1",
+        "--action",
+        "request_re_extraction",
+        "--version-num",
+        "0",
+        "--json"
+      ]);
+      expect(json.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(JSON.parse(json.stderr ?? "{}").error.code).toBe("missing_candidate_version");
+    });
+
+    it("records a request_re_extraction action when both head versions are supplied", async () => {
+      const composition = createStubComposition();
+      const res = await runCli(
+        [
+          "review",
+          "--task",
+          "task-1",
+          "--action",
+          "request_re_extraction",
+          "--version-num",
+          "0",
+          "--candidate-version",
+          "1",
+          "--actor",
+          "human:operator"
+        ],
+        { composition }
+      );
+      expect(res.exitCode).toBe(EXIT_SUCCESS);
+      expect(res.stdout).toContain("Resolution action recorded");
     });
 
     it("records resolution action and handles optimistic concurrency conflict", async () => {
@@ -415,6 +589,13 @@ describe("CLI Commands Execution", () => {
       expect(resEvidence.exitCode).toBe(EXIT_SUCCESS);
       expect(resEvidence.stdout).toContain("Evidence Spans");
       expect(resEvidence.stdout).not.toContain("Arithmetic Score Decomposition");
+    });
+
+    it("prints result identity when the packet carries it", async () => {
+      const res = await runCli(["packet", "candidate-1"]);
+      expect(res.exitCode).toBe(EXIT_SUCCESS);
+      expect(res.stdout).toContain("Result ID:    result-1");
+      expect(res.stdout).toContain("Result kind:  initial");
     });
 
     it("outputs candidate packet in JSON envelope", async () => {
