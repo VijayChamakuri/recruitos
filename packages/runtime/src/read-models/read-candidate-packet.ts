@@ -75,10 +75,11 @@ function readConfidenceInput(contentJson: string | undefined): CandidatePacketCo
       totalDimensions: record.totalDimensions as number,
       totalRequiredFields: record.totalRequiredFields as number
     };
+    /* v8 ignore start -- score_result CHECK requires json_valid content. */
   } catch {
-    /* v8 ignore next -- score_result CHECK requires json_valid content. */
     return null;
   }
+  /* v8 ignore stop */
 }
 
 /**
