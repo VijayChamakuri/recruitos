@@ -41,14 +41,50 @@ const SINGLE_SUBJECT_FACT_KINDS = [
   "claimed_experience"
 ] as const satisfies readonly StructuredFactKind[];
 
+function isParsedWorkAuthorizationProposal(value: {
+  provenance: FactProvenanceSource;
+  payload: StructuredFactPayload;
+}): boolean {
+  return value.provenance === "parsed" && value.payload.kind === "work_authorization_statement";
+}
+
 export const StructuredFactProposalSchema = z
   .object({
-    documentId: CandidateDocumentIdSchema,
+    documentId: CandidateDocumentIdSchema.optional(),
     provenance: FactProvenanceSourceSchema,
     payload: StructuredFactPayloadSchema,
-    evidenceSpanIds: z.array(EvidenceSpanIdSchema).min(1)
+    evidenceSpanIds: z.array(EvidenceSpanIdSchema)
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (isParsedWorkAuthorizationProposal(value)) {
+      if (value.documentId !== undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "Application-answer facts must not cite a source document"
+        });
+      }
+      if (value.evidenceSpanIds.length > 0) {
+        context.addIssue({
+          code: "custom",
+          message: "Application-answer facts must not cite document evidence spans"
+        });
+      }
+      return;
+    }
+    if (value.documentId === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Document-grounded facts require a document id"
+      });
+    }
+    if (value.evidenceSpanIds.length < 1) {
+      context.addIssue({
+        code: "custom",
+        message: "Document-grounded facts require at least one evidence span"
+      });
+    }
+  });
 
 export type StructuredFactProposal = z.infer<typeof StructuredFactProposalSchema>;
 
@@ -163,8 +199,9 @@ type FactAccumulator = {
  * members, which is the input that resolves the affected hard requirements to
  * `unknown` later in the pipeline.
  *
- * Every proposal must carry at least one grounding evidence span, so an
- * ungrounded claim cannot enter the consolidated set at all.
+ * Document-grounded proposals must carry at least one evidence span. Parsed
+ * work-authorization statements are grounded in the structured application
+ * answer instead, so they carry no document id and no document spans.
  */
 export function consolidateStructuredFacts(
   proposalsInput: unknown
@@ -177,7 +214,9 @@ export function consolidateStructuredFacts(
   const documentIds = new Set<string>();
   const accumulators = new Map<string, FactAccumulator>();
   for (const proposal of parsed.data) {
-    documentIds.add(proposal.documentId);
+    if (proposal.documentId !== undefined) {
+      documentIds.add(proposal.documentId);
+    }
     const factKey = structuredFactIdentityKey(proposal.payload);
     const existing = accumulators.get(factKey);
     const accumulator = existing ?? {
@@ -188,7 +227,9 @@ export function consolidateStructuredFacts(
       evidenceSpanIds: []
     };
     accumulator.provenance.add(proposal.provenance);
-    accumulator.documentIds.push(proposal.documentId);
+    if (proposal.documentId !== undefined) {
+      accumulator.documentIds.push(proposal.documentId);
+    }
     accumulator.evidenceSpanIds.push(...proposal.evidenceSpanIds);
     accumulators.set(factKey, accumulator);
   }
