@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { RUBRIC_V1, sha256Hex, type Result } from "@recruitos/core";
+import { RUBRIC_V1, canonicalJsonStringify, sha256Hex, type Result } from "@recruitos/core";
 import type BetterSqlite3 from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -205,6 +205,15 @@ function unlocatedBody(dimensionId: string): string {
   });
 }
 
+function noneLevelBody(dimensionId: string): string {
+  return JSON.stringify({
+    dimensionId,
+    proposedLevel: "none",
+    spans: [],
+    rejectedClaims: []
+  });
+}
+
 function registerFixturesForAttempt(
   runtime: RuntimeComposition,
   adapter: FixtureExtractionAdapter,
@@ -262,7 +271,8 @@ async function startAndExtract(
 function seedWorkAuthorization(
   runtime: RuntimeComposition,
   candidateId: string,
-  freeText: string | null
+  freeText: string | null,
+  selectedOptionKey = "authorized"
 ): void {
   unwrap(
     runImmediateTransaction(runtime.connection, (context) => {
@@ -274,7 +284,7 @@ function seedWorkAuthorization(
               candidateApplicationAnswerId: `ans-${candidateId}`,
               candidateId,
               questionKey: "work_authorization",
-              selectedOptionKey: "authorized",
+              selectedOptionKey,
               freeText,
               collectedBy: "ats",
               formId: "app-form-1",
@@ -288,6 +298,77 @@ function seedWorkAuthorization(
       return { ok: true, value: undefined };
     })
   );
+}
+
+function dropWorkItemTerminalTriggers(db: BetterSqlite3.Database): void {
+  db.exec("DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_reopen");
+  db.exec("DROP TRIGGER IF EXISTS attempt_work_item_reject_terminal_owner");
+}
+
+function rewriteStoredArtifacts(
+  db: BetterSqlite3.Database,
+  mutateAccepted: (accepted: {
+    dimensionId: string;
+    proposedLevel: string;
+    spans: Array<{
+      start: number;
+      end: number;
+      quotedText: string;
+      polarity: string;
+      matchQuality: string;
+    }>;
+  }) => void
+): void {
+  db.exec("DROP TRIGGER IF EXISTS extraction_artifact_reject_update");
+  const rows = db
+    .prepare(
+      `SELECT
+        extraction_artifact_id AS id,
+        accepted_output_json AS acceptedJson,
+        rejected_claims_json AS rejectedJson
+       FROM extraction_artifact`
+    )
+    .all() as Array<{ id: string; acceptedJson: string; rejectedJson: string }>;
+  for (const row of rows) {
+    const accepted = JSON.parse(row.acceptedJson) as {
+      dimensionId: string;
+      proposedLevel: string;
+      spans: Array<{
+        start: number;
+        end: number;
+        quotedText: string;
+        polarity: string;
+        matchQuality: string;
+      }>;
+    };
+    const rejected = JSON.parse(row.rejectedJson) as unknown;
+    mutateAccepted(accepted);
+    const acceptedCanon = canonicalJsonStringify(accepted);
+    const rejectedCanon = canonicalJsonStringify(rejected);
+    const contentCanon = canonicalJsonStringify({
+      acceptedOutput: accepted,
+      rejectedClaims: rejected
+    });
+    if (!acceptedCanon.ok || !rejectedCanon.ok || !contentCanon.ok) {
+      throw new Error("canonical JSON rewrite failed");
+    }
+    db.prepare(
+      `UPDATE extraction_artifact
+       SET accepted_output_json = ?,
+           accepted_output_hash = ?,
+           rejected_claims_json = ?,
+           rejected_claims_hash = ?,
+           content_hash = ?
+       WHERE extraction_artifact_id = ?`
+    ).run(
+      acceptedCanon.value,
+      sha256Hex(acceptedCanon.value),
+      rejectedCanon.value,
+      sha256Hex(rejectedCanon.value),
+      sha256Hex(contentCanon.value),
+      row.id
+    );
+  }
 }
 
 describe("finalizeTriageRun", () => {
@@ -341,6 +422,15 @@ describe("finalizeTriageRun", () => {
         message: "Finalize triage run requires an actor id"
       })
     });
+    expect(
+      finalizeTriageRun(runtime, { actorId: "not a valid id", triageAttemptId: "attempt-1" })
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: "Finalize triage run requires a valid actor id"
+      })
+    });
     expect(finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId: "" })).toEqual({
       ok: false,
       error: expect.objectContaining({
@@ -355,6 +445,19 @@ describe("finalizeTriageRun", () => {
       error: expect.objectContaining({
         code: "persistence_failed",
         message: "triageRunId must be a non-empty string when provided"
+      })
+    });
+    expect(
+      finalizeTriageRun(runtime, {
+        actorId: ACTOR_ID,
+        triageAttemptId: "attempt-1",
+        triageRunId: `run_${"x".repeat(128)}`
+      })
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: "triageRunId must be a valid identifier when provided"
       })
     });
     expect(
@@ -541,7 +644,7 @@ describe("finalizeTriageRun", () => {
     expect(scoreCount.count).toBe(0);
   });
 
-  it("persists a relocatable work-authorization fact when the answer quotes the document", async () => {
+  it("persists a work-authorization fact from the application answer without resume relocation", async () => {
     const { runtime, adapter } = await createTestRuntime();
     seedCandidates(runtime, ["cand-1"]);
     seedWorkAuthorization(runtime, "cand-1", candidateDocumentText("cand-1"));
@@ -558,24 +661,71 @@ describe("finalizeTriageRun", () => {
         "missing_evidence:employer_history"
       ])
     );
-    const factCount = nativeDatabase(runtime)
+    const db = nativeDatabase(runtime);
+    const factCount = db
       .prepare("SELECT COUNT(*) AS count FROM structured_fact WHERE candidate_id = ?")
       .get("cand-1") as { count: number };
     expect(factCount.count).toBe(1);
+    const spanLinks = db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM structured_fact_evidence_span sfe
+         JOIN structured_fact sf ON sf.structured_fact_id = sfe.structured_fact_id
+         WHERE sf.candidate_id = ?`
+      )
+      .get("cand-1") as { count: number };
+    expect(spanLinks.count).toBe(0);
+    const provenance = db
+      .prepare(
+        `SELECT sfp.source AS source
+         FROM structured_fact_provenance sfp
+         JOIN structured_fact sf ON sf.structured_fact_id = sfp.structured_fact_id
+         WHERE sf.candidate_id = ?`
+      )
+      .all("cand-1") as Array<{ source: string }>;
+    expect(provenance.map((row) => row.source)).toEqual(["parsed"]);
   });
 
-  it("does not persist a work-authorization fact when the answer quote is not in the document", async () => {
+  it("persists a work-authorization fact when the answer is not duplicated in the resume", async () => {
     const { runtime, adapter } = await createTestRuntime();
     seedCandidates(runtime, ["cand-1"]);
     seedWorkAuthorization(runtime, "cand-1", "authorization text that is not in the resume");
     const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
     unwrap(finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId }));
     const packet = unwrap(readCandidatePacket(runtime.connection.database, "cand-1"));
-    expect(packet.reasons).toContain("missing_evidence:work_authorization");
+    expect(packet.resultAvailability).toBe("complete");
+    expect(packet.confidenceInput?.requiredFieldsMissing).toBe(3);
+    expect(packet.reasons).not.toContain("missing_evidence:work_authorization");
     const factCount = nativeDatabase(runtime)
       .prepare("SELECT COUNT(*) AS count FROM structured_fact WHERE candidate_id = ?")
       .get("cand-1") as { count: number };
-    expect(factCount.count).toBe(0);
+    expect(factCount.count).toBe(1);
+  });
+
+  it("rejects on a not_authorized application answer that does not appear in the resume", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    seedWorkAuthorization(
+      runtime,
+      "cand-1",
+      "Not authorized to work and this sentence is not in the resume",
+      "not_authorized"
+    );
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    unwrap(finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId }));
+    const packet = unwrap(readCandidatePacket(runtime.connection.database, "cand-1"));
+    expect(packet.resultStatus).toBe("rejected_hard_requirement");
+    expect(packet.reasons).not.toContain("missing_evidence:work_authorization");
+    const polarity = nativeDatabase(runtime)
+      .prepare(
+        `SELECT hraf.polarity AS polarity
+         FROM hard_requirement_assessment_fact hraf
+         JOIN hard_requirement_assessment hra
+           ON hra.hard_requirement_assessment_id = hraf.hard_requirement_assessment_id
+         WHERE hra.candidate_id = ? AND hra.requirement_field_id = 'work_authorization'`
+      )
+      .all("cand-1") as Array<{ polarity: string }>;
+    expect(polarity.map((row) => row.polarity)).toEqual(["contradicting"]);
   });
 
   it("finalizes candidates in corpus import order", async () => {
@@ -690,5 +840,270 @@ describe("finalizeTriageRun", () => {
         message: "finalizeTriageRun cannot finalize a correction attempt"
       })
     });
+  });
+
+  it("prepares audit envelopes outside the SQLite writer lock", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    const guarded = {
+      ...runtime,
+      clock: {
+        now: () => {
+          if (db.inTransaction) {
+            throw new Error("audit clock must not run inside the writer lock");
+          }
+          return CREATED_AT;
+        }
+      }
+    };
+    const result = unwrap(
+      finalizeTriageRun(guarded, { actorId: ACTOR_ID, triageAttemptId })
+    );
+    expect(result.result.candidateCount).toBe(1);
+  });
+
+  it("refuses finalize when the audit clock returns an invalid recorded-at time", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    let calls = 0;
+    const guarded = {
+      ...runtime,
+      clock: {
+        now: () => {
+          calls += 1;
+          return calls === 1 ? CREATED_AT : -1;
+        }
+      }
+    };
+    const result = finalizeTriageRun(guarded, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: "Audit clock returned an invalid timestamp"
+      })
+    });
+  });
+
+  it("refuses finalize when a trusted extraction span id is not a valid identifier", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    dropWorkItemTerminalTriggers(db);
+    db.exec("DROP TRIGGER IF EXISTS extraction_artifact_reject_update");
+    db.pragma("foreign_keys = OFF");
+    const longArtifactId = `art_${"x".repeat(116)}`;
+    const original = db
+      .prepare(
+        `SELECT extraction_artifact_id AS id
+         FROM extraction_artifact
+         LIMIT 1`
+      )
+      .get() as { id: string };
+    db.prepare(
+      "UPDATE extraction_artifact SET extraction_artifact_id = ? WHERE extraction_artifact_id = ?"
+    ).run(longArtifactId, original.id);
+    db.prepare(
+      `UPDATE attempt_work_item
+       SET extraction_artifact_id = ?, version = version + 1
+       WHERE extraction_artifact_id = ?`
+    ).run(longArtifactId, original.id);
+    db.pragma("foreign_keys = ON");
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected invalid span id failure");
+    }
+    expect(result.error.code).toBe("persistence_failed");
+    expect(result.error.message).toContain("Invalid evidence span id");
+  });
+
+  it("refuses finalize when a trusted extraction span is missing its source document", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    unwrap(
+      runImmediateTransaction(runtime.connection, (context) => {
+        unwrap(
+          insertSourceDocument(
+            context,
+            unwrap(
+              prepareSourceDocument({
+                sourceDocumentId: "source-doc-retarget",
+                rawText: "Replacement document text that is not the original resume.",
+                normalizedText: "Replacement document text that is not the original resume.",
+                createdAt: CREATED_AT
+              })
+            )
+          )
+        );
+        return { ok: true, value: undefined };
+      })
+    );
+    const db = nativeDatabase(runtime);
+    db.exec("DROP TRIGGER IF EXISTS candidate_document_reject_update");
+    db.prepare("UPDATE candidate_document SET source_document_id = ? WHERE candidate_id = ?").run(
+      "source-doc-retarget",
+      "cand-1"
+    );
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: "Trusted extraction span is missing its source document"
+      })
+    });
+  });
+
+  it("refuses finalize when trusted extraction span offsets miss the stored document", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    db.exec("DROP TRIGGER IF EXISTS source_document_reject_update");
+    const tampered = "x";
+    db.prepare(
+      `UPDATE source_document
+       SET normalized_text = ?,
+           normalized_hash = ?,
+           normalized_length = ?,
+           normalized_byte_length = length(CAST(? AS BLOB))
+       WHERE source_document_id = ?`
+    ).run(
+      tampered,
+      sha256Hex(tampered),
+      tampered.length,
+      tampered,
+      "source-doc-cand-1-0"
+    );
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: "Evidence span offsets do not address the stored document"
+      })
+    });
+  });
+
+  it("refuses finalize when trusted extraction span preparation fails", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    rewriteStoredArtifacts(nativeDatabase(runtime), (accepted) => {
+      for (const span of accepted.spans) {
+        span.end = span.start;
+      }
+    });
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: "Evidence span end must exceed its start"
+      })
+    });
+  });
+
+  it("refuses finalize when a candidate is missing from the corpus snapshot", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    const attempt = db
+      .prepare(
+        `SELECT corpus_manifest_id AS corpusManifestId
+         FROM triage_attempt WHERE triage_attempt_id = ?`
+      )
+      .get(triageAttemptId) as { corpusManifestId: string };
+    db.exec("DROP TRIGGER IF EXISTS corpus_member_document_reject_delete");
+    db.exec("DROP TRIGGER IF EXISTS corpus_member_reject_delete");
+    db.prepare(
+      `DELETE FROM corpus_member_document
+       WHERE corpus_member_id IN (
+         SELECT corpus_member_id FROM corpus_member WHERE manifest_id = ?
+       )`
+    ).run(attempt.corpusManifestId);
+    db.prepare("DELETE FROM corpus_member WHERE manifest_id = ?").run(attempt.corpusManifestId);
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "persistence_failed",
+        message: `Candidate "cand-1" is missing from corpus snapshot ${attempt.corpusManifestId}`
+      })
+    });
+  });
+
+  it("refuses finalize when a succeeded work item points at a missing artifact", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const db = nativeDatabase(runtime);
+    dropWorkItemTerminalTriggers(db);
+    db.pragma("foreign_keys = OFF");
+    db.prepare(
+      `UPDATE attempt_work_item
+       SET extraction_artifact_id = ?, version = version + 1
+       WHERE triage_attempt_id = ? AND state = 'succeeded'`
+    ).run("extraction-artifact-missing", triageAttemptId);
+    db.pragma("foreign_keys = ON");
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "not_found",
+        message: 'Extraction artifact "extraction-artifact-missing" not found'
+      })
+    });
+  });
+
+  it("refuses finalize when a failed work item points at a missing failure record", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"], (dimensionId) =>
+      unlocatedBody(dimensionId)
+    );
+    const db = nativeDatabase(runtime);
+    dropWorkItemTerminalTriggers(db);
+    db.pragma("foreign_keys = OFF");
+    db.prepare(
+      `UPDATE attempt_work_item
+       SET extraction_failure_id = ?, version = version + 1
+       WHERE triage_attempt_id = ? AND state = 'reviewable_failure'`
+    ).run("extraction-failure-missing", triageAttemptId);
+    db.pragma("foreign_keys = ON");
+    const result = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: "not_found",
+        message: 'Extraction failure "extraction-failure-missing" not found'
+      })
+    });
+  });
+
+  it("persists evidence gaps for complete none-level dimension assessments", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"], (dimensionId) =>
+      noneLevelBody(dimensionId)
+    );
+    unwrap(finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId }));
+    const packet = unwrap(readCandidatePacket(runtime.connection.database, "cand-1"));
+    expect(packet.resultAvailability).toBe("complete");
+    const gapCount = nativeDatabase(runtime)
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM candidate_result_evidence_gap
+         WHERE candidate_result_id = ?`
+      )
+      .get(packet.resultId) as { count: number };
+    expect(gapCount.count).toBe(RUBRIC_V1.dimensions.length);
   });
 });
