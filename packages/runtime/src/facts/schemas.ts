@@ -85,15 +85,20 @@ export const StructuredFactContentSchema = z
   .strict();
 export type StructuredFactContent = z.infer<typeof StructuredFactContentSchema>;
 
+function isFullyParsed(value: {
+  provenances: readonly { source: string }[];
+}): boolean {
+  return (
+    value.provenances.length > 0 &&
+    value.provenances.every((provenance) => provenance.source === "parsed")
+  );
+}
+
 function isParsedWorkAuthorizationFact(value: {
   payload: { kind: string };
   provenances: readonly { source: string }[];
 }): boolean {
-  return (
-    value.payload.kind === "work_authorization_statement" &&
-    value.provenances.length > 0 &&
-    value.provenances.every((provenance) => provenance.source === "parsed")
-  );
+  return value.payload.kind === "work_authorization_statement" && isFullyParsed(value);
 }
 
 function refineStructuredFactEvidenceSpans(
@@ -112,6 +117,11 @@ function refineStructuredFactEvidenceSpans(
         path: ["evidenceSpans"]
       });
     }
+    return;
+  }
+  if (isFullyParsed(value)) {
+    // Parsed facts are grounded by a deterministic producer that reads the
+    // cited document, so a pinned evidence span is optional corroboration.
     return;
   }
   if (value.evidenceSpans.length < 1) {

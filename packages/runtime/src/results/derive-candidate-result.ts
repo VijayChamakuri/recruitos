@@ -274,6 +274,39 @@ export function deriveCandidateTriageInputs(
         }
       }
 
+      // Parsed non-work-authorization proposals must be grounded: at least one
+      // quote relocates against the cited document, or a valid pre-located
+      // evidence span is supplied. Relocated quotes are confirmed, not pinned.
+      // A proposal with neither is dropped, including the case of omitted
+      // quotes and empty spans. Parsed work-authorization from application
+      // answers is assembled above and does not enter this loop.
+      if (rawProposal.provenance === "parsed") {
+        let locatedQuoteCount = 0;
+        for (const quote of rawProposal.groundingQuotes ?? []) {
+          if (relocateQuote(doc.normalizedText, quote.quotedText).ok) {
+            locatedQuoteCount += 1;
+          } else {
+            droppedQuotes.push(
+              Object.freeze({
+                quotedText: quote.quotedText,
+                dimensionId: input.rubric.dimensions[0]!.dimensionId,
+                reason: "unlocated"
+              })
+            );
+          }
+        }
+        if (locatedQuoteCount === 0 && evidenceSpanIds.length === 0) {
+          continue;
+        }
+        structuredFactProposals.push({
+          documentId: CandidateDocumentIdSchema.parse(rawProposal.documentId),
+          provenance: "parsed",
+          payload: rawProposal.payload,
+          evidenceSpanIds
+        });
+        continue;
+      }
+
       if (Array.isArray(rawProposal.groundingQuotes)) {
         for (const quote of rawProposal.groundingQuotes) {
           quoteOrdinal += 1;

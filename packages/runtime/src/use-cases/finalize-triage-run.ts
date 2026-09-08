@@ -424,14 +424,16 @@ function deriveFinalizePlan(args: {
   const nextId = () => args.composition.idGenerator.next();
   const candidates: PlannedCandidate[] = [];
   for (const candidate of args.snapshot.candidates) {
+    const bridgeDocuments = candidate.documents.map(toBridgeDocument);
     const decisionResult = candidateResults.deriveCandidateDecision({
       candidateId: candidate.candidateId,
-      documents: candidate.documents.map(toBridgeDocument),
+      documents: bridgeDocuments,
       extractions: candidate.extractions,
       applicationAnswers:
         candidate.workAuthorization === undefined
           ? undefined
           : { workAuthorization: candidate.workAuthorization },
+      rawFactProposals: candidateResults.parseResumeFacts(bridgeDocuments),
       rubric: args.rubric,
       hardRequirementPolicy: policyResult.value,
       isVariant: args.snapshot.attempt.kind === "variant_run",

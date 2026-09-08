@@ -3,13 +3,25 @@ import { describe, expect, it } from "vitest";
 import { RUBRIC_V1, sha256Hex } from "@recruitos/core";
 
 import {
-  DEMO_CANDIDATE_SOURCE_KEY,
+  DEMO_CANDIDATE_SOURCE_KEYS,
   DEMO_CORPUS_SEED_HASH,
   DEMO_DIMENSION_IDS,
-  DEMO_EXPECTED_OUTCOME,
+  DEMO_EXPECTED_OUTCOMES,
+  DEMO_WORK_AUTHORIZATION_QUESTION_KEY,
   demoCandidateSourceRecords,
   demoExtractionResponseBody
 } from "./demo-corpus.js";
+
+type ExtractionBody = Readonly<{
+  dimensionId: string;
+  proposedLevel: string;
+  spans: ReadonlyArray<{ quotedText: string; polarity: string }>;
+  rejectedClaims: readonly unknown[];
+}>;
+
+function bodyFor(dimensionId: string, sourceKey: string): ExtractionBody {
+  return JSON.parse(demoExtractionResponseBody(dimensionId, sourceKey)) as ExtractionBody;
+}
 
 describe("demo corpus", () => {
   it("covers every rubric v1 dimension exactly once", () => {
@@ -18,40 +30,83 @@ describe("demo corpus", () => {
     );
   });
 
-  it("yields one synthetic candidate with one resume and a work authorization answer", () => {
+  it("yields seven synthetic candidates, one resume each, along the expected routes", () => {
     const records = demoCandidateSourceRecords();
-    expect(records).toHaveLength(1);
-    const record = records[0]!;
-    expect(record.sourceKey).toBe(DEMO_CANDIDATE_SOURCE_KEY);
-    expect(record.channel).toBe("inbound");
-    expect(record.documents).toHaveLength(1);
-    expect(record.documents[0]!.documentKind).toBe("resume");
-    expect(record.applicationAnswers.workAuthorization?.questionKey).toBe("eligible_to_work");
+    expect(records).toHaveLength(7);
+    expect(records.map((record) => record.sourceKey)).toEqual([...DEMO_CANDIDATE_SOURCE_KEYS]);
+    for (const record of records) {
+      expect(record.channel).toBe("inbound");
+      expect(record.documents).toHaveLength(1);
+      expect(record.documents[0]!.documentKind).toBe("resume");
+    }
   });
 
-  it("builds an on-contract extraction body whose quote is a verbatim resume slice", () => {
-    const resume = demoCandidateSourceRecords()[0]!.documents[0]!.rawText;
-    for (const dimensionId of DEMO_DIMENSION_IDS) {
-      const body = JSON.parse(demoExtractionResponseBody(dimensionId)) as {
-        dimensionId: string;
-        proposedLevel: string;
-        spans: ReadonlyArray<{ quotedText: string; polarity: string }>;
-        rejectedClaims: readonly unknown[];
-      };
-      expect(body.dimensionId).toBe(dimensionId);
-      expect(["none", "weak", "partial", "strong"]).toContain(body.proposedLevel);
-      expect(body.rejectedClaims).toEqual([]);
-      expect(body.spans.length).toBeGreaterThan(0);
-      for (const span of body.spans) {
-        expect(span.polarity).toBe("supporting");
-        expect(resume).toContain(span.quotedText);
+  it("attaches a work authorization answer only to the authorized candidates", () => {
+    const records = demoCandidateSourceRecords();
+    const authorized = records.filter(
+      (record) => record.applicationAnswers.workAuthorization !== undefined
+    );
+    // Route 3 is the only candidate authored without the structured answer.
+    expect(authorized).toHaveLength(6);
+    for (const record of authorized) {
+      expect(record.applicationAnswers.workAuthorization?.questionKey).toBe(
+        DEMO_WORK_AUTHORIZATION_QUESTION_KEY
+      );
+    }
+  });
+
+  it("builds on-contract extraction bodies whose located quotes are verbatim resume slices", () => {
+    const resumeBySourceKey = new Map(
+      demoCandidateSourceRecords().map((record) => [
+        record.sourceKey,
+        record.documents[0]!.rawText
+      ])
+    );
+    for (const sourceKey of DEMO_CANDIDATE_SOURCE_KEYS) {
+      const resume = resumeBySourceKey.get(sourceKey)!;
+      for (const dimensionId of DEMO_DIMENSION_IDS) {
+        const body = bodyFor(dimensionId, sourceKey);
+        expect(body.dimensionId).toBe(dimensionId);
+        expect(["none", "weak", "partial", "strong"]).toContain(body.proposedLevel);
+        expect(body.rejectedClaims).toEqual([]);
+        expect(body.spans.length).toBeGreaterThan(0);
+        for (const span of body.spans) {
+          expect(span.polarity).toBe("supporting");
+          // Every quote carrying the candidate token is a real narrative line
+          // and must be a verbatim contiguous slice of that candidate's resume.
+          if (span.quotedText.includes(sourceKey)) {
+            expect(resume).toContain(span.quotedText);
+          }
+        }
+      }
+    }
+  });
+
+  it("gives every candidate a unique quote per dimension so no two artifacts collide", () => {
+    const seen = new Set<string>();
+    for (const sourceKey of DEMO_CANDIDATE_SOURCE_KEYS) {
+      for (const dimensionId of DEMO_DIMENSION_IDS) {
+        for (const span of bodyFor(dimensionId, sourceKey).spans) {
+          if (!span.quotedText.includes(sourceKey)) {
+            continue;
+          }
+          const key = `${dimensionId}::${span.quotedText}`;
+          expect(seen.has(key)).toBe(false);
+          seen.add(key);
+        }
       }
     }
   });
 
   it("throws for an unknown dimension id", () => {
-    expect(() => demoExtractionResponseBody("not_a_dimension")).toThrow(
-      /No demo extraction fixture/
+    expect(() =>
+      demoExtractionResponseBody("not_a_dimension", DEMO_CANDIDATE_SOURCE_KEYS[0]!)
+    ).toThrow(/No demo extraction fixture/);
+  });
+
+  it("throws for an unknown source key", () => {
+    expect(() => demoExtractionResponseBody(DEMO_DIMENSION_IDS[0]!, "demo/not-a-route")).toThrow(
+      /No demo candidate/
     );
   });
 
@@ -60,19 +115,41 @@ describe("demo corpus", () => {
     expect(DEMO_CORPUS_SEED_HASH).not.toBe(sha256Hex(""));
   });
 
-  it("expects an escalated, complete, sealed outcome with three missing-evidence reasons", () => {
-    expect(DEMO_EXPECTED_OUTCOME).toEqual({
-      sourceKey: DEMO_CANDIDATE_SOURCE_KEY,
-      status: "escalated",
-      availability: "complete",
-      reasonCodes: [
-        "missing_evidence:current_title",
-        "missing_evidence:employer_history",
-        "missing_evidence:years_experience"
-      ],
-      hasScore: true,
-      hasConfidence: true,
-      sealed: true
-    });
+  it("publishes one expected outcome per candidate, each sealed", () => {
+    expect(DEMO_EXPECTED_OUTCOMES.map((outcome) => outcome.sourceKey)).toEqual([
+      ...DEMO_CANDIDATE_SOURCE_KEYS
+    ]);
+    for (const outcome of DEMO_EXPECTED_OUTCOMES) {
+      expect(outcome.sealed).toBe(true);
+      expect(["scored", "escalated", "rejected_hard_requirement"]).toContain(outcome.status);
+      expect(["complete", "unavailable"]).toContain(outcome.availability);
+      const complete = outcome.availability === "complete";
+      expect(outcome.scoreText === null).toBe(!complete);
+      expect(outcome.confidenceText === null).toBe(!complete);
+      expect(outcome.spansReturned === null).toBe(!complete);
+      expect(outcome.spansLocated === null).toBe(!complete);
+      if (complete) {
+        expect(outcome.scoreText).toMatch(/^\d+\/\d+$/);
+        expect(outcome.confidenceText).toMatch(/^\d+\/\d+$/);
+        expect(outcome.spansLocated!).toBeLessThanOrEqual(outcome.spansReturned!);
+      }
+    }
+  });
+
+  it("routes each of the seven primary outcomes at least once", () => {
+    const statuses = new Set(DEMO_EXPECTED_OUTCOMES.map((outcome) => outcome.status));
+    expect(statuses).toEqual(new Set(["scored", "escalated", "rejected_hard_requirement"]));
+    expect(
+      DEMO_EXPECTED_OUTCOMES.some((outcome) => outcome.availability === "unavailable")
+    ).toBe(true);
+    // The quote-grounding route is the one with a returned-but-unlocated span.
+    expect(
+      DEMO_EXPECTED_OUTCOMES.some(
+        (outcome) =>
+          outcome.spansReturned !== null &&
+          outcome.spansLocated !== null &&
+          outcome.spansReturned > outcome.spansLocated
+      )
+    ).toBe(true);
   });
 });

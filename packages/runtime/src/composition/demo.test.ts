@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { FixtureExtractionAdapter, SyntheticCandidateSourceAdapter } from "../adapters/index.js";
-import { DEMO_CANDIDATE_SOURCE_KEY, DEMO_CLOCK_MS } from "../corpus/index.js";
+import { DEMO_CANDIDATE_SOURCE_KEYS, DEMO_CLOCK_MS } from "../corpus/index.js";
 import { demoCompositionOptions } from "./demo.js";
 
 describe("demoCompositionOptions", () => {
@@ -14,11 +14,10 @@ describe("demoCompositionOptions", () => {
     expect(options.idGenerator?.next()).toMatch(/^demo-/);
     expect(options.extraction).toBeInstanceOf(FixtureExtractionAdapter);
     expect(options.candidateSource).toBeInstanceOf(SyntheticCandidateSourceAdapter);
-    expect(
-      (options.candidateSource as SyntheticCandidateSourceAdapter).hasCandidate(
-        DEMO_CANDIDATE_SOURCE_KEY
-      )
-    ).toBe(true);
+    const source = options.candidateSource as SyntheticCandidateSourceAdapter;
+    for (const sourceKey of DEMO_CANDIDATE_SOURCE_KEYS) {
+      expect(source.hasCandidate(sourceKey)).toBe(true);
+    }
   });
 
   it("lets the caller override any default", () => {

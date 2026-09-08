@@ -640,6 +640,34 @@ describe("structured fact persistence", () => {
     expect(connection.close().ok).toBe(true);
   });
 
+  it("round-trips a parsed employment fact with no document spans", async () => {
+    const connection = await openMigratedDatabase();
+    const fact = unwrap(
+      prepareStructuredFact(
+        factDraft({
+          payload: { kind: "current_title", title: "Staff Engineer" },
+          evidenceSpans: [],
+          provenances: [
+            {
+              structuredFactProvenanceId: "structured-fact-provenance-1",
+              source: "parsed",
+              actorId: null
+            }
+          ]
+        })
+      )
+    );
+    unwrap(
+      runImmediateTransaction(connection, (context) => {
+        unwrap(insertCandidate(context, unwrap(prepareCandidate(candidateDraft()))));
+        unwrap(insertStructuredFact(context, fact));
+        expect(unwrap(readStructuredFact(context, fact.structuredFactId))).toEqual(fact);
+        return ok(undefined);
+      })
+    );
+    expect(connection.close().ok).toBe(true);
+  });
+
   it("refuses missing parents, duplicate identity, and writes outside a transaction", async () => {
     const connection = await openMigratedDatabase();
     const fact = unwrap(prepareStructuredFact(factDraft()));
