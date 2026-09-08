@@ -13,7 +13,7 @@ import { SYSTEM_ACTOR_ID } from "../../packages/runtime/src/entities/index.js";
 import { readCandidatePacket } from "../../packages/runtime/src/read-models/index.js";
 import { runExtractionAttempt } from "../../packages/runtime/src/scheduler/index.js";
 import { completeReExtraction } from "../../packages/runtime/src/use-cases/complete-re-extraction.js";
-import { demoPrepare, registerDemoCorrectionFixtures } from "../../packages/runtime/src/use-cases/demo-prepare.js";
+import { demoPrepare, registerDemoCorrectionFixtures, registerDemoFixtures } from "../../packages/runtime/src/use-cases/demo-prepare.js";
 import { requestReExtraction } from "../../packages/runtime/src/use-cases/request-re-extraction.js";
 import { MIGRATIONS_FOLDER } from "./harness/database.js";
 import { unwrap } from "./harness/results.js";
@@ -21,6 +21,8 @@ import { unwrap } from "./harness/results.js";
 const migrationsFolder = MIGRATIONS_FOLDER;
 const temporaryDirectories: string[] = [];
 const HUMAN_ACTOR_ID = "human:operator";
+const ROUTE_5_SOURCE_KEY = "demo/route-5-missing-evidence";
+const APPLIED_DIMENSION_ID = "applied_ml_llm_systems";
 
 function nativeClient(runtime: RuntimeComposition): {
   prepare: (sql: string) => {
@@ -44,7 +46,10 @@ async function demoRuntime(): Promise<RuntimeComposition> {
   );
 }
 
-function route4(runtime: RuntimeComposition): {
+function idsForSourceKey(
+  runtime: RuntimeComposition,
+  sourceKey: string
+): {
   candidateId: string;
   resultId: string;
   headVersion: number;
@@ -54,7 +59,7 @@ function route4(runtime: RuntimeComposition): {
   const db = nativeClient(runtime);
   const candidate = db
     .prepare("SELECT candidate_id AS candidateId FROM candidate WHERE source_key = ?")
-    .get(DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) as { candidateId: string };
+    .get(sourceKey) as { candidateId: string };
   const head = db
     .prepare(
       `SELECT current_result_id AS resultId, version AS headVersion
@@ -78,6 +83,10 @@ function route4(runtime: RuntimeComposition): {
     taskId: task.taskId,
     taskVersion: task.taskVersion
   };
+}
+
+function route4(runtime: RuntimeComposition): ReturnType<typeof idsForSourceKey> {
+  return idsForSourceKey(runtime, DEMO_REVIEWABLE_FAILURE_SOURCE_KEY);
 }
 
 function count(runtime: RuntimeComposition, sql: string, ...params: unknown[]): number {
@@ -189,6 +198,67 @@ describe("T10.6 correction and re-extraction integration", () => {
     expect(
       count(runtime, "SELECT version AS n FROM candidate_head WHERE candidate_id = ?", ids.candidateId)
     ).toBe(ids.headVersion + 1);
+    unwrap(runtime.close());
+  });
+
+  it("reuses unscoped dimension assessment ids on a route-5 correction", async () => {
+    const runtime = await demoRuntime();
+    unwrap(await demoPrepare(runtime));
+    const ids = idsForSourceKey(runtime, ROUTE_5_SOURCE_KEY);
+    const original = nativeClient(runtime)
+      .prepare(
+        `SELECT dimension_id AS dimensionId, dimension_assessment_id AS dimensionAssessmentId
+         FROM candidate_result_dimension_assessment
+         WHERE candidate_result_id = ?`
+      )
+      .all(ids.resultId) as Array<{ dimensionId: string; dimensionAssessmentId: string }>;
+    expect(original).toHaveLength(6);
+    const requested = unwrap(
+      requestReExtraction(runtime, {
+        actorId: HUMAN_ACTOR_ID,
+        resolutionTaskId: ids.taskId,
+        expectedTaskHeadVersion: ids.taskVersion,
+        expectedCandidateHeadVersion: ids.headVersion
+      })
+    );
+    unwrap(registerDemoFixtures(runtime, requested.result.triageAttemptId));
+    unwrap(
+      await runExtractionAttempt(runtime, { triageAttemptId: requested.result.triageAttemptId })
+    );
+    const completed = unwrap(
+      completeReExtraction(runtime, {
+        actorId: SYSTEM_ACTOR_ID,
+        triageAttemptId: requested.result.triageAttemptId,
+        expectedTaskHeadVersion: requested.result.taskHeadVersion,
+        expectedCandidateHeadVersion: ids.headVersion
+      })
+    );
+    const correction = nativeClient(runtime)
+      .prepare(
+        `SELECT dimension_id AS dimensionId, dimension_assessment_id AS dimensionAssessmentId
+         FROM candidate_result_dimension_assessment
+         WHERE candidate_result_id = ?`
+      )
+      .all(completed.result.resultId) as Array<{
+      dimensionId: string;
+      dimensionAssessmentId: string;
+    }>;
+    expect(correction).toHaveLength(6);
+    const originalByDimension = new Map(
+      original.map((row) => [row.dimensionId, row.dimensionAssessmentId])
+    );
+    const correctionByDimension = new Map(
+      correction.map((row) => [row.dimensionId, row.dimensionAssessmentId])
+    );
+    expect(correctionByDimension.get(APPLIED_DIMENSION_ID)).not.toBe(
+      originalByDimension.get(APPLIED_DIMENSION_ID)
+    );
+    for (const [dimensionId, assessmentId] of originalByDimension) {
+      if (dimensionId === APPLIED_DIMENSION_ID) {
+        continue;
+      }
+      expect(correctionByDimension.get(dimensionId)).toBe(assessmentId);
+    }
     unwrap(runtime.close());
   });
 });

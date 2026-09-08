@@ -11,6 +11,8 @@ import { createFixtureExtractionAdapter } from "../adapters/index.js";
 import {
   claimAttemptWorkItem,
   failAttemptWorkItem,
+  insertTriageAttempt,
+  prepareTriageAttempt,
   readAttemptWorkItems
 } from "../attempts/index.js";
 import { runImmediateTransaction } from "../commands/index.js";
@@ -20,13 +22,17 @@ import {
   type RuntimeComposition
 } from "../composition/index.js";
 import { DEMO_REVIEWABLE_FAILURE_SOURCE_KEY } from "../corpus/index.js";
-import { SYSTEM_ACTOR_ID } from "../entities/index.js";
+import { SYSTEM_ACTOR_ID, insertActor, prepareActor } from "../entities/index.js";
 import type { RuntimeError } from "../errors/index.js";
 import {
   insertExtractionFailure,
   prepareExtractionFailure
 } from "../extraction/index.js";
 import { readCandidatePacket } from "../read-models/index.js";
+import {
+  insertResolutionAction,
+  prepareResolutionAction
+} from "../resolution/index.js";
 import { runExtractionAttempt } from "../scheduler/index.js";
 import type { CandidateDecisionOutput } from "../results/index.js";
 import { demoPrepare, registerDemoCorrectionFixtures, registerDemoFixtures } from "./demo-prepare.js";
@@ -38,6 +44,8 @@ const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url)
 const temporaryDirectories: string[] = [];
 const HUMAN_ACTOR_ID = "human:operator";
 const ROUTE_3_SOURCE_KEY = "demo/route-3-escalated";
+const ROUTE_5_SOURCE_KEY = "demo/route-5-missing-evidence";
+const APPLIED_DIMENSION_ID = "applied_ml_llm_systems";
 
 function unwrap<T>(result: Result<T, RuntimeError>): T {
   if (!result.ok) {
@@ -111,6 +119,20 @@ function idsForSourceKey(
 function count(runtime: RuntimeComposition, sql: string, ...params: unknown[]): number {
   const row = nativeClient(runtime).prepare(sql).get(...params) as { n: number };
   return row.n;
+}
+
+function assessmentsByDimension(
+  runtime: RuntimeComposition,
+  resultId: string
+): Map<string, string> {
+  const rows = nativeClient(runtime)
+    .prepare(
+      `SELECT dimension_id AS dimensionId, dimension_assessment_id AS dimensionAssessmentId
+       FROM candidate_result_dimension_assessment
+       WHERE candidate_result_id = ?`
+    )
+    .all(resultId) as Array<{ dimensionId: string; dimensionAssessmentId: string }>;
+  return new Map(rows.map((row) => [row.dimensionId, row.dimensionAssessmentId]));
 }
 
 async function requestedCorrection(
@@ -328,6 +350,24 @@ describe("completeReExtraction", () => {
     ).toMatchObject({
       ok: false,
       error: { message: "expectedCandidateHeadVersion must be a nonnegative integer" }
+    });
+    expect(
+      completeReExtraction(
+        runtime as RuntimeComposition,
+        completeInput("a", 1, 1, { commandId: "has space" })
+      )
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Complete re-extraction requires a valid command id" }
+    });
+    expect(
+      completeReExtraction(
+        runtime as RuntimeComposition,
+        completeInput("a", 1, 1, { commandId: 1 as never })
+      )
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Complete re-extraction requires a valid command id" }
     });
   });
 
@@ -843,6 +883,201 @@ describe("completeReExtraction", () => {
         details: { actualVersion: null, expectedVersion: missingTaskHead.taskHeadVersion }
       }
     });
+    expect(
+      completeReExtraction(
+        taskHeadRuntime,
+        completeInput(missingTaskHead.triageAttemptId, 0, missingTaskHead.ids.headVersion)
+      )
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "version_conflict",
+        details: { actualVersion: null, expectedVersion: 0 }
+      }
+    });
     unwrap(taskHeadRuntime.close());
+  });
+
+  it("refuses completion after a later human action advances the task head", async () => {
+    const runtime = await demoRuntime();
+    const { ids, triageAttemptId, taskHeadVersion } = await requestedCorrection(runtime);
+    unwrap(registerDemoCorrectionFixtures(runtime, triageAttemptId));
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId }));
+    unwrap(
+      runImmediateTransaction(runtime.connection, (context) => {
+        unwrap(
+          insertResolutionAction(
+            context,
+            unwrap(
+              prepareResolutionAction({
+                resolutionActionId: runtime.idGenerator.next(),
+                resolutionTaskId: ids.taskId,
+                actorId: HUMAN_ACTOR_ID,
+                actionOrdinal: taskHeadVersion,
+                payload: { kind: "dismiss", rationale: "Later human decision" },
+                createdAt: runtime.clock.now()
+              })
+            ),
+            taskHeadVersion
+          )
+        );
+        return ok(undefined);
+      })
+    );
+    const resultsBefore = count(runtime, "SELECT count(*) AS n FROM candidate_triage_result");
+    expect(
+      completeReExtraction(
+        runtime,
+        completeInput(triageAttemptId, taskHeadVersion + 1, ids.headVersion)
+      )
+    ).toMatchObject({
+      ok: false,
+      error: { code: "version_conflict" }
+    });
+    expect(count(runtime, "SELECT count(*) AS n FROM candidate_triage_result")).toBe(resultsBefore);
+    unwrap(runtime.close());
+  });
+
+  it("rejects a correction attempt whose request action is not request_re_extraction", async () => {
+    const runtime = await demoRuntime();
+    const prepared = unwrap(await demoPrepare(runtime));
+    const ids = idsForSourceKey(runtime, DEMO_REVIEWABLE_FAILURE_SOURCE_KEY);
+    const origin = nativeClient(runtime)
+      .prepare(
+        `SELECT snapshot_id AS snapshotId, corpus_manifest_id AS corpusManifestId
+         FROM triage_attempt WHERE triage_attempt_id = ?`
+      )
+      .get(prepared.triageAttemptId) as { snapshotId: string; corpusManifestId: string };
+    const createdAt = runtime.clock.now();
+    unwrap(
+      runImmediateTransaction(runtime.connection, (context) => {
+        unwrap(
+          insertActor(
+            context,
+            unwrap(
+              prepareActor({
+                actorId: HUMAN_ACTOR_ID,
+                displayName: HUMAN_ACTOR_ID,
+                createdAt
+              })
+            )
+          )
+        );
+        unwrap(
+          insertResolutionAction(
+            context,
+            unwrap(
+              prepareResolutionAction({
+                resolutionActionId: "resolution-action-dismiss-request",
+                resolutionTaskId: ids.taskId,
+                actorId: HUMAN_ACTOR_ID,
+                actionOrdinal: 0,
+                payload: { kind: "dismiss", rationale: "Not a re-extraction request" },
+                createdAt
+              })
+            ),
+            0
+          )
+        );
+        unwrap(
+          insertTriageAttempt(
+            context,
+            unwrap(
+              prepareTriageAttempt({
+                triageAttemptId: "triage-attempt-dismiss-request",
+                kind: "candidate_correction",
+                snapshotId: origin.snapshotId,
+                corpusManifestId: origin.corpusManifestId,
+                originRunId: prepared.triageRunId,
+                baseResultId: ids.resultId,
+                requestActionId: "resolution-action-dismiss-request",
+                scopeCandidateId: ids.candidateId,
+                status: "in_progress",
+                version: 1,
+                createdAt,
+                updatedAt: createdAt
+              })
+            )
+          )
+        );
+        return ok(undefined);
+      })
+    );
+    expect(
+      completeReExtraction(runtime, completeInput("triage-attempt-dismiss-request", 1, ids.headVersion))
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "command_conflict",
+        message: "completeReExtraction requires the request action to be request_re_extraction"
+      }
+    });
+    unwrap(runtime.close());
+  });
+
+  it("reuses unscoped dimension assessment ids on a route-5 correction", async () => {
+    const runtime = await demoRuntime();
+    const { ids, triageAttemptId, taskHeadVersion } = await requestedCorrection(
+      runtime,
+      ROUTE_5_SOURCE_KEY
+    );
+    const original = assessmentsByDimension(runtime, ids.resultId);
+    expect(original.size).toBe(6);
+    unwrap(registerDemoFixtures(runtime, triageAttemptId));
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId }));
+    const completed = unwrap(
+      completeReExtraction(runtime, completeInput(triageAttemptId, taskHeadVersion, ids.headVersion))
+    );
+    const correction = assessmentsByDimension(runtime, completed.result.resultId);
+    expect(correction.size).toBe(6);
+    expect(correction.get(APPLIED_DIMENSION_ID)).not.toBe(original.get(APPLIED_DIMENSION_ID));
+    for (const [dimensionId, assessmentId] of original) {
+      if (dimensionId === APPLIED_DIMENSION_ID) {
+        continue;
+      }
+      expect(correction.get(dimensionId)).toBe(assessmentId);
+    }
+    const applied = nativeClient(runtime)
+      .prepare(
+        `SELECT da.level AS level
+         FROM candidate_result_dimension_assessment cr
+         JOIN dimension_assessment da
+           ON da.dimension_assessment_id = cr.dimension_assessment_id
+         WHERE cr.candidate_result_id = ? AND cr.dimension_id = ?`
+      )
+      .get(completed.result.resultId, APPLIED_DIMENSION_ID) as { level: string };
+    expect(applied.level).toBe("none");
+    unwrap(runtime.close());
+  });
+
+  it("replays completion when the caller supplies the same command id", async () => {
+    const runtime = await demoRuntime();
+    const { ids, triageAttemptId, taskHeadVersion } = await requestedCorrection(runtime);
+    unwrap(registerDemoCorrectionFixtures(runtime, triageAttemptId));
+    unwrap(await runExtractionAttempt(runtime, { triageAttemptId }));
+    const first = unwrap(
+      completeReExtraction(
+        runtime,
+        completeInput(triageAttemptId, taskHeadVersion, ids.headVersion, {
+          commandId: "durable-complete-1"
+        })
+      )
+    );
+    expect(first.metadata.commandId).toBe("durable-complete-1");
+    const resultsAfterFirst = count(runtime, "SELECT count(*) AS n FROM candidate_triage_result");
+    const replay = unwrap(
+      completeReExtraction(
+        runtime,
+        completeInput(triageAttemptId, taskHeadVersion, ids.headVersion, {
+          commandId: "durable-complete-1"
+        })
+      )
+    );
+    expect(replay.metadata.replayed).toBe(true);
+    expect(replay.result).toEqual(first.result);
+    expect(count(runtime, "SELECT count(*) AS n FROM candidate_triage_result")).toBe(
+      resultsAfterFirst
+    );
+    unwrap(runtime.close());
   });
 });

@@ -69,6 +69,7 @@ import {
   prepareCandidateResultReason,
   prepareCandidateResultSeal,
   prepareCandidateTriageResult,
+  readCandidateTriageResult,
   setCandidateHead,
   type CandidateDecisionOutput,
   type CandidateDocumentBridgeInput,
@@ -1033,6 +1034,8 @@ export function persistCandidateResult(args: {
   supersedesResultId?: string | null;
   expectedCandidateHeadVersion?: number;
   skipExistingSpans?: boolean;
+  reuseAssessmentsFromResultId?: string | null;
+  correctedDimensionIds?: readonly string[];
 }): Result<string, RuntimeError> {
   const sealId = args.nextId();
   const kind = args.kind ?? "initial";
@@ -1068,7 +1071,9 @@ export function persistCandidateResult(args: {
     kind,
     supersedesResultId,
     expectedCandidateHeadVersion,
-    skipExistingSpans
+    skipExistingSpans,
+    reuseAssessmentsFromResultId: args.reuseAssessmentsFromResultId ?? null,
+    correctedDimensionIds: args.correctedDimensionIds ?? []
   });
 }
 
@@ -1196,6 +1201,8 @@ function persistCompleteResult(args: {
   supersedesResultId: string | null;
   expectedCandidateHeadVersion: number;
   skipExistingSpans: boolean;
+  reuseAssessmentsFromResultId: string | null;
+  correctedDimensionIds: readonly string[];
 }): Result<string, RuntimeError> {
   // deriveCandidateDecision only scores when availability is complete.
   /* v8 ignore next 3 -- complete availability always carries score and confidence */
@@ -1350,8 +1357,32 @@ function persistCompleteResult(args: {
     requirementIds.push(hardRequirementAssessmentId);
   }
 
+  const baseAssessmentIds = new Map<string, string>();
+  if (args.reuseAssessmentsFromResultId !== null) {
+    const baseResult = readCandidateTriageResult(args.context, args.reuseAssessmentsFromResultId);
+    /* v8 ignore next 3 -- store readers fail only on invalid stored rows */
+    if (!baseResult.ok) {
+      return baseResult;
+    }
+    /* v8 ignore next -- cannot delete the base result: FK from the correction attempt */
+    const storedBaseAssessments = baseResult.value?.dimensionAssessments ?? [];
+    for (const assessment of storedBaseAssessments) {
+      baseAssessmentIds.set(assessment.dimensionId, assessment.dimensionAssessmentId);
+    }
+  }
+  const correctedDimensionIds = new Set(args.correctedDimensionIds);
+
   const assessmentIds: Array<{ dimensionAssessmentId: string; dimensionId: string }> = [];
   for (const assessment of args.decision.dimensionDerivation.assessments) {
+    const reusedId =
+      args.reuseAssessmentsFromResultId !== null &&
+      !correctedDimensionIds.has(assessment.dimensionId)
+        ? baseAssessmentIds.get(assessment.dimensionId)
+        : undefined;
+    if (reusedId !== undefined) {
+      assessmentIds.push({ dimensionAssessmentId: reusedId, dimensionId: assessment.dimensionId });
+      continue;
+    }
     const dimensionAssessmentId = args.nextId();
     const preparedAssessment = prepareDimensionAssessment({
       dimensionAssessmentId,

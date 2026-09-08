@@ -1,5 +1,6 @@
 import {
   ActorIdSchema,
+  CommandIdSchema,
   deriveResolutionTaskStatus,
   err,
   ok,
@@ -79,6 +80,7 @@ export type RequestReExtractionInput = Readonly<{
   resolutionTaskId: string;
   expectedTaskHeadVersion: number;
   expectedCandidateHeadVersion: number;
+  commandId?: string;
 }>;
 
 type OriginAttemptRow = Readonly<{
@@ -177,9 +179,15 @@ export function requestReExtraction(
   ) {
     return err(requestFailure("expectedCandidateHeadVersion must be a nonnegative integer"));
   }
+  if (input.commandId !== undefined) {
+    if (typeof input.commandId !== "string" || !CommandIdSchema.safeParse(input.commandId).success) {
+      return err(requestFailure("Request re-extraction requires a valid command id"));
+    }
+  }
 
   const createdAt = composition.clock.now();
-  const commandId = composition.idGenerator.next();
+  const commandId =
+    input.commandId !== undefined ? input.commandId : composition.idGenerator.next();
   const payload: RequestReExtractionPayload = {
     resolutionTaskId: input.resolutionTaskId,
     expectedTaskHeadVersion: input.expectedTaskHeadVersion,

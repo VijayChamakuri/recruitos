@@ -369,6 +369,30 @@ describe("requestReExtraction", () => {
       ok: false,
       error: { message: "expectedCandidateHeadVersion must be a nonnegative integer" }
     });
+    expect(
+      requestReExtraction(runtime as RuntimeComposition, {
+        actorId: HUMAN_ACTOR_ID,
+        resolutionTaskId: "t",
+        expectedTaskHeadVersion: 0,
+        expectedCandidateHeadVersion: 1,
+        commandId: "has space"
+      })
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Request re-extraction requires a valid command id" }
+    });
+    expect(
+      requestReExtraction(runtime as RuntimeComposition, {
+        actorId: HUMAN_ACTOR_ID,
+        resolutionTaskId: "t",
+        expectedTaskHeadVersion: 0,
+        expectedCandidateHeadVersion: 1,
+        commandId: 1 as never
+      })
+    ).toMatchObject({
+      ok: false,
+      error: { message: "Request re-extraction requires a valid command id" }
+    });
   });
 
   it("opens a candidate_correction attempt without creating a run", async () => {
@@ -692,6 +716,29 @@ describe("requestReExtraction", () => {
         details: { actualVersion: null, expectedVersion: 1 }
       }
     });
+    unwrap(runtime.close());
+  });
+
+  it("replays when the caller supplies the same command id", async () => {
+    const runtime = await demoRuntime();
+    unwrap(await demoPrepare(runtime));
+    const ids = route4(runtime);
+    const first = unwrap(
+      requestReExtraction(runtime, requestInput(ids, { commandId: "durable-request-1" }))
+    );
+    expect(first.metadata.commandId).toBe("durable-request-1");
+    const attemptsAfterFirst = count(
+      runtime,
+      "SELECT count(*) AS n FROM triage_attempt WHERE kind = 'candidate_correction'"
+    );
+    const replay = unwrap(
+      requestReExtraction(runtime, requestInput(ids, { commandId: "durable-request-1" }))
+    );
+    expect(replay.metadata.replayed).toBe(true);
+    expect(replay.result).toEqual(first.result);
+    expect(
+      count(runtime, "SELECT count(*) AS n FROM triage_attempt WHERE kind = 'candidate_correction'")
+    ).toBe(attemptsAfterFirst);
     unwrap(runtime.close());
   });
 });

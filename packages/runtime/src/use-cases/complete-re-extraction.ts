@@ -1,5 +1,6 @@
 import {
   ActorIdSchema,
+  CommandIdSchema,
   RUBRIC_V1,
   deriveResolutionTaskStatus,
   err,
@@ -95,6 +96,7 @@ export type CompleteReExtractionInput = Readonly<{
   expectedTaskHeadVersion: number;
   expectedCandidateHeadVersion: number;
   rubric?: LockedRubric;
+  commandId?: string;
 }>;
 
 type PlannedWorkItemIdentity = Readonly<{
@@ -223,10 +225,16 @@ export function completeReExtraction(
   if (input.rubric !== undefined && input.rubric !== RUBRIC_V1) {
     return err(completeFailure("completeReExtraction requires RUBRIC_V1"));
   }
+  if (input.commandId !== undefined) {
+    if (typeof input.commandId !== "string" || !CommandIdSchema.safeParse(input.commandId).success) {
+      return err(completeFailure("Complete re-extraction requires a valid command id"));
+    }
+  }
 
   const rubric = input.rubric ?? RUBRIC_V1;
   const createdAt = composition.clock.now();
-  const commandId = composition.idGenerator.next();
+  const commandId =
+    input.commandId !== undefined ? input.commandId : composition.idGenerator.next();
   const payload: CompleteReExtractionPayload = {
     triageAttemptId: input.triageAttemptId,
     expectedTaskHeadVersion: input.expectedTaskHeadVersion,
@@ -474,6 +482,19 @@ function commitComplete(args: {
       )
     );
   }
+  if (
+    taskHead.value === undefined ||
+    taskHead.value.currentActionId !== plan.attempt.requestActionId
+  ) {
+    return err(
+      versionConflict(
+        "resolution_task_head",
+        plan.resolutionTaskId,
+        payload.expectedTaskHeadVersion,
+        taskHead.value === undefined ? null : taskHead.value.version
+      )
+    );
+  }
 
   const candidateHead = readCandidateHead(context, plan.candidateId);
   /* v8 ignore next 3 -- store readers fail only on invalid stored rows */
@@ -519,7 +540,9 @@ function commitComplete(args: {
     kind: "correction",
     supersedesResultId: plan.attempt.baseResultId,
     expectedCandidateHeadVersion: payload.expectedCandidateHeadVersion,
-    skipExistingSpans: true
+    skipExistingSpans: true,
+    reuseAssessmentsFromResultId: plan.attempt.baseResultId,
+    correctedDimensionIds: [...new Set(plan.workItemIdentities.map((item) => item.dimensionId))]
   });
   /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!persisted.ok) {
@@ -671,6 +694,15 @@ function loadReadyCorrectionAttempt(
       createRuntimeError(
         "not_found",
         `Request action "${attempt.requestActionId}" not found`,
+        false
+      )
+    );
+  }
+  if (requestAction.value.actionKind !== "request_re_extraction") {
+    return err(
+      createRuntimeError(
+        "command_conflict",
+        "completeReExtraction requires the request action to be request_re_extraction",
         false
       )
     );
