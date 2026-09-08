@@ -14,7 +14,7 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 4db416c |
+| origin/main | d7b0958 |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Six `b/` PRs: import (MERGED #54), scheduler (MERGED #57), start-run (MERGED #59), extraction bridge plus OQ-7 policy, finalize, correction. |
@@ -44,7 +44,7 @@ your own rows plus the log.
 |---|---|---|---|
 | Cursor | main | PR #58 merged (schema request for extraction_run persistence). | idle / ready |
 | Claude Code | (paused) | T10.1 (#54), T10.2a (#55), and T10.2 (#57) merged. Paused (usage credits exhausted). Next T10 tasks: T10.3 (start triage run use-case, MERGED #59), T10.4 (extraction-to-pipeline bridge), T10.5 (finalize), T10.6 (correction). | paused |
-| Antigravity | `c/t10-extraction-bridge` | T10.4: Extraction-to-pipeline bridge and hard-requirement policy v1 (`packages/runtime/src/policy/hard-requirements-v1.ts` and `packages/runtime/src/results/derive-candidate-result.ts`). | building |
+| Antigravity | main | PR #60 merged (T10.4: Extraction-to-pipeline bridge and hard-requirements policy v1). | idle / ready for T10.5 |
 
 ## Hard rules
 
@@ -139,3 +139,4 @@ your own rows plus the log.
 - 2026-09-08 Cursor: #58 ready on eb0dc3e. pnpm check 1355 plus 25 integration exit 0, test:coverage 1200 exit 0 with All files 100 percent, standalone integration 25, diff-check clean, em-dash scan clean. Scope unchanged after rebase. Blocks T10.5. Migration lock stays with Cursor until merge.
 - 2026-09-08 Cursor: PR #58 squash-merged to main at 4db416c. Migration lock released.
 - 2026-09-08 Antigravity: starting T10.4 on c/t10-extraction-bridge off 4db416c. Implementing the declarative v1 hard-requirement policy carrying OQ-7 assumptions (packages/runtime/src/policy/hard-requirements-v1.ts) and the extraction-to-pipeline bridge (packages/runtime/src/results/derive-candidate-result.ts) to ground and assemble inputs for consolidateStructuredFacts, deriveDimensionAssessments, and resolveHardRequirements.
+- 2026-09-08 Antigravity: PR #60 (feat(runtime): extraction-to-pipeline bridge and hard-requirements policy v1 (T10.4)) squash-merged to main at d7b0958. Branch c/t10-extraction-bridge deleted. Implemented declarative v1 hard-requirement policy carrying OQ-7 assumptions (packages/runtime/src/policy/hard-requirements-v1.ts) and extraction-to-pipeline bridge (packages/runtime/src/results/derive-candidate-result.ts) executing pure core functions end-to-end. 100 percent test coverage (1229 tests, 25 integration), test:types, test:integration, check passing, zero em dashes. Idle, ready for T10.5.
