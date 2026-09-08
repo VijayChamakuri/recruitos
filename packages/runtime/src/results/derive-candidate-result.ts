@@ -9,6 +9,7 @@ import {
   deriveDimensionAssessments,
   deriveShortlistProposals,
   EvidenceSpanIdSchema,
+  NonnegativeIntegerSchema,
   PositiveIntegerSchema,
   relocateQuote,
   REQUIRED_FIELD_IDS,
@@ -471,16 +472,15 @@ export function deriveCandidateDecision(
     }
 
     confidenceInput = {
-      dimensionsWithLocatedSpan,
-      totalDimensions: input.rubric.dimensions.length,
-      spansLocated,
-      spansReturned: spansLocated,
-      contradictionCount: dimensionDerivation.assessments.reduce(
-        (sum, a) => sum + a.contradictingSpanIds.length,
-        0
+      dimensionsWithLocatedSpan: NonnegativeIntegerSchema.parse(dimensionsWithLocatedSpan),
+      totalDimensions: PositiveIntegerSchema.parse(input.rubric.dimensions.length),
+      spansLocated: NonnegativeIntegerSchema.parse(spansLocated),
+      spansReturned: NonnegativeIntegerSchema.parse(spansLocated),
+      contradictionCount: NonnegativeIntegerSchema.parse(
+        dimensionDerivation.assessments.reduce((sum, a) => sum + a.contradictingSpanIds.length, 0)
       ),
-      requiredFieldsMissing: hardRequirements.unknownCount,
-      totalRequiredFields: REQUIRED_FIELD_IDS.length
+      requiredFieldsMissing: NonnegativeIntegerSchema.parse(hardRequirements.unknownCount),
+      totalRequiredFields: PositiveIntegerSchema.parse(REQUIRED_FIELD_IDS.length)
     };
 
     const confidenceResult = computeConfidence(confidenceInput);

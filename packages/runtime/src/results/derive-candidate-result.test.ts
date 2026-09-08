@@ -198,6 +198,39 @@ describe("deriveCandidateTriageInputs", () => {
     ]);
   });
 
+  it("uses the selected option key when work authorization free text is absent", () => {
+    const appAnswer: CandidateApplicationAnswer = {
+      candidateApplicationAnswerId: "ans_fallback" as any,
+      candidateId: "cand_1" as any,
+      questionKey: "work_authorization",
+      selectedOptionKey: "authorized_no_sponsorship",
+      freeText: null,
+      collectedBy: "greenhouse",
+      formId: "form_1",
+      questionId: "q_1",
+      collectedAt: NonnegativeIntegerSchema.parse(1000),
+      createdAt: NonnegativeIntegerSchema.parse(1000)
+    };
+
+    const result = deriveCandidateTriageInputs({
+      candidateId: "cand_1",
+      documents: [SAMPLE_DOC],
+      extractions: [],
+      applicationAnswers: { workAuthorization: appAnswer },
+      rubric: RUBRIC_V1
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.structuredFactProposals).toHaveLength(0);
+    expect(result.value.droppedQuotes).toEqual([
+      expect.objectContaining({
+        quotedText: "Application answer: authorized_no_sponsorship",
+        reason: "unlocated"
+      })
+    ]);
+  });
+
   it("drops an unlocated work_authorization quote instead of emitting a fact", () => {
     const appAnswer: CandidateApplicationAnswer = {
       candidateApplicationAnswerId: "ans_unlocated" as any,
