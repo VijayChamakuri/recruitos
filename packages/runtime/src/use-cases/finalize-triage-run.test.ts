@@ -682,6 +682,10 @@ describe("finalizeTriageRun", () => {
       .prepare("SELECT COUNT(*) AS count FROM resolution_task WHERE candidate_result_id = ?")
       .get(packet.resultId) as { count: number };
     expect(taskCount.count).toBe(packet.reasons.length);
+    const proposalCount = db
+      .prepare("SELECT COUNT(*) AS count FROM proposal WHERE candidate_result_id = ?")
+      .get(packet.resultId) as { count: number };
+    expect(proposalCount.count).toBe(0);
   });
 
   it("finalizes a run whose work items predate extraction_run persistence", async () => {
@@ -1302,6 +1306,37 @@ describe("finalizeTriageRun", () => {
     unwrap(finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId }));
     expect(spy).toHaveBeenCalled();
     expect(db.inTransaction).toBe(false);
+  });
+
+  it("fails closed when run-level shortlist derivation cannot use a scored result", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const original = candidateResults.deriveCandidateDecision;
+    vi.spyOn(candidateResults, "deriveCandidateDecision").mockImplementation((input) => {
+      const result = original(input);
+      if (!result.ok) {
+        return result;
+      }
+      return {
+        ok: true,
+        value: {
+          ...result.value,
+          score: null,
+          routing: {
+            ...result.value.routing,
+            status: "scored",
+            availability: "complete"
+          }
+        }
+      };
+    });
+    const finalized = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(finalized.ok).toBe(false);
+    if (finalized.ok) {
+      return;
+    }
+    expect(finalized.error.message).toContain("Run-level shortlist derivation failed");
   });
 
   it("blocks a concurrent writer only during the short finalize commit", async () => {

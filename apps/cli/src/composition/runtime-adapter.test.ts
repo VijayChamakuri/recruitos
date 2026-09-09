@@ -119,6 +119,11 @@ describe("Runtime Composition Wiring in Apps", () => {
 
     expect(candidatesResult.value).toEqual([]);
 
+    const proposalsResult = await composition.listProposals();
+    expect(proposalsResult.ok).toBe(true);
+    if (!proposalsResult.ok) return;
+    expect(proposalsResult.value).toEqual([]);
+
     const packetResult = await composition.getCandidatePacket("candidate-1");
     expect(packetResult).toMatchObject({ ok: false, error: { code: "not_found" } });
 
@@ -165,4 +170,160 @@ describe("Runtime Composition Wiring in Apps", () => {
 
     expect(composition.runtime.close().ok).toBe(true);
   }, 120_000);
+
+  it("lists persisted proposals from the database after demo:prepare, never stub ids", async () => {
+    const filename = await databaseFilename();
+    const created = createDemoRuntimeComposition(filename);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const composition = created.value as RuntimeRecruitosComposition;
+    expect(composition.prepareDemo).toBeDefined();
+    if (!composition.prepareDemo) {
+      composition.runtime.close();
+      return;
+    }
+    const prepared = await composition.prepareDemo({});
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) {
+      composition.runtime.close();
+      return;
+    }
+
+    const listed = await composition.listProposals();
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) {
+      composition.runtime.close();
+      return;
+    }
+    expect(listed.value).toEqual([]);
+    expect(listed.value.some((proposal) => proposal.proposalId === "proposal-1")).toBe(false);
+    expect(listed.value.some((proposal) => proposal.kind === "stage_advancement")).toBe(false);
+
+    const pendingOnly = await composition.listProposals({ status: "pending" });
+    expect(pendingOnly.ok).toBe(true);
+    if (pendingOnly.ok) {
+      expect(pendingOnly.value).toEqual([]);
+    }
+
+    const approvedOnly = await composition.listProposals({ status: "approved" });
+    expect(approvedOnly.ok).toBe(true);
+    if (approvedOnly.ok) {
+      expect(approvedOnly.value).toEqual([]);
+    }
+
+    const status = await composition.getStatus();
+    expect(status.ok).toBe(true);
+    if (status.ok) {
+      expect(status.value.pendingProposalsCount).toBe(0);
+    }
+
+    expect(composition.runtime.close().ok).toBe(true);
+  }, 120_000);
+
+  it("passes through runtime proposal statuses and counts only current-head pending rows", async () => {
+    const filename = await databaseFilename();
+    const created = createDefaultRuntimeComposition({ database: { filename } });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+    expect(created.value).toBeInstanceOf(RuntimeRecruitosComposition);
+    const composition = created.value as RuntimeRecruitosComposition;
+    const native = (
+      composition.runtime.connection.database as unknown as {
+        $client: {
+          pragma: (value: string) => void;
+          prepare: (sql: string) => { run: (...parameters: unknown[]) => unknown };
+        };
+      }
+    ).$client;
+    native.pragma("foreign_keys = OFF");
+    const hash = "a".repeat(64);
+    native
+      .prepare(
+        `INSERT INTO candidate (candidate_id, source_system, source_key, channel, corpus_tag, is_synthetic, created_at)
+         VALUES ('cand-live', 'system', 'key-live', 'inbound', 'main', 1, 1000)`
+      )
+      .run();
+    for (const resultId of ["res-old", "res-new"] as const) {
+      native
+        .prepare(
+          `INSERT INTO candidate_triage_result (
+             candidate_triage_result_id, candidate_id, kind, availability, status,
+             content_json, content_hash, seal_id, created_at
+           ) VALUES (?, 'cand-live', 'initial', 'complete', 'scored', '{}', ?, ?, 1000)`
+        )
+        .run(
+          resultId,
+          `${resultId.replace(/[^0-9a-f]/gu, "a").padEnd(64, "a").slice(0, 64)}`,
+          `seal-${resultId}`
+        );
+    }
+    native
+      .prepare(
+        `INSERT INTO proposal (
+           proposal_id, candidate_result_id, proposal_kind, proposal_ordinal,
+           payload_json, payload_hash, created_at
+         ) VALUES
+           ('prop-old', 'res-old', 'shortlist_inclusion', 0, '{"kind":"shortlist_inclusion"}', ?, 1000),
+           ('prop-pending', 'res-new', 'shortlist_inclusion', 0, '{"kind":"shortlist_inclusion"}', ?, 1000),
+           ('prop-edited', 'res-new', 'follow_up_draft', 1, '{"kind":"follow_up_draft","body":"Ask for a work-auth document."}', ?, 1001)`
+      )
+      .run(hash, hash, hash);
+    native
+      .prepare(
+        `INSERT INTO review_decision (
+           review_decision_id, proposal_id, actor_id, decision_kind, decision_ordinal,
+           payload_json, payload_hash, created_at
+         ) VALUES (
+           'decision-edited', 'prop-edited', 'actor-1', 'edit', 0,
+           '{"kind":"edit","editedPayload":{"kind":"follow_up_draft","body":"Ask for a work-auth document."}}',
+           ?, 1001
+         )`
+      )
+      .run(hash);
+    native
+      .prepare(
+        `INSERT INTO proposal_head (proposal_id, current_decision_id, version)
+         VALUES ('prop-edited', 'decision-edited', 1)`
+      )
+      .run();
+    native
+      .prepare(
+        `INSERT INTO candidate_head (candidate_id, current_result_id, version)
+         VALUES ('cand-live', 'res-new', 1)`
+      )
+      .run();
+
+    const listed = await composition.listProposals();
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) {
+      composition.runtime.close();
+      return;
+    }
+    expect(listed.value.map((proposal) => [proposal.proposalId, proposal.status])).toEqual([
+      ["prop-pending", "pending"],
+      ["prop-edited", "edited"]
+    ]);
+
+    const pendingOnly = await composition.listProposals({ status: "pending" });
+    expect(pendingOnly.ok).toBe(true);
+    if (pendingOnly.ok) {
+      expect(pendingOnly.value.map((proposal) => proposal.proposalId)).toEqual(["prop-pending"]);
+    }
+
+    const editedOnly = await composition.listProposals({ status: "edited" });
+    expect(editedOnly.ok).toBe(true);
+    if (editedOnly.ok) {
+      expect(editedOnly.value.map((proposal) => proposal.proposalId)).toEqual(["prop-edited"]);
+    }
+
+    const status = await composition.getStatus();
+    expect(status.ok).toBe(true);
+    if (status.ok) {
+      expect(status.value.pendingProposalsCount).toBe(1);
+    }
+
+    expect(composition.runtime.close().ok).toBe(true);
+  });
 });

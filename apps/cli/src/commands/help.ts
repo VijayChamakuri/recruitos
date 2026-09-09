@@ -60,6 +60,8 @@ export function formatHelp(targetCommand?: string): string {
         "  --candidate-version <n>  Expected candidate head version (request_re_extraction)",
         "  --command-id <id>     Durable command id so a lost receipt can be replayed",
         "  --status <status>     Filter tasks or proposals by status",
+        "                        Proposal statuses: pending, evidence_requested,",
+        "                        approved, rejected, edited",
         "  --json                Emit output in structured JSON envelope",
         "  -h, --help            Show this help message",
         "",

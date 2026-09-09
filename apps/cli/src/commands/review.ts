@@ -1,3 +1,5 @@
+import { ProposalStatusSchema } from "@recruitos/core";
+
 import {
   createErrorEnvelope,
   createSuccessEnvelope,
@@ -311,8 +313,10 @@ export async function runReviewCommand(
     status: args.options.status as ResolutionTaskStatus | undefined
   });
 
+  const parsedProposalStatus = ProposalStatusSchema.safeParse(args.options.status);
   const proposalsResult = await composition.listProposals({
-    candidateId: args.options.candidate
+    candidateId: args.options.candidate,
+    ...(parsedProposalStatus.success ? { status: parsedProposalStatus.data } : {})
   });
 
   const durationMs = Date.now() - startTime;

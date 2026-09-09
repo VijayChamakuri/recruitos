@@ -42,6 +42,7 @@ import {
   importCandidates,
   listAuditEvents,
   listCandidates,
+  listProposals,
   listResolutionTasks,
   registerDemoCorrectionFixtures,
   registerDemoFixtures,
@@ -59,6 +60,7 @@ import {
   type AuditEventItem,
   type CandidatePacketModel,
   type CandidateSummaryItem,
+  type ProposalListItem,
   type ResolutionTaskItem
 } from "@recruitos/runtime";
 import { loadCandidatePacketSnapshot } from "./packet-snapshot.js";
@@ -112,6 +114,18 @@ function toAuditEventSummary(item: AuditEventItem): AuditEventSummary {
     payloadHash: item.payloadHash,
     commandId: item.commandId,
     eventOrdinal: item.eventOrdinal
+  };
+}
+
+function toProposalSummary(item: ProposalListItem): ProposalSummary {
+  return {
+    proposalId: item.proposalId,
+    candidateId: item.candidateId,
+    kind: item.kind,
+    status: item.status,
+    proposedChange: item.proposedChange,
+    version: item.version,
+    createdAt: item.createdAt
   };
 }
 
@@ -457,6 +471,21 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
     return false;
   }
 
+  private hasProposalsInDb(): boolean {
+    try {
+      const nativeClient = getNativeClient(this.runtime.connection.database);
+      if (nativeClient) {
+        const row = nativeClient.prepare("SELECT count(*) as cnt FROM proposal").get() as
+          | { cnt: number }
+          | undefined;
+        return (row?.cnt ?? 0) > 0;
+      }
+    } catch {
+      // Table may not exist yet
+    }
+    return false;
+  }
+
   private hasTasksInDb(): boolean {
     try {
       const nativeClient = getNativeClient(this.runtime.connection.database);
@@ -510,7 +539,19 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
         }
 
         try {
-          const propRow = nativeClient.prepare("SELECT count(*) as cnt FROM proposal_head WHERE status = 'pending'").get() as { cnt: number } | undefined;
+          const propRow = nativeClient
+            .prepare(
+              `SELECT count(*) AS cnt
+               FROM proposal p
+               JOIN candidate_triage_result ctr
+                 ON ctr.candidate_triage_result_id = p.candidate_result_id
+               JOIN candidate_head ch
+                 ON ch.candidate_id = ctr.candidate_id
+                 AND ch.current_result_id = p.candidate_result_id
+               LEFT JOIN proposal_head ph ON ph.proposal_id = p.proposal_id
+               WHERE ph.proposal_id IS NULL`
+            )
+            .get() as { cnt: number } | undefined;
           if (propRow) {
             pendingProposalsCount = propRow.cnt;
           }
@@ -792,6 +833,28 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   async listProposals(
     options?: ListProposalsOptions
   ): Promise<Result<readonly ProposalSummary[], RuntimeError>> {
+    if (this.hasProposalsInDb() || !this.allowStubFallback) {
+      const items: ProposalSummary[] = [];
+      let cursor: string | undefined;
+      do {
+        const pageResult = listProposals(this.runtime.connection.database, {
+          candidateId: options?.candidateId,
+          status: options?.status,
+          limit: 100,
+          ...(cursor === undefined ? {} : { cursor })
+        });
+        if (!pageResult.ok) {
+          return err({
+            code: "database_error",
+            message: pageResult.error.message,
+            retryable: false
+          });
+        }
+        items.push(...pageResult.value.items.map(toProposalSummary));
+        cursor = pageResult.value.nextCursor;
+      } while (cursor);
+      return ok(items);
+    }
     return this.fallback.listProposals(options);
   }
 

@@ -28,7 +28,7 @@ import {
   insertExtractionFailure,
   prepareExtractionFailure
 } from "../extraction/index.js";
-import { readCandidatePacket } from "../read-models/index.js";
+import { listProposals, readCandidatePacket } from "../read-models/index.js";
 import {
   insertResolutionAction,
   prepareResolutionAction
@@ -454,6 +454,26 @@ describe("completeReExtraction", () => {
     expect(task.actionKind).toBe("reextraction_completed");
     expect(count(runtime, "SELECT count(*) AS n FROM triage_run")).toBe(runsBefore);
     expect(count(runtime, "SELECT count(*) AS n FROM triage_run_member")).toBe(membersBefore);
+    expect(
+      count(
+        runtime,
+        "SELECT count(*) AS n FROM proposal WHERE candidate_result_id = ?",
+        ids.resultId
+      )
+    ).toBe(0);
+    expect(
+      count(
+        runtime,
+        "SELECT count(*) AS n FROM proposal WHERE candidate_result_id = ?",
+        completed.result.resultId
+      )
+    ).toBe(0);
+    expect(count(runtime, "SELECT count(*) AS n FROM proposal_head")).toBe(0);
+
+    const listed = unwrap(listProposals(runtime.connection.database));
+    expect(listed.queryCount).toBe(1);
+    expect(listed.items).toHaveLength(0);
+    expect(listed.items.some((item) => item.proposalId === "proposal-1")).toBe(false);
     unwrap(runtime.close());
   });
 
