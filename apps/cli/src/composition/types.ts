@@ -179,6 +179,8 @@ export type AuditEventSummary = Readonly<{
   actorId: string;
   occurredAt: number;
   payloadHash: string;
+  commandId: string | null;
+  eventOrdinal: number | null;
 }>;
 
 export type ListCandidatesOptions = Readonly<{
@@ -279,6 +281,7 @@ export type RecordReviewDecisionInput = Readonly<{
 }>;
 
 export type ListAuditEventsOptions = Readonly<{
+  cursor?: string | undefined;
   limit?: number | undefined;
 }>;
 

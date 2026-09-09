@@ -40,6 +40,7 @@ import {
   completeReExtraction,
   demoPrepare,
   importCandidates,
+  listAuditEvents,
   listCandidates,
   listResolutionTasks,
   registerDemoCorrectionFixtures,
@@ -55,6 +56,7 @@ import {
   readResolutionTaskHead,
   readResolutionActions,
   readCandidateTriageResult,
+  type AuditEventItem,
   type CandidatePacketModel,
   type CandidateSummaryItem,
   type ResolutionTaskItem
@@ -98,6 +100,18 @@ function toCandidateSummary(item: CandidateSummaryItem): CandidateSummary {
     tasksCount: 0,
     sealed: item.isSealed,
     createdAt: item.createdAt
+  };
+}
+
+function toAuditEventSummary(item: AuditEventItem): AuditEventSummary {
+  return {
+    auditEventId: item.auditEventId,
+    eventName: item.eventName,
+    actorId: item.actorId,
+    occurredAt: item.occurredAt,
+    payloadHash: item.payloadHash,
+    commandId: item.commandId,
+    eventOrdinal: item.eventOrdinal
   };
 }
 
@@ -420,6 +434,21 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       const nativeClient = getNativeClient(this.runtime.connection.database);
       if (nativeClient) {
         const row = nativeClient.prepare("SELECT count(*) as cnt FROM candidate_head").get() as { cnt: number } | undefined;
+        return (row?.cnt ?? 0) > 0;
+      }
+    } catch {
+      // Table may not exist yet
+    }
+    return false;
+  }
+
+  private hasAuditEventsInDb(): boolean {
+    try {
+      const nativeClient = getNativeClient(this.runtime.connection.database);
+      if (nativeClient) {
+        const row = nativeClient.prepare("SELECT count(*) as cnt FROM audit_event").get() as
+          | { cnt: number }
+          | undefined;
         return (row?.cnt ?? 0) > 0;
       }
     } catch {
@@ -775,6 +804,20 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   async listAuditEvents(
     options?: ListAuditEventsOptions
   ): Promise<Result<readonly AuditEventSummary[], RuntimeError>> {
+    if (this.hasAuditEventsInDb() || !this.allowStubFallback) {
+      const pageResult = listAuditEvents(this.runtime.connection.database, {
+        limit: options?.limit,
+        ...(options?.cursor === undefined ? {} : { cursor: options.cursor })
+      });
+      if (!pageResult.ok) {
+        return err({
+          code: "database_error",
+          message: pageResult.error.message,
+          retryable: false
+        });
+      }
+      return ok(pageResult.value.items.map(toAuditEventSummary));
+    }
     return this.fallback.listAuditEvents(options);
   }
 }

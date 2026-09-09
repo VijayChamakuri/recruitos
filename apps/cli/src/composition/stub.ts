@@ -357,21 +357,27 @@ export class StubRecruitosComposition implements RecruitosComposition {
         eventName: "corpus_sealed",
         actorId: "system:runtime",
         occurredAt: BASE_TIMESTAMP - 10000,
-        payloadHash: "c018247df789123405abcde018a4f91e0d37bc01fae2981329cbf7689104fa2b"
+        payloadHash: "c018247df789123405abcde018a4f91e0d37bc01fae2981329cbf7689104fa2b",
+        commandId: null,
+        eventOrdinal: null
       },
       {
         auditEventId: "audit-2",
         eventName: "triage_run_started",
         actorId: "human:recruiter-1",
         occurredAt: BASE_TIMESTAMP - 5000,
-        payloadHash: "d37bc01fae2981329cbf7689104fa2bc018247df789123405abcde018a4f91e0"
+        payloadHash: "d37bc01fae2981329cbf7689104fa2bc018247df789123405abcde018a4f91e0",
+        commandId: null,
+        eventOrdinal: null
       },
       {
         auditEventId: "audit-3",
         eventName: "candidate_triage_result_sealed",
         actorId: "system:runtime",
         occurredAt: BASE_TIMESTAMP,
-        payloadHash: "fae2981329cbf7689104fa2bc018247df789123405abcde018a4f91e0d37bc01"
+        payloadHash: "fae2981329cbf7689104fa2bc018247df789123405abcde018a4f91e0d37bc01",
+        commandId: null,
+        eventOrdinal: null
       }
     ];
   }

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createCompositionFromRuntime,
   createDefaultRuntimeComposition,
+  createDemoRuntimeComposition,
   createIncrementingIdGenerator,
   createProcessUniqueIdGenerator,
   createRuntime,
@@ -120,5 +121,48 @@ describe("Runtime Composition Wiring in Apps", () => {
 
     const packetResult = await composition.getCandidatePacket("candidate-1");
     expect(packetResult).toMatchObject({ ok: false, error: { code: "not_found" } });
+
+    const auditResult = await composition.listAuditEvents();
+    expect(auditResult.ok).toBe(true);
+    if (!auditResult.ok) return;
+    expect(auditResult.value).toEqual([]);
+    expect(auditResult.value.some((event) => event.eventName === "corpus_sealed")).toBe(false);
   });
+
+  it("lists persisted audit events after demo:prepare, never stub names", async () => {
+    const filename = await databaseFilename();
+    const created = createDemoRuntimeComposition(filename);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value).toBeInstanceOf(RuntimeRecruitosComposition);
+    const composition = created.value as RuntimeRecruitosComposition;
+    expect(composition.prepareDemo).toBeDefined();
+    if (!composition.prepareDemo) {
+      composition.runtime.close();
+      return;
+    }
+    const prepared = await composition.prepareDemo({});
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) {
+      composition.runtime.close();
+      return;
+    }
+
+    const listed = await composition.listAuditEvents({ limit: 100 });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) {
+      composition.runtime.close();
+      return;
+    }
+    const names = listed.value.map((event) => event.eventName);
+    expect(names).toContain("candidate.result.published");
+    expect(names).toContain("triage_run.sealed");
+    expect(names).not.toContain("corpus_sealed");
+    expect(names).not.toContain("triage_run_started");
+    expect(listed.value.every((event) => event.payloadHash.length === 64)).toBe(true);
+    expect(listed.value.some((event) => event.commandId !== null)).toBe(true);
+    expect(listed.value.some((event) => event.eventOrdinal !== null)).toBe(true);
+
+    expect(composition.runtime.close().ok).toBe(true);
+  }, 120_000);
 });
