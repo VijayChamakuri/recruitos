@@ -12,11 +12,13 @@ import { openRuntimeDatabase, type RuntimeDatabaseConnection } from "../db/index
 import {
   assertListAuditEventsIndexPlan,
   assertListCandidatesIndexPlan,
+  assertListProposalsIndexPlan,
   assertListResolutionTasksIndexPlan,
   decodeCursor,
   encodeCursor,
   listAuditEvents,
   listCandidates,
+  listProposals,
   listResolutionTasks,
   readCandidatePacket
 } from "./index.js";
@@ -1007,6 +1009,291 @@ describe("readCandidatePacket Read Model", () => {
         expect(foreign.error.code).toBe("not_found");
         expect(foreign.error.message).toContain("does not belong to candidate");
       }
+    } finally {
+      connection.close();
+    }
+  });
+});
+
+const PROPOSAL_PAYLOAD_HASH = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+function seedProposalRow(
+  nativeDb: BetterSqlite3.Database,
+  input: {
+    readonly proposalId: string;
+    readonly candidateId: string;
+    readonly resultId: string;
+    readonly createdAt: number;
+    readonly kind?: string;
+    readonly ordinal?: number;
+    readonly decisionKind?: string | null;
+  }
+): void {
+  nativeDb
+    .prepare(
+      `INSERT INTO candidate (candidate_id, source_system, source_key, channel, corpus_tag, is_synthetic, created_at)
+       VALUES (?, 'system', ?, 'inbound', 'main', 1, 1000)`
+    )
+    .run(input.candidateId, `key-${input.candidateId}`);
+  nativeDb
+    .prepare(
+      `INSERT INTO candidate_triage_result (
+         candidate_triage_result_id, candidate_id, kind, availability, status,
+         content_json, content_hash, seal_id, created_at
+       ) VALUES (?, ?, 'initial', 'complete', 'scored', '{}', ?, ?, 1000)`
+    )
+    .run(
+      input.resultId,
+      input.candidateId,
+      `${input.resultId.replace(/[^0-9a-f]/gu, "a").padEnd(64, "a").slice(0, 64)}`,
+      `seal-${input.resultId}`
+    );
+  nativeDb
+    .prepare(
+      `INSERT INTO proposal (
+         proposal_id, candidate_result_id, proposal_kind, proposal_ordinal,
+         payload_json, payload_hash, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      input.proposalId,
+      input.resultId,
+      input.kind ?? "shortlist_inclusion",
+      input.ordinal ?? 0,
+      `{"kind":"${input.kind ?? "shortlist_inclusion"}"}`,
+      PROPOSAL_PAYLOAD_HASH,
+      input.createdAt
+    );
+  if (input.decisionKind) {
+    nativeDb
+      .prepare(
+        `INSERT INTO review_decision (
+           review_decision_id, proposal_id, actor_id, decision_kind, decision_ordinal,
+           payload_json, payload_hash, created_at
+         ) VALUES (?, ?, 'actor-1', ?, 0, ?, ?, ?)`
+      )
+      .run(
+        `decision-${input.proposalId}`,
+        input.proposalId,
+        input.decisionKind,
+        `{"kind":"${input.decisionKind}"}`,
+        PROPOSAL_PAYLOAD_HASH,
+        input.createdAt
+      );
+    nativeDb
+      .prepare(
+        `INSERT INTO proposal_head (proposal_id, current_decision_id, version)
+         VALUES (?, ?, 1)`
+      )
+      .run(input.proposalId, `decision-${input.proposalId}`);
+  }
+}
+
+describe("listProposals Read Model", () => {
+  it("returns empty page on clean database with queryCount = 1", async () => {
+    const connection = await openMigratedDatabase();
+    try {
+      const result = listProposals(connection.database);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.items.length).toBe(0);
+      expect(result.value.nextCursor).toBeUndefined();
+      expect(result.value.queryCount).toBe(1);
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("orders by createdAt then proposalId and paginates with a keyset cursor", async () => {
+    const connection = await openMigratedDatabase();
+    const nativeDb = getNativeClient(connection);
+    try {
+      nativeDb.pragma("foreign_keys = OFF");
+      seedProposalRow(nativeDb, {
+        proposalId: "prop-b",
+        candidateId: "cand-1",
+        resultId: "res-1",
+        createdAt: 1000
+      });
+      seedProposalRow(nativeDb, {
+        proposalId: "prop-a",
+        candidateId: "cand-2",
+        resultId: "res-2",
+        createdAt: 1000
+      });
+      seedProposalRow(nativeDb, {
+        proposalId: "prop-c",
+        candidateId: "cand-3",
+        resultId: "res-3",
+        createdAt: 2000,
+        decisionKind: "approve"
+      });
+
+      const page1 = listProposals(connection.database, { limit: 2 });
+      expect(page1.ok).toBe(true);
+      if (!page1.ok) return;
+      expect(page1.value.queryCount).toBe(1);
+      expect(page1.value.items.map((item) => item.proposalId)).toEqual(["prop-a", "prop-b"]);
+      expect(page1.value.items[0]?.status).toBe("pending");
+      expect(page1.value.items[0]?.version).toBe(0);
+      expect(page1.value.items[0]?.proposedChange).toBe("shortlist_inclusion");
+      expect(page1.value.nextCursor).toBeDefined();
+
+      const page2 = listProposals(connection.database, {
+        cursor: page1.value.nextCursor,
+        limit: 2
+      });
+      expect(page2.ok).toBe(true);
+      if (!page2.ok) return;
+      expect(page2.value.items.map((item) => item.proposalId)).toEqual(["prop-c"]);
+      expect(page2.value.items[0]?.status).toBe("approved");
+      expect(page2.value.items[0]?.version).toBe(1);
+      expect(page2.value.nextCursor).toBeUndefined();
+
+      const forCandidate = listProposals(connection.database, { candidateId: "cand-1" });
+      expect(forCandidate.ok).toBe(true);
+      if (forCandidate.ok) {
+        expect(forCandidate.value.items.map((item) => item.proposalId)).toEqual(["prop-b"]);
+      }
+
+      const pendingOnly = listProposals(connection.database, { status: "pending" });
+      expect(pendingOnly.ok).toBe(true);
+      if (pendingOnly.ok) {
+        expect(pendingOnly.value.items.map((item) => item.proposalId)).toEqual([
+          "prop-a",
+          "prop-b"
+        ]);
+      }
+
+      const approvedOnly = listProposals(connection.database, { status: "approved" });
+      expect(approvedOnly.ok).toBe(true);
+      if (approvedOnly.ok) {
+        expect(approvedOnly.value.items.map((item) => item.proposalId)).toEqual(["prop-c"]);
+      }
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("derives edited, rejected, and evidence_requested from the current review decision", async () => {
+    const connection = await openMigratedDatabase();
+    const nativeDb = getNativeClient(connection);
+    try {
+      nativeDb.pragma("foreign_keys = OFF");
+      seedProposalRow(nativeDb, {
+        proposalId: "prop-edit",
+        candidateId: "cand-edit",
+        resultId: "res-edit",
+        createdAt: 3000,
+        decisionKind: "edit"
+      });
+      seedProposalRow(nativeDb, {
+        proposalId: "prop-reject",
+        candidateId: "cand-reject",
+        resultId: "res-reject",
+        createdAt: 4000,
+        decisionKind: "reject"
+      });
+      seedProposalRow(nativeDb, {
+        proposalId: "prop-evidence",
+        candidateId: "cand-evidence",
+        resultId: "res-evidence",
+        createdAt: 5000,
+        decisionKind: "request_evidence"
+      });
+
+      const edited = listProposals(connection.database, { status: "edited" });
+      expect(edited.ok).toBe(true);
+      if (edited.ok) {
+        expect(edited.value.items.map((item) => [item.proposalId, item.status])).toEqual([
+          ["prop-edit", "edited"]
+        ]);
+        expect(edited.value.items[0]?.version).toBe(1);
+      }
+
+      const rejected = listProposals(connection.database, { status: "rejected" });
+      expect(rejected.ok).toBe(true);
+      if (rejected.ok) {
+        expect(rejected.value.items.map((item) => [item.proposalId, item.status])).toEqual([
+          ["prop-reject", "rejected"]
+        ]);
+      }
+
+      const evidence = listProposals(connection.database, { status: "evidence_requested" });
+      expect(evidence.ok).toBe(true);
+      if (evidence.ok) {
+        expect(evidence.value.items.map((item) => [item.proposalId, item.status])).toEqual([
+          ["prop-evidence", "evidence_requested"]
+        ]);
+      }
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("handles client errors, bad cursors, invalid status, query errors, and unknown decision kinds", async () => {
+    const badClientDb = {};
+    expect(listProposals(badClientDb).ok).toBe(false);
+    expect(assertListProposalsIndexPlan(badClientDb).ok).toBe(false);
+
+    const connection = await openMigratedDatabase();
+    try {
+      const badCursorResult = listProposals(connection.database, { cursor: "invalid" });
+      expect(badCursorResult.ok).toBe(false);
+
+      const invalidStatus = listProposals(connection.database, {
+        status: "not-a-status" as never
+      });
+      expect(invalidStatus.ok).toBe(false);
+
+      const throwingDb = {
+        $client: {
+          prepare() {
+            throw new Error("Simulated query failure");
+          }
+        }
+      };
+      expect(listProposals(throwingDb).ok).toBe(false);
+      expect(assertListProposalsIndexPlan(throwingDb).ok).toBe(false);
+
+      const unknownKindDb = {
+        $client: {
+          prepare() {
+            return {
+              all: () => [
+                {
+                  proposalId: "prop-unknown",
+                  candidateId: "cand-1",
+                  candidateResultId: "res-1",
+                  proposalOrdinal: 0,
+                  proposalKind: "shortlist_inclusion",
+                  createdAt: 1,
+                  currentDecisionKind: "not-a-kind",
+                  headVersion: 0
+                }
+              ]
+            };
+          }
+        }
+      };
+      const unknownKind = listProposals(unknownKindDb);
+      expect(unknownKind.ok).toBe(true);
+      if (unknownKind.ok) {
+        expect(unknownKind.value.items[0]?.status).toBe("pending");
+      }
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("asserts the index plan for listProposals", async () => {
+    const connection = await openMigratedDatabase();
+    try {
+      const planResult = assertListProposalsIndexPlan(connection.database);
+      expect(planResult.ok).toBe(true);
+      if (!planResult.ok) return;
+      expect(planResult.value.steps.length).toBeGreaterThan(0);
+      expect(planResult.value.query).toContain("FROM proposal");
     } finally {
       connection.close();
     }

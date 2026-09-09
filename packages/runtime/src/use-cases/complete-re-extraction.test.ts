@@ -28,7 +28,7 @@ import {
   insertExtractionFailure,
   prepareExtractionFailure
 } from "../extraction/index.js";
-import { readCandidatePacket } from "../read-models/index.js";
+import { listProposals, readCandidatePacket } from "../read-models/index.js";
 import {
   insertResolutionAction,
   prepareResolutionAction
@@ -469,6 +469,20 @@ describe("completeReExtraction", () => {
       )
     ).toBe(1);
     expect(count(runtime, "SELECT count(*) AS n FROM proposal_head")).toBe(0);
+
+    const listed = unwrap(listProposals(runtime.connection.database));
+    expect(listed.queryCount).toBe(1);
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]).toEqual(
+      expect.objectContaining({
+        candidateResultId: completed.result.resultId,
+        kind: "shortlist_inclusion",
+        status: "pending",
+        proposedChange: "shortlist_inclusion",
+        version: 0
+      })
+    );
+    expect(listed.items[0]?.proposalId).not.toBe("proposal-1");
     unwrap(runtime.close());
   });
 

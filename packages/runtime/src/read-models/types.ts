@@ -1,4 +1,4 @@
-import type { ResolutionTaskStatus } from "@recruitos/core";
+import type { ProposalStatus, ResolutionTaskStatus } from "@recruitos/core";
 
 export const DEFAULT_PAGE_SIZE = 50;
 export const MAXIMUM_PAGE_SIZE = 100;
@@ -101,6 +101,31 @@ export interface AuditEventListPage {
 export interface ListAuditEventsOptions {
   readonly cursor?: string | undefined;
   readonly limit?: number | undefined;
+}
+
+export interface ProposalListItem {
+  readonly proposalId: string;
+  readonly candidateId: string;
+  readonly candidateResultId: string;
+  readonly proposalOrdinal: number;
+  readonly kind: string;
+  readonly status: ProposalStatus;
+  readonly proposedChange: string;
+  readonly version: number;
+  readonly createdAt: number;
+}
+
+export interface ProposalListPage {
+  readonly items: readonly ProposalListItem[];
+  readonly nextCursor: string | undefined;
+  readonly queryCount: number;
+}
+
+export interface ListProposalsOptions {
+  readonly cursor?: string | undefined;
+  readonly limit?: number | undefined;
+  readonly candidateId?: string | undefined;
+  readonly status?: ProposalStatus | undefined;
 }
 
 export interface CandidatePacketConfidenceInput {
