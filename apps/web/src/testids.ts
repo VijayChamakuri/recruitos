@@ -62,13 +62,18 @@ export const TEST_IDS = {
   PRIOR_VERSION_LINK: "prior-version-link",
   VERSION_HISTORY: "version-history",
 
-  // Workflow 3: Resolution Rescore
+  // Workflow 3: fixture correction request and completion
   TASK_ITEM: (id: string) => `task-item-${id}`,
   TASK_STATUS: (id: string) => `task-status-${id}`,
+  TASK_INSPECTOR: "task-inspector",
   RESOLUTION_FORM: "resolution-form",
+  RATIONALE_INPUT: "resolution-rationale",
   EVIDENCE_INPUT: "evidence-input",
   LEVEL_SELECT: "level-select",
   SUBMIT_RESOLUTION_BTN: "submit-resolution-btn",
+  FIXTURE_MODE_MARK: "fixture-correction-mark",
+  FIXTURE_COMPLETE_FORM: "fixture-complete-form",
+  COMPLETE_FIXTURE_BTN: "complete-fixture-extraction-btn",
 
   // Workflow 4: Stale Conflict
   CONFLICT_ERROR_BANNER: "conflict-error-banner",

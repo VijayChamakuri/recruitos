@@ -15,12 +15,15 @@ import { renderEvidenceGapCard } from "./evidence-gap-card.js";
 import { escapeHtml } from "./safe-text.js";
 import { formatWeightPercent } from "../format.js";
 import { TEST_IDS } from "../testids.js";
+import { renderConflictBand, renderPriorResultLink, renderTaskInspector } from "./task-inspector.js";
+import type { PacketInspectorModel } from "../server/inspector-model.js";
 
 export type CandidatePacketViewProps = Readonly<{
   packet: CandidatePacket;
   focusedDimensionId?: string | undefined;
   focusedSpanId?: string | undefined;
   appearance?: Appearance | undefined;
+  inspector?: PacketInspectorModel | undefined;
 }>;
 
 function inspectingLabel(packet: CandidatePacket): string {
@@ -223,8 +226,15 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
   ].join("\n");
 
   const routingReasons = p.reasons;
+  const inspector = props.inspector;
+  const priorResultId = inspector?.priorResultId;
+  const resultKind = p.resultKind ?? "unavailable";
+  const resultIdAttr = p.resultId === undefined ? "" : ` data-result-id="${escapeHtml(p.resultId)}"`;
+  const resultKindAttr = ` data-result-kind="${escapeHtml(resultKind)}"`;
+  const sourceKeyAttr = ` data-source-key="${escapeHtml(p.sourceKey)}"`;
+  const candidateIdAttr = ` data-candidate-id="${escapeHtml(p.candidateId)}"`;
 
-  return [
+  const headerHtml = [
     `  <div style="padding:10px 16px 8px;border-bottom:1px solid var(--hairline-strong);background:var(--surface)">`,
     `    <div style="display:flex;align-items:baseline;gap:12px">`,
     `      <a href="${escapeHtml(returnHref)}" class="mono link" style="font-size:12px" data-testid="${TEST_IDS.RETURN_TO_QUEUE}">Return to triage queue</a>`,
@@ -237,12 +247,15 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     `      <span class="mono" style="font-size:12px">ID: ${escapeHtml(p.candidateId)}</span>`,
     `    </div>`,
     `    <div class="mono faint" style="font-size:12px;margin-top:4px">`,
-    `      channel: ${escapeHtml(p.channel)} &middot; status: <strong style="color:var(--text)">${escapeHtml(p.status)}</strong> &middot; content hash: ${escapeHtml(p.contentHash.slice(0, 16))}... &middot; sealed: ${p.sealed ? "yes" : "no"}`,
+    `      channel: ${escapeHtml(p.channel)} &middot; status: <strong style="color:var(--text)">${escapeHtml(p.status)}</strong> &middot; result kind: ${escapeHtml(resultKind)} &middot; content hash: ${escapeHtml(p.contentHash.slice(0, 16))}... &middot; sealed: ${p.sealed ? "yes" : "no"}`,
     `    </div>`,
     `    <div class="mono" style="font-size:12px;margin-top:4px" data-testid="${TEST_IDS.PACKET_INSPECTING_LABEL}">${escapeHtml(inspectingLabel(p))}</div>`,
     `    <div style="display:flex;align-items:center;gap:12px;margin-top:6px" data-testid="${TEST_IDS.VERSION_HISTORY}">`,
     `      <span class="badge" data-testid="${TEST_IDS.SUPERSEDING_BADGE}">${p.sealed ? "Sealed Version" : "Active Head"}</span>`,
     `      <span class="sep">&#124;</span>`,
+    priorResultId
+      ? renderPriorResultLink(p.candidateId, appearance, priorResultId)
+      : "",
     `      <div data-testid="${TEST_IDS.ROUTING_REASONS}" style="display:inline-flex;gap:6px;flex-wrap:wrap">`,
     routingReasons.length > 0
       ? routingReasons
@@ -255,14 +268,39 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     `      </div>`,
     `    </div>`,
     renderPacketTasks(p.tasks),
-    `  </div>`,
-    `  <div class="packet-b" data-testid="candidate-packet-view">`,
+    `  </div>`
+  ].join("\n");
+
+  const panesHtml = [
+    `  <div class="packet-b" data-testid="candidate-packet-view"${candidateIdAttr}${resultIdAttr}${resultKindAttr}${sourceKeyAttr}>`,
     `    <svg class="thread" aria-hidden="true">`,
     `      <!-- The thread connects focused claim to evidence card and source span -->`,
     `    </svg>`,
     arithPane,
     ledgerPane,
     sourcePane,
+    `  </div>`
+  ].join("\n");
+
+  if (inspector === undefined) {
+    return [headerHtml, panesHtml].join("\n");
+  }
+
+  const conflictSlot =
+    inspector.conflictMessage === undefined
+      ? ""
+      : `    <div class="packet-conflict-slot">${renderConflictBand(inspector.conflictMessage)}</div>`;
+
+  return [
+    `  <div class="packet-shell">`,
+    headerHtml,
+    conflictSlot,
+    `    <div class="packet-with-inspector">`,
+    `      <div class="packet-main">`,
+    panesHtml,
+    `      </div>`,
+    renderTaskInspector(inspector),
+    `    </div>`,
     `  </div>`
   ].join("\n");
 }

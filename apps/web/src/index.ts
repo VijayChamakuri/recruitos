@@ -17,7 +17,7 @@ export {
   type CandidatePacketViewProps
 } from "./components/candidate-packet.js";
 
-export { handleRequest, type HttpResponse } from "./server/handlers.js";
+export { handleRequest, type HttpResponse, type IncomingRequest } from "./server/handlers.js";
 export { renderPage, type PageRenderOptions } from "./server/ssr.js";
 export {
   getServerComposition,

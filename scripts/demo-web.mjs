@@ -32,19 +32,21 @@ function hermeticEnv(base) {
 }
 
 function parseArgs(argv) {
+  const correction = argv.includes("--correction");
   const dbIndex = argv.indexOf("--db");
   if (dbIndex >= 0) {
     const database = argv[dbIndex + 1];
     if (!database) {
-      fail("Usage: node scripts/demo-web.mjs --db <path>");
+      fail("Usage: node scripts/demo-web.mjs [--correction] [--db <path>]");
     }
-    return { database, ownsDirectory: false };
+    return { database, ownsDirectory: false, correction };
   }
   const directory = mkdtempSync(join(tmpdir(), "recruitos-demo-web."));
   return {
     database: join(directory, "runtime.db"),
     ownsDirectory: true,
-    directory
+    directory,
+    correction
   };
 }
 
@@ -104,11 +106,11 @@ async function main() {
   }
 
   const url = `http://127.0.0.1:${port}/triage?theme=light&density=default`;
-  const server = spawn(
-    process.execPath,
-    [webServer, "--db", parsed.database, "--port", String(port)],
-    { cwd: repoRoot, env, stdio: "inherit" }
-  );
+  const serverArgs = [webServer, "--db", parsed.database, "--port", String(port)];
+  if (parsed.correction) {
+    serverArgs.push("--correction");
+  }
+  const server = spawn(process.execPath, serverArgs, { cwd: repoRoot, env, stdio: "inherit" });
 
   let cleaned = false;
   const cleanup = () => {
@@ -149,6 +151,13 @@ async function main() {
   process.stdout.write(`Open ${url}\n`);
   process.stdout.write(`Database ${parsed.database}\n`);
   process.stdout.write(`Fixture extraction only. Zero provider calls. Ctrl-C stops the server.\n`);
+  if (parsed.correction) {
+    process.stdout.write(
+      "Fixture correction mutations are on. The browser requests re-extraction; the overlay simulates the provider. The browser does not supply extracted facts or the system actor.\n"
+    );
+  } else {
+    process.stdout.write("Read-only. Use make demo-web-correction for the fixture correction path.\n");
+  }
 }
 
 await main();

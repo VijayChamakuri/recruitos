@@ -37,6 +37,7 @@ import {
   listAllResolutionTaskSummaries
 } from "./server/read-pages.js";
 import { listCandidates, listResolutionTasks } from "@recruitos/runtime";
+import { setCorrectionFixtureMode } from "./server/correction-mode.js";
 import { parseWebServerOptions } from "./server/options.js";
 import { TEST_IDS } from "./testids.js";
 
@@ -212,6 +213,18 @@ describe("Server options and explicit database", () => {
     expect(parsed.value.databasePath).toBe("/tmp/runtime.db");
     expect(parsed.value.port).toBe(4010);
     expect(parsed.value.host).toBe("127.0.0.1");
+    expect(parsed.value.correctionFixture).toBe(false);
+  });
+
+  it("enables fixture correction from --correction or CORRECTION_FIXTURE", () => {
+    const flagged = parseWebServerOptions(["--db", "/tmp/runtime.db", "--correction"], {});
+    expect(flagged.ok).toBe(true);
+    if (!flagged.ok) return;
+    expect(flagged.value.correctionFixture).toBe(true);
+    const fromEnv = parseWebServerOptions(["--db", "/tmp/runtime.db"], { CORRECTION_FIXTURE: "1" });
+    expect(fromEnv.ok).toBe(true);
+    if (!fromEnv.ok) return;
+    expect(fromEnv.value.correctionFixture).toBe(true);
   });
 
   it("fails closed when the explicit database file is missing", () => {
@@ -254,6 +267,7 @@ describe("Prepared seven-candidate demo composition", () => {
       throw new Error(prepared.error.message);
     }
     setServerComposition(composition);
+    setCorrectionFixtureMode(false);
   }, 120_000);
 
   afterAll(async () => {
@@ -514,6 +528,8 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(res.body).toContain("unavailable");
     expect(res.body).toContain("open");
     expect(res.body).toContain(`data-testid="${TEST_IDS.PACKET_TASKS}"`);
+    expect(res.body).toContain(`data-testid="${TEST_IDS.TASK_INSPECTOR}"`);
+    expect(res.body).toContain("make demo-web-correction");
   });
 
   it("returns the typed not-found page for an unknown candidate", async () => {
@@ -528,6 +544,9 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("Human Resolution Queue");
     expect(res.body).toContain("Resolution Tasks");
+    expect(res.body).toContain("demo/route-4-reviewable-failure");
+    expect(res.body).not.toContain("Read-only in this phase");
+    expect(res.body).toContain("make demo-web-correction");
     expect(res.body).not.toContain("prop-1");
     expect((res.body.match(/data-testid="task-item-/g) ?? []).length).toBeGreaterThan(2);
   });
@@ -625,6 +644,30 @@ describe("Prepared seven-candidate demo composition", () => {
     const res = await handleRequest("/nonexistent-page", new URLSearchParams());
     expect(res.statusCode).toBe(404);
     expect(res.body).toContain("404 Page Not Found");
+  });
+
+  it("rejects correction POSTs and GET actions while fixture mode is off", async () => {
+    const posted = await handleRequest(
+      "/actions/request-re-extraction",
+      new URLSearchParams("theme=light&density=default"),
+      {
+        method: "POST",
+        body: new URLSearchParams({
+          candidateId: "ignored",
+          taskId: "ignored",
+          rationale: "should not mutate",
+          expectedTaskHeadVersion: "1",
+          expectedCandidateHeadVersion: "1"
+        })
+      }
+    );
+    expect(posted.statusCode).toBe(403);
+    expect(posted.body).toContain("make demo-web-correction");
+    const getAction = await handleRequest(
+      "/actions/request-re-extraction",
+      new URLSearchParams()
+    );
+    expect(getAction.statusCode).toBe(405);
   });
 
   it("does not create an empty database when an explicit missing path is supplied", async () => {
