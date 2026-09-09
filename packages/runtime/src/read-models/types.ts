@@ -82,6 +82,27 @@ export interface ListResolutionTasksOptions {
   readonly candidateId?: string | undefined;
 }
 
+export interface AuditEventItem {
+  readonly auditEventId: string;
+  readonly commandId: string | null;
+  readonly eventOrdinal: number | null;
+  readonly occurredAt: number;
+  readonly actorId: string;
+  readonly eventName: string;
+  readonly payloadHash: string;
+}
+
+export interface AuditEventListPage {
+  readonly items: readonly AuditEventItem[];
+  readonly nextCursor: string | undefined;
+  readonly queryCount: number;
+}
+
+export interface ListAuditEventsOptions {
+  readonly cursor?: string | undefined;
+  readonly limit?: number | undefined;
+}
+
 export interface CandidatePacketConfidenceInput {
   readonly contradictionCount: number;
   readonly dimensionsWithLocatedSpan: number;

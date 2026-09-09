@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { appendAuditEvent, prepareAuditEvent } from "../../packages/runtime/src/audit/index.js";
 import {
   runImmediateTransaction,
   type ImmediateTransactionContext
@@ -14,8 +15,10 @@ import {
   prepareSourceDocument
 } from "../../packages/runtime/src/entities/index.js";
 import {
+  assertListAuditEventsIndexPlan,
   assertListCandidatesIndexPlan,
   assertListResolutionTasksIndexPlan,
+  listAuditEvents,
   listCandidates,
   listResolutionTasks,
   readCandidatePacket
@@ -392,6 +395,87 @@ describe("read-models integration", () => {
       if (sealedRes.ok) {
         expect(sealedRes.value.isSealed).toBe(true);
       }
+    });
+  });
+
+  describe("listAuditEvents keyset cursor and bounded query count", () => {
+    it("pages persisted audit_event rows with one query and a recorded plan", async () => {
+      const connection = await openMigratedDatabase("list-audit-events");
+      const nativeDb = nativeDatabase(connection);
+      const receiptHash = "b".repeat(64);
+      nativeDb
+        .prepare(
+          `INSERT INTO command_receipt (
+            command_id, command_name, actor_id, expected_version, payload_hash, status,
+            result_json, result_hash, error_code, error_message, created_at, completed_at
+          ) VALUES (?, 'test.command', 'test-actor-1', 0, ?, 'in_progress', NULL, NULL, NULL, NULL, ?, NULL)`
+        )
+        .run("cmd-finalize", receiptHash, SEED_TIMESTAMP);
+
+      unwrap(
+        runImmediateTransaction(connection, (context: ImmediateTransactionContext) => {
+          for (const [index, eventName] of [
+            "candidate.result.published",
+            "candidate.result.published",
+            "triage_run.sealed"
+          ].entries()) {
+            const prepared = unwrap(
+              prepareAuditEvent(
+                { now: () => SEED_TIMESTAMP + index },
+                {
+                  auditEventId: `audit-${index + 1}`,
+                  commandId: "cmd-finalize",
+                  eventOrdinal: index,
+                  actorId: "system:runtime",
+                  actorDisplayName: "system:runtime",
+                  eventName,
+                  eventVersion: 1,
+                  payload: { index },
+                  occurredAt: SEED_TIMESTAMP
+                }
+              )
+            );
+            unwrap(appendAuditEvent(context, prepared));
+          }
+          const unlinked = unwrap(
+            prepareAuditEvent(
+              { now: () => SEED_TIMESTAMP + 10 },
+              {
+                auditEventId: "audit-unlinked",
+                commandId: null,
+                eventOrdinal: null,
+                actorId: "human:operator",
+                actorDisplayName: "Operator",
+                eventName: "test.unlinked",
+                eventVersion: 1,
+                payload: { orphan: true },
+                occurredAt: SEED_TIMESTAMP - 1000
+              }
+            )
+          );
+          unwrap(appendAuditEvent(context, unlinked));
+          return { ok: true, value: undefined };
+        })
+      );
+
+      const page1 = unwrap(listAuditEvents(connection.database, { limit: 2 }));
+      expect(page1.queryCount).toBe(1);
+      expect(page1.items.map((item) => item.auditEventId)).toEqual(["audit-3", "audit-2"]);
+      expect(page1.nextCursor).toBeDefined();
+
+      const page2 = unwrap(
+        listAuditEvents(connection.database, { cursor: page1.nextCursor, limit: 2 })
+      );
+      expect(page2.queryCount).toBe(1);
+      expect(page2.items.map((item) => item.auditEventId)).toEqual([
+        "audit-1",
+        "audit-unlinked"
+      ]);
+      expect(page2.items[1]?.commandId).toBeNull();
+      expect(page2.nextCursor).toBeUndefined();
+
+      const plan = unwrap(assertListAuditEventsIndexPlan(connection.database));
+      expect(plan.steps.length).toBeGreaterThan(0);
     });
   });
 });
