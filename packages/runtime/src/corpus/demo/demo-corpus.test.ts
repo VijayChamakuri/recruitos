@@ -36,6 +36,9 @@ describe("demo corpus", () => {
     const records = demoCandidateSourceRecords();
     expect(records).toHaveLength(7);
     expect(records.map((record) => record.sourceKey)).toEqual([...DEMO_CANDIDATE_SOURCE_KEYS]);
+    expect(
+      new Set(records.map((record) => record.documents[0]?.rawText.split("\n")[1])).size
+    ).toBe(7);
     for (const record of records) {
       expect(record.channel).toBe("inbound");
       expect(record.documents).toHaveLength(1);
@@ -178,6 +181,9 @@ describe("demo corpus", () => {
   it("routes each of the seven primary outcomes at least once", () => {
     const statuses = new Set(DEMO_EXPECTED_OUTCOMES.map((outcome) => outcome.status));
     expect(statuses).toEqual(new Set(["scored", "escalated", "rejected_hard_requirement"]));
+    expect(
+      new Set(DEMO_EXPECTED_OUTCOMES.map((outcome) => outcome.scoreText).filter(Boolean)).size
+    ).toBeGreaterThanOrEqual(5);
     expect(
       DEMO_EXPECTED_OUTCOMES.some((outcome) => outcome.availability === "unavailable")
     ).toBe(true);
