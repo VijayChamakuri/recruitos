@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,18 +72,19 @@ function sqliteCount(database, table) {
   if (table !== "triage_run" && table !== "triage_run_member") {
     fail(`Refusing to count unknown table ${table}`);
   }
-  const result = spawnSync("sqlite3", [database, `SELECT count(*) FROM ${table};`], {
-    encoding: "utf8"
-  });
-  if (result.status !== 0) {
-    if (result.stderr) process.stderr.write(result.stderr);
-    fail(`Failed to count rows in ${table}`);
+  const require = createRequire(join(repoRoot, "packages/runtime/package.json"));
+  const Database = require("better-sqlite3");
+  const db = new Database(database, { readonly: true, fileMustExist: true });
+  try {
+    const row = db.prepare(`SELECT count(*) AS count FROM ${table}`).get();
+    const count = Number(row?.count);
+    if (!Number.isInteger(count)) {
+      fail(`Unexpected count for ${table}`);
+    }
+    return count;
+  } finally {
+    db.close();
   }
-  const count = Number.parseInt((result.stdout ?? "").trim(), 10);
-  if (!Number.isInteger(count)) {
-    fail(`Unexpected count for ${table}: ${result.stdout}`);
-  }
-  return count;
 }
 
 function findRoute4(database, candidateIds) {

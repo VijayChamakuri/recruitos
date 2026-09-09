@@ -32,10 +32,13 @@ function ensureCliBuilt(): void {
 describe("demo-stakeholder sitting", () => {
   it("adds a Makefile target that keeps make demo unchanged", () => {
     const makefile = readFileSync(makefilePath, "utf8");
+    const script = readFileSync(scriptPath, "utf8");
     expect(makefile).toContain("demo-stakeholder:");
     expect(makefile).toContain("scripts/demo-stakeholder.mjs");
     expect(makefile).not.toMatch(/demo-stakeholder:[\s\S]*\$\(MAKE\)\s+demo\b/u);
     expect(makefile).not.toMatch(/demo-stakeholder:[\s\S]*\bmake demo\b/u);
+    expect(script).toContain("better-sqlite3");
+    expect(script).not.toContain('spawnSync("sqlite3"');
 
     const demoIndex = makefile.indexOf("\ndemo:\n");
     const stakeholderIndex = makefile.indexOf("\ndemo-stakeholder:\n");
