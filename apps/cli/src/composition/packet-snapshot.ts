@@ -10,8 +10,6 @@ import {
   type RuntimeError
 } from "@recruitos/runtime";
 
-const MAXIMUM_PACKET_TASK_PAGES = 64;
-
 export type PacketSnapshotReadOptions = Readonly<{
   resultId?: string;
   afterSelectedRead?: () => void;
@@ -38,8 +36,9 @@ export function listAllResolutionTasksForCandidate(
   candidateId: string
 ): Result<readonly ResolutionTaskItem[], RuntimeError> {
   const items: ResolutionTaskItem[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
-  for (let page = 0; page < MAXIMUM_PACKET_TASK_PAGES; page += 1) {
+  for (;;) {
     const listed = listResolutionTasks(database, {
       candidateId,
       ...(cursor === undefined ? {} : { cursor })
@@ -52,7 +51,7 @@ export function listAllResolutionTasksForCandidate(
     if (nextCursor === undefined) {
       return ok(items);
     }
-    if (nextCursor === cursor) {
+    if (nextCursor === cursor || seenCursors.has(nextCursor)) {
       return err(
         createRuntimeError(
           "persistence_failed",
@@ -61,15 +60,9 @@ export function listAllResolutionTasksForCandidate(
         )
       );
     }
+    seenCursors.add(nextCursor);
     cursor = nextCursor;
   }
-  return err(
-    createRuntimeError(
-      "persistence_failed",
-      "Resolution task pagination exceeded the packet page limit",
-      false
-    )
-  );
 }
 
 export function readCandidatePacketSnapshotParts(
