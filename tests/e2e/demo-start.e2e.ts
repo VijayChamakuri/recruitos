@@ -39,6 +39,10 @@ test.describe("Workflow 1: Demo Start", () => {
     await expect(page.locator("body")).not.toContainText("128.6%");
     const html = await page.content();
     expect(html).toContain("@font-face");
+    expect(html).toMatch(/font-family:\s*"IBM Plex Mono"[\s\S]*?font-display:\s*block/);
+    expect(html).toMatch(
+      /font-family:\s*"Source Serif 4"[\s\S]*?font-weight:\s*400;[\s\S]*?font-display:\s*block/
+    );
     expect(html).not.toContain("fonts.googleapis");
     expect(html).not.toMatch(/run-\d{10,}/);
 

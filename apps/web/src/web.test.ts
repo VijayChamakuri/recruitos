@@ -8,6 +8,7 @@ import {
 } from "@recruitos/cli";
 import { createRuntime, demoCompositionOptions } from "@recruitos/runtime/composition";
 import { DEFAULT_APPEARANCE } from "./appearance.js";
+import { TOKENS_CSS } from "./tokens.js";
 import {
   escapeHtml,
   validateSpanContent,
@@ -423,9 +424,20 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(res.body).toContain("--surface-paper");
     expect(res.body).toContain("--support");
     expect(res.body).toContain("--contradict");
+    expect(res.body).toBe(TOKENS_CSS);
     expect(res.body).toContain("@font-face");
     expect(res.body).toContain("IBM Plex Sans");
     expect(res.body).toContain("Source Serif 4");
+    expect(res.body).toMatch(
+      /font-family:\s*"IBM Plex Sans Condensed"[\s\S]*?font-display:\s*swap/
+    );
+    expect(res.body).toMatch(/font-family:\s*"IBM Plex Mono"[\s\S]*?font-display:\s*block/);
+    expect(res.body).toMatch(
+      /font-family:\s*"Source Serif 4"[\s\S]*?font-weight:\s*400;[\s\S]*?font-display:\s*block/
+    );
+    expect(res.body).toMatch(
+      /font-family:\s*"Source Serif 4"[\s\S]*?font-weight:\s*600;[\s\S]*?font-display:\s*block/
+    );
     expect(res.body).not.toContain("fonts.googleapis");
     expect(res.body).not.toContain("cdn.jsdelivr");
   });
