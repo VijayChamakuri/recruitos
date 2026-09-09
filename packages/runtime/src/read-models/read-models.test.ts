@@ -1064,6 +1064,12 @@ function seedProposalRow(
       PROPOSAL_PAYLOAD_HASH,
       input.createdAt
     );
+  nativeDb
+    .prepare(
+      `INSERT INTO candidate_head (candidate_id, current_result_id, version)
+       VALUES (?, ?, 1)`
+    )
+    .run(input.candidateId, input.resultId);
   if (input.decisionKind) {
     nativeDb
       .prepare(
@@ -1170,6 +1176,58 @@ describe("listProposals Read Model", () => {
       if (approvedOnly.ok) {
         expect(approvedOnly.value.items.map((item) => item.proposalId)).toEqual(["prop-c"]);
       }
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("lists only proposals whose candidate result is the current head", async () => {
+    const connection = await openMigratedDatabase();
+    const nativeDb = getNativeClient(connection);
+    try {
+      nativeDb.pragma("foreign_keys = OFF");
+      nativeDb
+        .prepare(
+          `INSERT INTO candidate (candidate_id, source_system, source_key, channel, corpus_tag, is_synthetic, created_at)
+           VALUES ('cand-live', 'system', 'key-cand-live', 'inbound', 'main', 1, 1000)`
+        )
+        .run();
+      for (const resultId of ["res-old", "res-new"] as const) {
+        nativeDb
+          .prepare(
+            `INSERT INTO candidate_triage_result (
+               candidate_triage_result_id, candidate_id, kind, availability, status,
+               content_json, content_hash, seal_id, created_at
+             ) VALUES (?, 'cand-live', 'initial', 'complete', 'scored', '{}', ?, ?, 1000)`
+          )
+          .run(
+            resultId,
+            `${resultId.replace(/[^0-9a-f]/gu, "a").padEnd(64, "a").slice(0, 64)}`,
+            `seal-${resultId}`
+          );
+        nativeDb
+          .prepare(
+            `INSERT INTO proposal (
+               proposal_id, candidate_result_id, proposal_kind, proposal_ordinal,
+               payload_json, payload_hash, created_at
+             ) VALUES (?, ?, 'shortlist_inclusion', 0, '{"kind":"shortlist_inclusion"}', ?, 1000)`
+          )
+          .run(`prop-${resultId}`, resultId, PROPOSAL_PAYLOAD_HASH);
+      }
+      nativeDb
+        .prepare(
+          `INSERT INTO candidate_head (candidate_id, current_result_id, version)
+           VALUES ('cand-live', 'res-new', 1)`
+        )
+        .run();
+
+      const listed = listProposals(connection.database);
+      expect(listed.ok).toBe(true);
+      if (!listed.ok) {
+        return;
+      }
+      expect(listed.value.items.map((item) => item.proposalId)).toEqual(["prop-res-new"]);
+      expect(listed.value.items[0]?.candidateResultId).toBe("res-new");
     } finally {
       connection.close();
     }

@@ -38,6 +38,8 @@ interface RawProposalRow {
 /**
  * Lists persisted proposals using a keyset cursor.
  * Orders by creation timestamp ascending, then proposal ID ascending.
+ * The default feed is current-head only: a proposal is listed when
+ * `candidate_head.current_result_id` is the proposal's candidate result.
  * Status is derived from the current review decision, or pending when the
  * proposal has no head row.
  */
@@ -134,6 +136,9 @@ export function listProposals(
     FROM proposal p
     JOIN candidate_triage_result ctr
       ON ctr.candidate_triage_result_id = p.candidate_result_id
+    JOIN candidate_head ch
+      ON ch.candidate_id = ctr.candidate_id
+      AND ch.current_result_id = p.candidate_result_id
     LEFT JOIN proposal_head ph ON ph.proposal_id = p.proposal_id
     LEFT JOIN review_decision rd ON rd.review_decision_id = ph.current_decision_id
   )
@@ -233,6 +238,9 @@ export function assertListProposalsIndexPlan(
   FROM proposal p
   JOIN candidate_triage_result ctr
     ON ctr.candidate_triage_result_id = p.candidate_result_id
+  JOIN candidate_head ch
+    ON ch.candidate_id = ctr.candidate_id
+    AND ch.current_result_id = p.candidate_result_id
   LEFT JOIN proposal_head ph ON ph.proposal_id = p.proposal_id
   LEFT JOIN review_decision rd ON rd.review_decision_id = ph.current_decision_id
   ORDER BY p.created_at ASC, p.proposal_id ASC
