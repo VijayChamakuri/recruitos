@@ -14,10 +14,10 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 0766507 |
+| origin/main | f3c1824 |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
-| T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Import (MERGED #54), extraction contract (MERGED #55), scheduler (MERGED #57), start-run (MERGED #59), bridge plus OQ-7 policy (MERGED #60), finalize (MERGED #61). Scheduler `extraction_run` wiring is PR #62, in review. T10.6 correction deferred into the demo-spine phase. |
+| T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Import (MERGED #54), extraction contract (MERGED #55), scheduler (MERGED #57), start-run (MERGED #59), bridge plus OQ-7 policy (MERGED #60), finalize (MERGED #61). Scheduler `extraction_run` wiring MERGED #62. T10.6 correction MERGED #70. |
 | Demo spine phase | `docs/plans/demo-spine-phase.md`. ACTIVE. One command produces a sealed triage packet from synthetic candidates through the real runtime, plus a CLI correction loop, then `/plan-ceo-review`. No T12, no live LLM, no web serve, no full corpus. |
 
 ## Lanes and file locks
@@ -44,7 +44,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | `cursor/t10-6-correction-reextraction` | T10.6 PR #70 review fixes. Completion refuses when the task head no longer points at the `request_re_extraction` action. Unscoped dimension assessments stay associated by their original IDs. CLI mutations accept durable `--command-id` so a lost receipt can be replayed. No new `triage_run` or membership. No schema migration. `make demo` unchanged. | ready |
+| Cursor | (none) | T10.6 PR #70 merged to main at f3c1824. Branch `cursor/t10-6-correction-reextraction` deleted. No schema request queued. Migration lock remains released. Idle. | idle |
 | Claude Code | `b/t10-seven-route-corpus` | Step 6 PR #69: seven-route proving corpus + `parseResumeFacts` threading structured employment facts into finalization so route 1 reaches `scored`. Codex merge-gate review returned two blockers plus one P2, all addressed in a follow-up commit: strict all-or-nothing parser behind an `EXPERIENCE (STRUCTURED)` sentinel (no partial parse can force a wrong rejection); parsed non-work-auth facts must cite their source document and the bridge confirms the grounding quote relocates before accepting (no ungrounded parsed-fact bypass); `DEMO_EXPECTED_OUTCOMES` pins exact score, confidence, and extractor span counts per route. Awaiting Codex re-review. Step 7 (T10.6 CLI-only correction slice) next. | review |
 | Codex | `c/demo-spine-cli` | PR #66 merged at 8f86884. Implementation lane returns to Claude for Steps 6 and 7. Codex owns corpus outcome validation, merge-gate `/review`, clean-checkout verification, and the eventual CEO review. | idle |
 | Antigravity | (out) | Out of usage. `apps/cli/**` + `tests/eval/**` + `make demo` lane held by Codex for the demo-spine phase. | out |
@@ -156,3 +156,4 @@ your own rows plus the log.
 - 2026-09-08 Cursor: taking T10.6 on `cursor/t10-6-correction-reextraction` from origin/main `0766507`. Human `request_re_extraction` plus system `completeReExtraction` over the existing schema. No migration. No T12. `make demo` stays the seven-route prepare and packet print. The proving correction uses the reviewable-extraction-failure candidate with an opt-in overlay fixture register.
 - 2026-09-08 Cursor: T10.6 PR #70 ready. File-backed CLI commands namespace ids so `triage:complete-correction` does not collide with `request_re_extraction`. `pnpm check` 1525 tests plus 26 integration, `test:coverage` All files 100 percent, fixture CLI sequence PASS, `make demo` still prints route-1 scored, diff-check clean, no em dashes in the branch diff. No merge.
 - 2026-09-08 Cursor: PR #70 review fixes ready. Completion checks the task-head pointer, not just version. Route-5 corrections reuse the five unscoped assessment IDs. `--command-id` replays request and complete. `pnpm check` 1531 tests plus 27 integration, `test:coverage` All files 100 percent, fixture CLI sequence PASS, `make demo` still prints route-1 scored. No merge.
+- 2026-09-09 Cursor: PR #70 squash-merged to main at f3c1824. Re-review confirmed the three findings: request-action binding, route-5 unscoped assessment ID reuse, and durable `--command-id` replay. Branch `cursor/t10-6-correction-reextraction` deleted. Cursor idle. No next schema request.
