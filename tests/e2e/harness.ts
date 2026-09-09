@@ -16,6 +16,7 @@ export interface TestServerEnvironment {
 
 export interface RecruitOsTestFixtures {
   testEnvironment: TestServerEnvironment;
+  correctionFixture: boolean;
 }
 
 const PROVIDER_KEYS = [
@@ -117,7 +118,9 @@ export function assertFixtureOnlyExtraction(dbPath: string): void {
 }
 
 export const test = base.extend<RecruitOsTestFixtures>({
-  testEnvironment: async ({}, use) => {
+  correctionFixture: [false, { option: true }],
+
+  testEnvironment: async ({ correctionFixture }, use) => {
     const tempDir = mkdtempSync(join(tmpdir(), "recruitos-e2e-"));
     const dbPath = join(tempDir, "recruitos.db");
     const port = await allocateAvailablePort();
@@ -146,15 +149,15 @@ export const test = base.extend<RecruitOsTestFixtures>({
 
     assertFixtureOnlyExtraction(dbPath);
 
-    const serverProcess: ChildProcess = spawn(
-      process.execPath,
-      [serverScript, "--db", dbPath, "--port", String(port)],
-      {
-        cwd: repoRoot,
-        env,
-        stdio: "pipe"
-      }
-    );
+    const serverArgs = [serverScript, "--db", dbPath, "--port", String(port)];
+    if (correctionFixture) {
+      serverArgs.push("--correction");
+    }
+    const serverProcess: ChildProcess = spawn(process.execPath, serverArgs, {
+      cwd: repoRoot,
+      env,
+      stdio: "pipe"
+    });
 
     try {
       await waitForServerReady(`${serverUrl}/triage`);
