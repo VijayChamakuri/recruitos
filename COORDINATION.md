@@ -14,11 +14,11 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | f3c1824 |
+| origin/main | 986bac6 |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Import (MERGED #54), extraction contract (MERGED #55), scheduler (MERGED #57), start-run (MERGED #59), bridge plus OQ-7 policy (MERGED #60), finalize (MERGED #61), scheduler `extraction_run` wiring (MERGED #62), T10.6 correction and re-extraction (MERGED #70 at f3c1824). |
-| Demo spine phase | `docs/plans/demo-spine-phase.md`. ACTIVE. `/plan-ceo-review` on main `f3c1824` returned conditionally ready: both product promises work as software, but `make demo` hid the correction loop and CLI packets hardcoded `tasks: []`. Narrow next slice: `make demo-stakeholder` prints both promises on one temporary database, and packets list real resolution tasks. No T12, no live LLM, no web serve, no corpus expansion. |
+| Demo spine phase | `docs/plans/demo-spine-phase.md`. Stakeholder demo MERGED (#72 at 986bac6). Next step is a real technical-evaluator sitting with `make demo-stakeholder` and `docs/operator-card-stakeholder-demo.md`. No T12, no live LLM, no web serve, no corpus expansion until evaluator feedback. |
 
 ## Lanes and file locks
 
@@ -44,7 +44,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | `cursor/demo-stakeholder-c42c` | PR #72 review fixes. Packet reads every resolution-task page and loads selected result, current head, and tasks in one deferred SQLite snapshot. Stakeholder final counts go through installed `better-sqlite3`, not host `sqlite3`. `make demo` unchanged. No T12, no web serve, no live LLM, no schema migration, no correction-runtime redesign. Codex owns merge-gate review. Do not merge from this lane. | ready |
+| Cursor | (idle) | Stakeholder demo PR #72 merged to main at 986bac6. Waiting for a real technical-evaluator sitting with `make demo-stakeholder` and `docs/operator-card-stakeholder-demo.md`. No T12, no web serve, no live LLM, no corpus expansion, no correction slice until evaluator feedback. | idle |
 | Claude Code | `b/t10-seven-route-corpus` | Step 6 PR #69: seven-route proving corpus + `parseResumeFacts` threading structured employment facts into finalization so route 1 reaches `scored`. Codex merge-gate review returned two blockers plus one P2, all addressed in a follow-up commit: strict all-or-nothing parser behind an `EXPERIENCE (STRUCTURED)` sentinel (no partial parse can force a wrong rejection); parsed non-work-auth facts must cite their source document and the bridge confirms the grounding quote relocates before accepting (no ungrounded parsed-fact bypass); `DEMO_EXPECTED_OUTCOMES` pins exact score, confidence, and extractor span counts per route. Awaiting Codex re-review. Step 7 (T10.6 CLI-only correction slice) next. | review |
 | Codex | `c/demo-spine-cli` | PR #66 merged at 8f86884. Implementation lane returns to Claude for Steps 6 and 7. Codex owns corpus outcome validation, merge-gate `/review`, clean-checkout verification, and the eventual CEO review. | idle |
 | Antigravity | (out) | Out of usage. `apps/cli/**` + `tests/eval/**` + `make demo` lane held by Codex for the demo-spine phase. | out |
@@ -161,3 +161,4 @@ your own rows plus the log.
 - 2026-09-09 Cursor: starting `cursor/demo-stakeholder-c42c` from main `f3c1824` for the narrow stakeholder demo. One new Makefile target, one temporary database, packet tasks from the resolution-task read model, one operator card, and focused CLI verification. `make demo` stays unchanged. No T12, no web serve, no live LLM, no corpus expansion, no schema migration, no correction-runtime redesign. Codex owns merge-gate review. Do not merge from this lane.
 - 2026-09-09 Cursor: stakeholder demo PR #72 ready on `cursor/demo-stakeholder-c42c`. `corepack pnpm check` 1534 tests plus 27 integration exit 0. `corepack pnpm test:coverage` All files 100 percent. `make demo` still prints route-1 `scored` and Class 1 passed. `make demo-stakeholder` prints route-4 `escalated` then `correction`/`scored` with `review_required`, original result still readable, 1 `triage_run` and 7 members. Diff-check clean. No em dashes in the branch diff. Codex owns merge-gate review. Do not merge from this lane.
 - 2026-09-09 Cursor: PR #72 Codex review fixes on `cursor/demo-stakeholder-c42c`. Packet pages every resolution-task keyset page and reads selected result, current head, and tasks in one deferred snapshot. Stakeholder counts use installed `better-sqlite3`, not host `sqlite3`. Focused CLI tests 59 passed. `make demo` still route-1 `scored` and Class 1 passed. `make demo-stakeholder` still prints both promises, `review_required`, 1 `triage_run` and 7 members. Diff-check clean. No em dashes in the branch diff. Codex owns re-review and merge. Do not merge from this lane.
+- 2026-09-09 Cursor: stakeholder demo PR #72 merged to main at 986bac6. Slice complete. Cursor is idle. Next step is a real technical-evaluator sitting with `make demo-stakeholder` and `docs/operator-card-stakeholder-demo.md`. No T12, no web serve, no live LLM, no corpus expansion, no correction slice until evaluator feedback.
