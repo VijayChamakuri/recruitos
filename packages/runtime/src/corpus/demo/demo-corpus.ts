@@ -60,32 +60,21 @@ type DimensionKey =
   | "ambiguity"
   | "communication";
 
-/**
- * Narrative sentences, each ending in a `{ref}` placeholder that is replaced
- * with the candidate token. The extraction quote for a dimension is the
- * sentence up to and including that token, so it is a verbatim contiguous slice
- * and unique per candidate.
- */
-const NARRATIVE_TEMPLATES: Readonly<Record<DimensionKey, string>> = {
-  applied:
-    "Built and shipped a retrieval augmented generation service for 30000 monthly users, owning prompt design and tool use across an agent loop. {ref}",
-  production:
-    "Ran the service on call for eighteen months, wrote the continuous integration pipeline, and led two schema migrations without downtime. {ref}",
-  evaluation:
-    "Defined an offline evaluation set of 400 labeled questions, tracked answer accuracy before every release, and blocked one regressing launch. {ref}",
-  data: "Owned the ingestion path that parsed and normalized every candidate document before scoring. {ref}",
-  ambiguity:
-    "Framed the ambiguity in the routing requirements in a design document, chose the escalation thresholds, and carried the rollout past the first week. {ref}",
-  communication:
-    "Published an internal write up explaining why we chose deterministic scoring over a learned ranker and what that traded away. {ref}"
-};
+const DIMENSION_KEYS: readonly DimensionKey[] = [
+  "applied",
+  "production",
+  "evaluation",
+  "data",
+  "ambiguity",
+  "communication"
+];
 
 function token(sourceKey: string): string {
   return `[ref ${sourceKey}]`;
 }
 
-function narrativeLine(dimension: DimensionKey, sourceKey: string): string {
-  return NARRATIVE_TEMPLATES[dimension].replace("{ref}", token(sourceKey));
+function narrativeLine(dimension: DimensionKey, candidate: DemoCandidate): string {
+  return `${candidate.narratives[dimension]} ${token(candidate.sourceKey)}`;
 }
 
 type DimensionBody = Readonly<{ proposedLevel: Level; quoteDimension: DimensionKey | null }>;
@@ -133,6 +122,7 @@ type DemoCandidate = Readonly<{
   sourceKey: string;
   displayName: string;
   profileSummary: string;
+  narratives: Readonly<Record<DimensionKey, string>>;
   experienceBlock: readonly string[];
   workAuthorized: boolean;
   bodies: Readonly<Record<string, DimensionBody>>;
@@ -153,6 +143,14 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
     sourceKey: "demo/route-1-scored",
     displayName: "Priya Natarajan",
     profileSummary: "Applied AI engineer focused on production retrieval systems and evaluation.",
+    narratives: {
+      applied: "Built and shipped a retrieval augmented generation service for 30000 monthly users, owning prompt design and tool use across an agent loop.",
+      production: "Ran the service on call for eighteen months, wrote the continuous integration pipeline, and led two schema migrations without downtime.",
+      evaluation: "Defined an offline evaluation set of 400 labeled questions, tracked answer accuracy before every release, and blocked one regressing launch.",
+      data: "Owned the ingestion path that parsed and normalized every candidate document before scoring.",
+      ambiguity: "Framed the ambiguity in the routing requirements in a design document, chose the escalation thresholds, and carried the rollout past the first week.",
+      communication: "Published an internal write up explaining why we chose deterministic scoring over a learned ranker and what that traded away."
+    },
     experienceBlock: [
       "Senior Machine Learning Engineer | TechCorp | 2021-03 | present",
       "Machine Learning Engineer | DataCo | 2019-06 | 2021-02"
@@ -176,6 +174,14 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
     sourceKey: "demo/route-2-rejected",
     displayName: "Marcus Chen",
     profileSummary: "Early-career ML engineer with strong project exposure and limited production tenure.",
+    narratives: {
+      applied: "Prototyped an FAQ classifier during an internship and connected it to a sandbox support chatbot.",
+      production: "Added unit tests and fixed queue worker defects with guidance from the service owner.",
+      evaluation: "Compared predictions against 50 hand labeled examples in a spreadsheet before a team demo.",
+      data: "Cleaned partner CSV exports and wrote SQL transformations for a graduate capstone project.",
+      ambiguity: "Broke an unclear model monitoring ticket into smaller tasks with help from a senior engineer.",
+      communication: "Presented the capstone approach and its known limits during an internal learning session."
+    },
     experienceBlock: ["Machine Learning Engineer | SmallCo | 2025-06 | 2026-02"],
     workAuthorized: true,
     bodies: withOverrides({
@@ -204,8 +210,16 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
     sourceKey: "demo/route-3-escalated",
     displayName: "Elena Rodriguez",
     profileSummary: "Senior ML engineer with broad delivery experience and an incomplete application.",
+    narratives: {
+      applied: "Led delivery of a clinical search assistant that combined retrieval, reranking, and constrained generation for care coordinators.",
+      production: "Containerized the assistant and joined the support rotation while the platform team retained deployment ownership.",
+      evaluation: "Reviewed a small sample of answers each week but did not define a release-blocking quality threshold.",
+      data: "Built normalization jobs for provider directories and encounter summaries used by the retrieval index.",
+      ambiguity: "Defined a safe fallback workflow when policy owners could not initially agree on which clinical questions the assistant should answer.",
+      communication: "Shared experiment results in sprint reviews without producing a formal decision record."
+    },
     experienceBlock: [
-      "Senior Machine Learning Engineer | TechCorp | 2021-03 | present"
+      "Senior Machine Learning Engineer | Northstar Health | 2021-03 | present"
     ],
     workAuthorized: false,
     bodies: withOverrides({
@@ -232,8 +246,16 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
     sourceKey: "demo/route-4-reviewable-failure",
     displayName: "Jordan Okafor",
     profileSummary: "Applied ML lead whose first extraction omits a required evaluation assessment.",
+    narratives: {
+      applied: "Shipped a support copilot that retrieved policy passages and drafted grounded responses for enterprise agents.",
+      production: "Owned deployment automation, service alerts, and the weekly on-call rotation for the copilot API.",
+      evaluation: "Created a blinded test set from resolved support cases and measured citation accuracy before rollout.",
+      data: "Maintained the document ingestion service that split, tagged, and indexed policy updates every hour.",
+      ambiguity: "Resolved unclear ownership between support operations and engineering by defining escalation boundaries and service objectives.",
+      communication: "Wrote the rollout RFC and presented failure examples to engineering, legal, and support leadership."
+    },
     experienceBlock: [
-      "Senior Machine Learning Engineer | TechCorp | 2021-03 | present"
+      "Applied Machine Learning Lead | CivicSignal | 2021-03 | present"
     ],
     workAuthorized: true,
     bodies: withOverrides({
@@ -256,6 +278,14 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
     sourceKey: "demo/route-5-missing-evidence",
     displayName: "Maya Patel",
     profileSummary: "Data platform engineer with useful adjacent experience and a major evidence gap.",
+    narratives: {
+      applied: "Experimented with keyword routing rules but provided no evidence of deploying an ML or language model system.",
+      production: "Operated event processing services and improved retry handling for delayed customer records.",
+      evaluation: "Established baseline completeness checks for incoming datasets and reviewed failures with analysts.",
+      data: "Built batch and streaming pipelines that standardized product events from twelve source systems.",
+      ambiguity: "Scoped a migration from inconsistent partner schemas and negotiated a minimum shared contract.",
+      communication: "Authored an operations playbook that explained recovery steps and data ownership to support teams."
+    },
     experienceBlock: [],
     workAuthorized: true,
     bodies: withOverrides({
@@ -281,6 +311,14 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
     sourceKey: "demo/route-6-work-authorization",
     displayName: "Lucas Ferreira",
     profileSummary: "Machine learning engineer whose work authorization comes from the application form.",
+    narratives: {
+      applied: "Integrated a hosted language model into an internal research workflow and added retrieval over approved reports.",
+      production: "Owned the inference service, deployment pipeline, latency alerts, and incident response for two years.",
+      evaluation: "Designed a gold dataset, measured answer faithfulness by release, and stopped launches that missed the agreed target.",
+      data: "Rebuilt the batch feature pipeline and added validation for late and duplicated records.",
+      ambiguity: "Defined the first pilot scope with research leads and documented which questions required manual review.",
+      communication: "Produced architecture notes, evaluation reports, and operator guidance used by both engineering and research teams."
+    },
     experienceBlock: [],
     workAuthorized: true,
     bodies: withOverrides({
@@ -306,9 +344,17 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
     sourceKey: "demo/route-7-quote-grounding",
     displayName: "Aisha Rahman",
     profileSummary: "Evaluation engineer with a strong packet and one deliberately ungrounded quote.",
+    narratives: {
+      applied: "Built an evaluation harness for a multi-step research agent that used retrieval, tools, and structured outputs.",
+      production: "Maintained the harness service and release jobs while a platform team owned the underlying model gateway.",
+      evaluation: "Created a 1200-case gold set, added regression slices, and required passing thresholds before prompt releases.",
+      data: "Built the labeling export, normalization, and aggregation pipeline used for weekly quality reporting.",
+      ambiguity: "Investigated poorly defined citation failures and proposed a taxonomy that separated retrieval misses from generation errors.",
+      communication: "Published a model comparison explaining the evidence, unresolved risks, and recommendation to product leaders."
+    },
     experienceBlock: [
-      "Senior Machine Learning Engineer | TechCorp | 2021-03 | present",
-      "Machine Learning Engineer | DataCo | 2019-06 | 2021-02"
+      "Machine Learning Evaluation Engineer | Verity AI | 2021-03 | present",
+      "Data Scientist | SignalWorks | 2019-06 | 2021-02"
     ],
     workAuthorized: true,
     bodies: withOverrides({
@@ -340,9 +386,7 @@ function resumeText(candidate: DemoCandidate): string {
     "",
     "Summary",
     candidate.profileSummary,
-    ...(Object.keys(NARRATIVE_TEMPLATES) as DimensionKey[]).map((dimension) =>
-      narrativeLine(dimension, candidate.sourceKey)
-    )
+    ...DIMENSION_KEYS.map((dimension) => narrativeLine(dimension, candidate))
   ];
   if (candidate.experienceBlock.length > 0) {
     lines.push("", "EXPERIENCE (STRUCTURED)", ...candidate.experienceBlock);
@@ -402,7 +446,7 @@ export function demoExtractionResponseBody(dimensionId: string, sourceKey: strin
   const spans: Array<{ quotedText: string; polarity: "supporting" | "contradicting" }> = [];
   if (body.quoteDimension !== null) {
     spans.push({
-      quotedText: narrativeLine(body.quoteDimension, sourceKey),
+      quotedText: narrativeLine(body.quoteDimension, candidate),
       polarity: "supporting"
     });
   } else {
@@ -435,6 +479,7 @@ export function demoCorrectionExtractionResponseBody(
   if (sourceKey !== DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) {
     return demoExtractionResponseBody(dimensionId, sourceKey);
   }
+  const candidate = CANDIDATE_BY_SOURCE_KEY.get(sourceKey)!;
   const body = FULL_COVERAGE[dimensionId];
   if (body === undefined) {
     throw new Error(`No demo extraction fixture for dimension "${dimensionId}"`);
@@ -442,7 +487,7 @@ export function demoCorrectionExtractionResponseBody(
   const spans: Array<{ quotedText: string; polarity: "supporting" | "contradicting" }> = [];
   if (body.quoteDimension !== null) {
     spans.push({
-      quotedText: narrativeLine(body.quoteDimension, sourceKey),
+      quotedText: narrativeLine(body.quoteDimension, candidate),
       polarity: "supporting"
     });
   }
