@@ -1,4 +1,4 @@
-import type { Result } from "@recruitos/core";
+import type { Result, ReviewDecisionPayload } from "@recruitos/core";
 import type { Class1EvaluationReport } from "../evaluation/class1.js";
 
 export type { Class1EvaluationReport } from "../evaluation/class1.js";
@@ -279,10 +279,10 @@ export type ListProposalsOptions = Readonly<{
 
 export type RecordReviewDecisionInput = Readonly<{
   proposalId: string;
-  decision: "approve" | "reject";
   actorId: string;
-  rationale: string;
   expectedVersion: number;
+  decision: ReviewDecisionPayload;
+  commandId?: string;
 }>;
 
 export type ListAuditEventsOptions = Readonly<{
@@ -378,7 +378,9 @@ export interface RecruitosComposition {
 
   recordReviewDecision(
     input: RecordReviewDecisionInput
-  ): Promise<Result<{ decisionId: string; newVersion: number }, RuntimeError>>;
+  ): Promise<
+    Result<{ decisionId: string; newVersion: number; status: ProposalStatus; commandId: string }, RuntimeError>
+  >;
 
   listAuditEvents(
     options?: ListAuditEventsOptions

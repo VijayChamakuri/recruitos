@@ -96,6 +96,20 @@ describe("CLI Parser", () => {
     expect(p5.options.candidateVersion).toBe(1);
     expect(p5.options.result).toBe("result-original");
     expect(p5.options.commandId).toBe("durable-request-1");
+
+    const p6 = parseArgs([
+      "review",
+      "--proposal",
+      "proposal-1",
+      "--decision",
+      "edit",
+      "--edited-payload",
+      '{"kind":"shortlist_inclusion"}',
+      "--command-id",
+      "decision-1"
+    ]);
+    expect(p6.options.editedPayload).toBe('{"kind":"shortlist_inclusion"}');
+    expect(p6.options.commandId).toBe("decision-1");
   });
 
   it("records unknown options", () => {
@@ -150,6 +164,8 @@ describe("CLI Commands Execution", () => {
       expect(reviewHelp.stdout).toContain("request_re_extraction");
       expect(reviewHelp.stdout).toContain("--candidate-version");
       expect(reviewHelp.stdout).toContain("--command-id");
+      expect(reviewHelp.stdout).toContain("request_evidence");
+      expect(reviewHelp.stdout).toContain("--edited-payload");
 
       const extractHelp = await runCli(["help", "triage:extract"]);
       expect(extractHelp.stdout).toContain("--demo-fixtures");
@@ -929,11 +945,45 @@ describe("CLI Commands Execution", () => {
     it("records proposal review decision", async () => {
       const composition = createStubComposition();
       const res = await runCli(
-        ["review", "--proposal", "proposal-1", "--decision", "approve", "--version-num", "0"],
+        [
+          "review",
+          "--proposal",
+          "proposal-1",
+          "--decision",
+          "approve",
+          "--version-num",
+          "0",
+          "--command-id",
+          "decision-cli-1"
+        ],
         { composition }
       );
       expect(res.exitCode).toBe(EXIT_SUCCESS);
       expect(res.stdout).toContain("Review decision recorded");
+      expect(res.stdout).toContain("Decision ID:");
+      expect(res.stdout).toContain("New Version:");
+      expect(res.stdout).toContain("Status:      approved");
+      expect(res.stdout).toContain("Command ID:  decision-cli-1");
+      const json = await runCli(
+        [
+          "review",
+          "--proposal",
+          "proposal-1",
+          "--decision",
+          "reject",
+          "--rationale",
+          "Does not clear the bar.",
+          "--version-num",
+          "1",
+          "--json"
+        ],
+        { composition }
+      );
+      expect(json.exitCode).toBe(EXIT_SUCCESS);
+      expect(parseEnvelopeData(json)).toMatchObject({
+        newVersion: 2,
+        status: "rejected"
+      });
     });
 
     it("rejects invalid decision", async () => {
@@ -941,7 +991,91 @@ describe("CLI Commands Execution", () => {
         ["review", "--proposal", "proposal-1", "--decision", "maybe", "--version-num", "0"]
       );
       expect(res.exitCode).toBe(EXIT_USAGE_ERROR);
-      expect(res.stderr).toContain("Must be 'approve' or 'reject'");
+      expect(res.stderr).toContain("Must be 'approve', 'reject', 'edit', or 'request_evidence'");
+    });
+
+    it("requires a nonempty rationale for reject and request_evidence", async () => {
+      const composition = createStubComposition();
+      const rejected = await runCli(
+        ["review", "--proposal", "proposal-1", "--decision", "reject", "--version-num", "0"],
+        { composition }
+      );
+      expect(rejected.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(rejected.stderr).toContain("--rationale is required");
+      const requested = await runCli(
+        [
+          "review",
+          "--proposal",
+          "proposal-1",
+          "--decision",
+          "request_evidence",
+          "--rationale",
+          "   ",
+          "--version-num",
+          "0"
+        ],
+        { composition }
+      );
+      expect(requested.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(requested.stderr).toContain("--rationale is required");
+    });
+
+    it("requires valid ProposalPayload JSON for edit", async () => {
+      const composition = createStubComposition();
+      const missing = await runCli(
+        ["review", "--proposal", "proposal-1", "--decision", "edit", "--version-num", "0"],
+        { composition }
+      );
+      expect(missing.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(missing.stderr).toContain("--edited-payload is required");
+      const invalidJson = await runCli(
+        [
+          "review",
+          "--proposal",
+          "proposal-1",
+          "--decision",
+          "edit",
+          "--edited-payload",
+          "{not-json",
+          "--version-num",
+          "0"
+        ],
+        { composition }
+      );
+      expect(invalidJson.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(invalidJson.stderr).toContain("must be valid JSON");
+      const invalidPayload = await runCli(
+        [
+          "review",
+          "--proposal",
+          "proposal-1",
+          "--decision",
+          "edit",
+          "--edited-payload",
+          '{"kind":"shortlist_inclusion","extra":true}',
+          "--version-num",
+          "0"
+        ],
+        { composition }
+      );
+      expect(invalidPayload.exitCode).toBe(EXIT_USAGE_ERROR);
+      expect(invalidPayload.stderr).toContain("ProposalPayload");
+      const edited = await runCli(
+        [
+          "review",
+          "--proposal",
+          "proposal-1",
+          "--decision",
+          "edit",
+          "--edited-payload",
+          '{"kind":"ats_stage_change","targetStage":"onsite"}',
+          "--version-num",
+          "0"
+        ],
+        { composition }
+      );
+      expect(edited.exitCode).toBe(EXIT_SUCCESS);
+      expect(edited.stdout).toContain("Status:      edited");
     });
   });
 

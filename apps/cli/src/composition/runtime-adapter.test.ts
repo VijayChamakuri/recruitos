@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCompositionFromRuntime,
   createDefaultRuntimeComposition,
@@ -11,8 +11,14 @@ import {
   createRuntime,
   fixedClock,
   RuntimeRecruitosComposition,
+  StubRecruitosComposition,
   type RuntimeComposition
 } from "./index.js";
+import {
+  insertProposal,
+  prepareProposal,
+  runImmediateTransaction
+} from "@recruitos/runtime";
 
 const temporaryDirectories: string[] = [];
 
@@ -23,6 +29,8 @@ async function databaseFilename(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   await Promise.all(
     temporaryDirectories
       .splice(0)
@@ -326,4 +334,112 @@ describe("Runtime Composition Wiring in Apps", () => {
 
     expect(composition.runtime.close().ok).toBe(true);
   });
+
+  it("records a review decision from the runtime use case and never calls the stub", async () => {
+    const filename = await databaseFilename();
+    const created = createDemoRuntimeComposition(filename);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+    expect(created.value).toBeInstanceOf(RuntimeRecruitosComposition);
+    const composition = created.value as RuntimeRecruitosComposition;
+    expect(composition.prepareDemo).toBeDefined();
+    if (!composition.prepareDemo) {
+      composition.runtime.close();
+      return;
+    }
+    const prepared = await composition.prepareDemo({});
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) {
+      composition.runtime.close();
+      return;
+    }
+    const fetchImpl = vi.fn();
+    vi.stubGlobal("fetch", fetchImpl);
+    const stubSpy = vi.spyOn(StubRecruitosComposition.prototype, "recordReviewDecision");
+
+    const native = (
+      composition.runtime.connection.database as unknown as {
+        $client: {
+          prepare: (sql: string) => {
+            get: (...parameters: unknown[]) => unknown;
+            all: (...parameters: unknown[]) => unknown[];
+          };
+        };
+      }
+    ).$client;
+    const current = native
+      .prepare(
+        `SELECT c.candidate_id AS candidateId, h.current_result_id AS resultId
+         FROM candidate c
+         JOIN candidate_head h ON h.candidate_id = c.candidate_id
+         WHERE c.source_key = 'demo/route-1-scored'`
+      )
+      .get() as { candidateId: string; resultId: string };
+
+    const inserted = runImmediateTransaction(composition.runtime.connection, (context) => {
+      const preparedProposal = prepareProposal({
+        proposalId: "proposal-live-1",
+        candidateResultId: current.resultId,
+        proposalOrdinal: 0,
+        payload: {
+          kind: "follow_up_draft",
+          body: "Ask for a work-authorization document."
+        },
+        evidenceSpans: [],
+        createdAt: 1_788_700_000_000
+      });
+      if (!preparedProposal.ok) {
+        return preparedProposal;
+      }
+      return insertProposal(context, preparedProposal.value);
+    });
+    expect(inserted.ok).toBe(true);
+    if (!inserted.ok) {
+      composition.runtime.close();
+      return;
+    }
+
+    const decided = await composition.recordReviewDecision({
+      proposalId: "proposal-live-1",
+      actorId: "human:operator",
+      expectedVersion: 0,
+      decision: { kind: "approve" },
+      commandId: "cli-decision-1"
+    });
+    expect(stubSpy).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(decided.ok).toBe(true);
+    if (!decided.ok) {
+      composition.runtime.close();
+      return;
+    }
+    expect(decided.value).toEqual({
+      decisionId: expect.any(String),
+      newVersion: 1,
+      status: "approved",
+      commandId: "cli-decision-1"
+    });
+    const listed = await composition.listProposals({ status: "approved" });
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      expect(listed.value.map((proposal) => proposal.proposalId)).toEqual(["proposal-live-1"]);
+    }
+    const replayed = await composition.recordReviewDecision({
+      proposalId: "proposal-live-1",
+      actorId: "human:operator",
+      expectedVersion: 0,
+      decision: { kind: "approve" },
+      commandId: "cli-decision-1"
+    });
+    expect(replayed.ok).toBe(true);
+    if (replayed.ok) {
+      expect(replayed.value).toEqual(decided.value);
+    }
+    expect(stubSpy).not.toHaveBeenCalled();
+    stubSpy.mockRestore();
+    vi.unstubAllGlobals();
+    expect(composition.runtime.close().ok).toBe(true);
+  }, 120_000);
 });
