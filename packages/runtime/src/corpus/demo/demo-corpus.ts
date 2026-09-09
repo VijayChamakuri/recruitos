@@ -131,6 +131,8 @@ type ExpectedOutcome = Readonly<{
 type DemoCandidate = Readonly<{
   route: string;
   sourceKey: string;
+  displayName: string;
+  profileSummary: string;
   experienceBlock: readonly string[];
   workAuthorized: boolean;
   bodies: Readonly<Record<string, DimensionBody>>;
@@ -149,6 +151,8 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
   {
     route: "scored",
     sourceKey: "demo/route-1-scored",
+    displayName: "Priya Natarajan",
+    profileSummary: "Applied AI engineer focused on production retrieval systems and evaluation.",
     experienceBlock: [
       "Senior Machine Learning Engineer | TechCorp | 2021-03 | present",
       "Machine Learning Engineer | DataCo | 2019-06 | 2021-02"
@@ -170,9 +174,17 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
   {
     route: "hard-requirement-rejection",
     sourceKey: "demo/route-2-rejected",
+    displayName: "Marcus Chen",
+    profileSummary: "Early-career ML engineer with strong project exposure and limited production tenure.",
     experienceBlock: ["Machine Learning Engineer | SmallCo | 2025-06 | 2026-02"],
     workAuthorized: true,
-    bodies: FULL_COVERAGE,
+    bodies: withOverrides({
+      applied_ml_llm_systems: { proposedLevel: "weak", quoteDimension: "applied" },
+      production_software_engineering: { proposedLevel: "weak", quoteDimension: "production" },
+      evaluation_and_measurement: { proposedLevel: "weak", quoteDimension: "evaluation" },
+      ambiguity_and_ownership: { proposedLevel: "weak", quoteDimension: "ambiguity" },
+      communication_of_reasoning: { proposedLevel: "weak", quoteDimension: "communication" }
+    }),
     expected: {
       sourceKey: "demo/route-2-rejected",
       status: "rejected_hard_requirement",
@@ -181,7 +193,7 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       // separate reason code for it (route-result keeps reasons empty here).
       reasonCodes: [],
       sealed: true,
-      scoreText: "467/6",
+      scoreText: "33/1",
       confidenceText: "7/10",
       spansReturned: 6,
       spansLocated: 6
@@ -190,18 +202,26 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
   {
     route: "escalation-missing-work-authorization",
     sourceKey: "demo/route-3-escalated",
+    displayName: "Elena Rodriguez",
+    profileSummary: "Senior ML engineer with broad delivery experience and an incomplete application.",
     experienceBlock: [
       "Senior Machine Learning Engineer | TechCorp | 2021-03 | present"
     ],
     workAuthorized: false,
-    bodies: FULL_COVERAGE,
+    bodies: withOverrides({
+      production_software_engineering: { proposedLevel: "partial", quoteDimension: "production" },
+      evaluation_and_measurement: { proposedLevel: "weak", quoteDimension: "evaluation" },
+      data_and_pipeline_work: { proposedLevel: "partial", quoteDimension: "data" },
+      ambiguity_and_ownership: { proposedLevel: "strong", quoteDimension: "ambiguity" },
+      communication_of_reasoning: { proposedLevel: "weak", quoteDimension: "communication" }
+    }),
     expected: {
       sourceKey: "demo/route-3-escalated",
       status: "escalated",
       availability: "complete",
       reasonCodes: ["missing_evidence:work_authorization"],
       sealed: true,
-      scoreText: "467/6",
+      scoreText: "139/2",
       confidenceText: "27/40",
       spansReturned: 6,
       spansLocated: 6
@@ -210,6 +230,8 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
   {
     route: "reviewable-extraction-failure",
     sourceKey: "demo/route-4-reviewable-failure",
+    displayName: "Jordan Okafor",
+    profileSummary: "Applied ML lead whose first extraction omits a required evaluation assessment.",
     experienceBlock: [
       "Senior Machine Learning Engineer | TechCorp | 2021-03 | present"
     ],
@@ -232,6 +254,8 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
   {
     route: "missing-evidence-dimension-gap",
     sourceKey: "demo/route-5-missing-evidence",
+    displayName: "Maya Patel",
+    profileSummary: "Data platform engineer with useful adjacent experience and a major evidence gap.",
     experienceBlock: [],
     workAuthorized: true,
     bodies: withOverrides({
@@ -255,16 +279,23 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
   {
     route: "work-authorization-from-structured-answer",
     sourceKey: "demo/route-6-work-authorization",
+    displayName: "Lucas Ferreira",
+    profileSummary: "Machine learning engineer whose work authorization comes from the application form.",
     experienceBlock: [],
     workAuthorized: true,
-    bodies: FULL_COVERAGE,
+    bodies: withOverrides({
+      applied_ml_llm_systems: { proposedLevel: "partial", quoteDimension: "applied" },
+      evaluation_and_measurement: { proposedLevel: "strong", quoteDimension: "evaluation" },
+      data_and_pipeline_work: { proposedLevel: "partial", quoteDimension: "data" },
+      communication_of_reasoning: { proposedLevel: "strong", quoteDimension: "communication" }
+    }),
     expected: {
       sourceKey: "demo/route-6-work-authorization",
       status: "escalated",
       availability: "complete",
       reasonCodes: [...MISSING_TENURE],
       sealed: true,
-      scoreText: "467/6",
+      scoreText: "167/2",
       confidenceText: "5/8",
       spansReturned: 6,
       spansLocated: 6
@@ -273,12 +304,18 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
   {
     route: "quote-grounding-dropped-quote",
     sourceKey: "demo/route-7-quote-grounding",
+    displayName: "Aisha Rahman",
+    profileSummary: "Evaluation engineer with a strong packet and one deliberately ungrounded quote.",
     experienceBlock: [
       "Senior Machine Learning Engineer | TechCorp | 2021-03 | present",
       "Machine Learning Engineer | DataCo | 2019-06 | 2021-02"
     ],
     workAuthorized: true,
-    bodies: FULL_COVERAGE,
+    bodies: withOverrides({
+      production_software_engineering: { proposedLevel: "partial", quoteDimension: "production" },
+      evaluation_and_measurement: { proposedLevel: "strong", quoteDimension: "evaluation" },
+      data_and_pipeline_work: { proposedLevel: "strong", quoteDimension: "data" }
+    }),
     droppedQuoteDimension: "applied_ml_llm_systems",
     expected: {
       sourceKey: "demo/route-7-quote-grounding",
@@ -286,7 +323,7 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       availability: "complete",
       reasonCodes: [],
       sealed: true,
-      scoreText: "467/6",
+      scoreText: "345/4",
       confidenceText: "93/140",
       // The deliberately dropped quote: one extractor span returned, not located.
       spansReturned: 7,
@@ -298,10 +335,11 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
 function resumeText(candidate: DemoCandidate): string {
   const lines = [
     `Candidate reference ${candidate.sourceKey}`,
-    "Priya Natarajan",
+    candidate.displayName,
     DEMO_ROLE_TITLE,
     "",
     "Summary",
+    candidate.profileSummary,
     ...(Object.keys(NARRATIVE_TEMPLATES) as DimensionKey[]).map((dimension) =>
       narrativeLine(dimension, candidate.sourceKey)
     )
@@ -435,6 +473,8 @@ export const DEMO_CORPUS_SEED_HASH: string = (() => {
     frozenDate: DEMO_FROZEN_DATE,
     candidates: DEMO_CANDIDATES.map((candidate) => ({
       sourceKey: candidate.sourceKey,
+      displayName: candidate.displayName,
+      profileSummary: candidate.profileSummary,
       resumeText: resumeText(candidate),
       workAuthorized: candidate.workAuthorized,
       bodies: candidate.bodies,
