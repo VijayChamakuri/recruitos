@@ -248,6 +248,16 @@ describe("Server options and explicit database", () => {
   });
 });
 
+function expectPersistedGlobalBar(html: string): void {
+  expect(html).toContain(`data-testid="${TEST_IDS.GLOBAL_BAR}"`);
+  expect(html).not.toContain("status unavailable");
+  expect(html).not.toContain("open tasks unavailable");
+  expect(html).not.toContain("limitations unavailable");
+  expect(html).toMatch(/\d+ open tasks/);
+  expect(html).toMatch(/\d+ known limitations/);
+  expect(html).toMatch(/ sealed/);
+}
+
 describe("Prepared seven-candidate demo composition", () => {
   let databasePath = "";
   let tempDir = "";
@@ -702,11 +712,14 @@ describe("Prepared seven-candidate demo composition", () => {
     );
     expect(posted.statusCode).toBe(403);
     expect(posted.body).toContain("make demo-web-correction");
+    expectPersistedGlobalBar(posted.body);
     const getAction = await handleRequest(
       "/actions/request-re-extraction",
       new URLSearchParams()
     );
     expect(getAction.statusCode).toBe(405);
+    expect(getAction.body).toContain("Correction actions accept POST only.");
+    expectPersistedGlobalBar(getAction.body);
   });
 
   it("does not create an empty database when an explicit missing path is supplied", async () => {

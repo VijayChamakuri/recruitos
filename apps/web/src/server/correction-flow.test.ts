@@ -138,6 +138,16 @@ async function loadRoute4PacketForm(): Promise<{
   };
 }
 
+function expectPersistedGlobalBar(html: string): void {
+  expect(html).toContain(`data-testid="${TEST_IDS.GLOBAL_BAR}"`);
+  expect(html).not.toContain("status unavailable");
+  expect(html).not.toContain("open tasks unavailable");
+  expect(html).not.toContain("limitations unavailable");
+  expect(html).toMatch(/\d+ open tasks/);
+  expect(html).toMatch(/\d+ known limitations/);
+  expect(html).toMatch(/ sealed/);
+}
+
 describe("fixture correction HTTP flow", () => {
   let tempDir = "";
 
@@ -266,6 +276,13 @@ describe("fixture correction HTTP flow", () => {
       body: new URLSearchParams()
     });
     expect(unknown.statusCode).toBe(404);
+    expect(unknown.body).toContain("Unknown correction action.");
+    expectPersistedGlobalBar(unknown.body);
+
+    const methodNotAllowed = await handleRequest("/actions/complete-fixture-extraction", appearance);
+    expect(methodNotAllowed.statusCode).toBe(405);
+    expect(methodNotAllowed.body).toContain("Correction actions accept POST only.");
+    expectPersistedGlobalBar(methodNotAllowed.body);
     const body = new URLSearchParams({
       candidateId: route4.candidateId,
       taskId,
@@ -301,6 +318,7 @@ describe("fixture correction HTTP flow", () => {
     expect(stale.body).toContain("Second browser still has this rationale");
     expect(stale.body).toContain("There is no Save anyway.");
     expect(stale.body).toContain("packet-conflict-slot");
+    expectPersistedGlobalBar(stale.body);
     expect(countRequestActions()).toBe(1);
 
     const requestUrl = new URL(location, "http://127.0.0.1");
@@ -363,8 +381,11 @@ describe("fixture correction HTTP flow", () => {
       new URLSearchParams(`theme=light&density=default&result=${priorId}`)
     );
     expect(historical.body).toContain("Inspecting: historical result");
+    expect(historical.body).toContain(`data-testid="${TEST_IDS.PACKET_HISTORICAL}"`);
+    expect(historical.body).toContain("packet-historical");
     expect(historical.body).toContain("escalated");
     expect(historical.body).toContain("assessment_unavailable");
+    expect(historical.body).toContain("Inspecting a historical result. Mutations apply to the current head.");
 
     const runs = await handleRequest("/runs", new URLSearchParams());
     expect(runs.statusCode).toBe(200);
@@ -376,5 +397,20 @@ describe("fixture correction HTTP flow", () => {
       "Append-only, enforced by database triggers. Not cryptographically tamper-proof. An administrator with file access can replace history."
     );
     expect(runs.body).not.toContain("corpus_sealed");
+
+    const completeAgain = await handleRequest("/actions/complete-fixture-extraction", appearance, {
+      method: "POST",
+      body: new URLSearchParams({
+        candidateId: route4.candidateId,
+        taskId,
+        triageAttemptId: attemptId,
+        expectedTaskHeadVersion: completeTaskVersion,
+        expectedCandidateHeadVersion: completeCandidateVersion
+      })
+    });
+    expect(completeAgain.statusCode).toBe(409);
+    expect(completeAgain.body).toContain("Mutable head version conflict");
+    expect(completeAgain.body).not.toContain("Save anyway");
+    expectPersistedGlobalBar(completeAgain.body);
   }, 120_000);
 });
