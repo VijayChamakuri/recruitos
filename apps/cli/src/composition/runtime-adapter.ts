@@ -42,7 +42,6 @@ import {
   importCandidates,
   listCandidates,
   listResolutionTasks,
-  readCandidatePacket,
   registerDemoCorrectionFixtures,
   registerDemoFixtures,
   requestReExtraction,
@@ -60,6 +59,7 @@ import {
   type CandidateSummaryItem,
   type ResolutionTaskItem
 } from "@recruitos/runtime";
+import { loadCandidatePacketSnapshot } from "./packet-snapshot.js";
 import { runClass1EvaluationForFinalizedCandidate } from "../evaluation/index.js";
 
 function toRuntimeCandidateStatus(
@@ -569,59 +569,30 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
     candidateId: string,
     options?: { resultId?: string }
   ): Promise<Result<CandidatePacket, RuntimeError>> {
-    const packetResult = readCandidatePacket(
-      this.runtime.connection.database,
+    const snapshot = loadCandidatePacketSnapshot(
+      this.runtime.connection,
       candidateId,
-      options
+      options?.resultId === undefined ? undefined : { resultId: options.resultId }
     );
-    if (!packetResult.ok) {
+    if (!snapshot.ok) {
       if (this.allowStubFallback && !this.hasCandidatesInDb()) {
         return this.fallback.getCandidatePacket(candidateId);
       }
       return err({
-        code: packetResult.error.code,
-        message: packetResult.error.message,
-        retryable: false
-      });
-    }
-
-    let currentResultId = packetResult.value.resultId;
-    let isHistoricalResult = false;
-    if (options?.resultId !== undefined) {
-      const currentPacket = readCandidatePacket(
-        this.runtime.connection.database,
-        candidateId
-      );
-      if (!currentPacket.ok) {
-        return err({
-          code: currentPacket.error.code,
-          message: currentPacket.error.message,
-          retryable: false
-        });
-      }
-      currentResultId = currentPacket.value.resultId;
-      isHistoricalResult = packetResult.value.resultId !== currentResultId;
-    }
-
-    const tasksResult = listResolutionTasks(this.runtime.connection.database, {
-      candidateId
-    });
-    if (!tasksResult.ok) {
-      return err({
-        code: tasksResult.error.code,
-        message: tasksResult.error.message,
+        code: snapshot.error.code,
+        message: snapshot.error.message,
         retryable: false
       });
     }
 
     return ok(
       toCandidatePacket(
-        packetResult.value,
+        snapshot.value.selected,
         getNativeClient(this.runtime.connection.database),
-        tasksResult.value.items.map(toResolutionTaskSummary),
+        snapshot.value.tasks.map(toResolutionTaskSummary),
         {
-          isHistoricalResult,
-          currentResultId
+          isHistoricalResult: snapshot.value.isHistoricalResult,
+          currentResultId: snapshot.value.currentResultId
         }
       )
     );
