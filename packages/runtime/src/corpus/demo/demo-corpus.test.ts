@@ -103,6 +103,17 @@ describe("demo corpus", () => {
     }
   });
 
+  it("gives every candidate distinct evidence statements beyond its reference token", () => {
+    const statements = demoCandidateSourceRecords().flatMap((record) =>
+      record.documents[0]!.rawText
+        .split("\n")
+        .filter((line) => line.includes("[ref demo/"))
+        .map((line) => line.replace(/ \[ref demo\/[^\]]+\]$/, ""))
+    );
+    expect(statements).toHaveLength(42);
+    expect(new Set(statements).size).toBe(42);
+  });
+
   it("correction overlay locates the evaluation quote for the reviewable-failure candidate", () => {
     const resume = demoCandidateSourceRecords().find(
       (record) => record.sourceKey === DEMO_REVIEWABLE_FAILURE_SOURCE_KEY
