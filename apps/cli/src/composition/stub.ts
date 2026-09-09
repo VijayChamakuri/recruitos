@@ -219,9 +219,11 @@ export class StubRecruitosComposition implements RecruitosComposition {
       evidenceGaps: [],
       documents: [resumeDoc],
       tasks: [],
+      isHistoricalResult: false,
       resultId: "result-1",
       resultKind: "initial",
-      headVersion: 1
+      headVersion: 1,
+      currentResultId: "result-1"
     };
 
     const task1: ResolutionTaskDetail = {
@@ -269,7 +271,12 @@ export class StubRecruitosComposition implements RecruitosComposition {
           text: "Jordan Lee\nTechnical Lead with 8 years in machine learning platforms."
         }
       ],
-      tasks: [task1]
+      tasks: [{ ...task1, listing: "this_result" }],
+      isHistoricalResult: false,
+      resultId: "result-2",
+      resultKind: "initial",
+      headVersion: 1,
+      currentResultId: "result-2"
     };
 
     const packet3: CandidatePacket = {
@@ -317,7 +324,8 @@ export class StubRecruitosComposition implements RecruitosComposition {
           text: "Morgan Riley\nBackend Engineer specializing in real-time streaming."
         }
       ],
-      tasks: []
+      tasks: [],
+      isHistoricalResult: false
     };
 
     this.packets = new Map([

@@ -66,6 +66,29 @@ export type CandidateSourceDocumentView = Readonly<{
   text: string;
 }>;
 
+export type ResolutionTaskStatus =
+  | "open"
+  | "review_required"
+  | "resolved"
+  | "dismissed";
+
+export type ResolutionTaskSummary = Readonly<{
+  resolutionTaskId: string;
+  candidateId: string;
+  candidateResultId: string;
+  reasonCode: string;
+  status: ResolutionTaskStatus;
+  taskOrdinal: number;
+  currentActionId?: string;
+  version: number;
+  createdAt: number;
+}>;
+
+export type PacketTaskListing = "this_result" | "current_candidate_work";
+
+export type PacketResolutionTask = ResolutionTaskSummary &
+  Readonly<{ listing: PacketTaskListing }>;
+
 export type CandidatePacket = Readonly<{
   candidateId: string;
   sourceKey: string;
@@ -95,10 +118,12 @@ export type CandidatePacket = Readonly<{
   evidenceSpans: readonly EvidenceSpan[];
   evidenceGaps: readonly EvidenceGap[];
   documents: readonly CandidateSourceDocumentView[];
-  tasks: readonly ResolutionTaskSummary[];
+  tasks: readonly PacketResolutionTask[];
+  isHistoricalResult: boolean;
   resultId?: string;
   resultKind?: string;
   headVersion?: number;
+  currentResultId?: string;
 }>;
 
 export type TriageRunSummary = Readonly<{
@@ -111,24 +136,6 @@ export type TriageRunSummary = Readonly<{
   sealedCount: number;
   durationMs: number;
   sealed: boolean;
-}>;
-
-export type ResolutionTaskStatus =
-  | "open"
-  | "review_required"
-  | "resolved"
-  | "dismissed";
-
-export type ResolutionTaskSummary = Readonly<{
-  resolutionTaskId: string;
-  candidateId: string;
-  candidateResultId: string;
-  reasonCode: string;
-  status: ResolutionTaskStatus;
-  taskOrdinal: number;
-  currentActionId?: string;
-  version: number;
-  createdAt: number;
 }>;
 
 export type ResolutionTaskDetail = ResolutionTaskSummary &

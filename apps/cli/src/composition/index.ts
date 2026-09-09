@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./stub.js";
+export * from "./packet-snapshot.js";
 export * from "./runtime-adapter.js";
 export {
   createRuntime,

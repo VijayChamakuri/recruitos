@@ -144,6 +144,7 @@ describe("CLI Commands Execution", () => {
       expect(res.exitCode).toBe(EXIT_SUCCESS);
       expect(res.stdout).toContain("recruitos packet <candidate-id>");
       expect(res.stdout).toContain("--result");
+      expect(res.stdout).toContain("current_candidate_work");
 
       const reviewHelp = await runCli(["help", "review"]);
       expect(reviewHelp.stdout).toContain("request_re_extraction");
@@ -269,6 +270,8 @@ describe("CLI Commands Execution", () => {
         expect(packet.exitCode).toBe(EXIT_SUCCESS);
         expect(packet.stdout).toContain("Status:       scored");
         expect(packet.stdout).toContain("Sealed:       yes");
+        expect(packet.stdout).toContain("Inspecting: current head");
+        expect(packet.stdout).toContain("Outstanding review: none");
 
         const evaluated = await runCli([
           "eval:class1",
@@ -306,6 +309,8 @@ describe("CLI Commands Execution", () => {
             resultKind?: string;
             headVersion?: number;
             reasons: string[];
+            tasks: Array<{ status: string; listing: string }>;
+            isHistoricalResult: boolean;
           }>(await runCli(["packet", id, "--db", database, "--json"]));
           if (packet.sourceKey !== DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) continue;
           candidateId = id;
@@ -313,6 +318,15 @@ describe("CLI Commands Execution", () => {
           candidateVersion = packet.headVersion;
           expect(packet.resultKind).toBe("initial");
           expect(packet.reasons).toContain("assessment_unavailable");
+          expect(packet.tasks).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                status: "open",
+                listing: "this_result"
+              })
+            ])
+          );
+          expect(packet.isHistoricalResult).toBe(false);
           break;
         }
         expect(candidateId).toMatch(/\S/);
@@ -420,16 +434,36 @@ describe("CLI Commands Execution", () => {
           resultKind?: string;
           status: string;
           headVersion?: number;
+          tasks: Array<{ status: string; listing: string }>;
+          isHistoricalResult: boolean;
         }>(await runCli(["packet", candidateId ?? "", "--db", database, "--json"]));
         expect(current.resultId).toBe(completed.resultId);
         expect(current.resultKind).toBe("correction");
         expect(current.status).toBe("scored");
         expect(current.headVersion).toBe(2);
+        expect(current.isHistoricalResult).toBe(false);
+        expect(current.tasks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              status: "review_required",
+              listing: "current_candidate_work"
+            })
+          ])
+        );
+
+        const currentText = await runCli(["packet", candidateId ?? "", "--db", database]);
+        expect(currentText.exitCode).toBe(EXIT_SUCCESS);
+        expect(currentText.stdout).toContain("Outstanding review: required (review_required)");
+        expect(currentText.stdout).not.toContain(
+          "not a decision on this historical result"
+        );
 
         const original = parseEnvelopeData<{
           resultId?: string;
           resultKind?: string;
           reasons: string[];
+          tasks: Array<{ status: string; listing: string }>;
+          isHistoricalResult: boolean;
         }>(
           await runCli([
             "packet",
@@ -444,6 +478,29 @@ describe("CLI Commands Execution", () => {
         expect(original.resultId).toBe(originalResultId);
         expect(original.resultKind).toBe("initial");
         expect(original.reasons).toContain("assessment_unavailable");
+        expect(original.isHistoricalResult).toBe(true);
+        expect(original.tasks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              status: "review_required",
+              listing: "current_candidate_work"
+            })
+          ])
+        );
+
+        const originalText = await runCli([
+          "packet",
+          candidateId ?? "",
+          "--result",
+          originalResultId ?? "",
+          "--db",
+          database
+        ]);
+        expect(originalText.exitCode).toBe(EXIT_SUCCESS);
+        expect(originalText.stdout).toContain("Inspecting: historical result");
+        expect(originalText.stdout).toContain(
+          "current candidate work, not a decision on this historical result"
+        );
 
         const after = parseEnvelopeData<{ status: string }>(
           await runCli([
@@ -924,6 +981,17 @@ describe("CLI Commands Execution", () => {
       expect(res.exitCode).toBe(EXIT_SUCCESS);
       expect(res.stdout).toContain("Result ID:    result-1");
       expect(res.stdout).toContain("Result kind:  initial");
+      expect(res.stdout).toContain("Inspecting: current head");
+      expect(res.stdout).toContain("Outstanding review: none");
+      expect(res.stdout).toContain("Tasks: none");
+    });
+
+    it("prints the stub review task on the escalated packet", async () => {
+      const res = await runCli(["packet", "candidate-2"]);
+      expect(res.exitCode).toBe(EXIT_SUCCESS);
+      expect(res.stdout).toContain("Outstanding review: required (open)");
+      expect(res.stdout).toContain("task-1");
+      expect(res.stdout).toContain("this_result");
     });
 
     it("outputs candidate packet in JSON envelope", async () => {

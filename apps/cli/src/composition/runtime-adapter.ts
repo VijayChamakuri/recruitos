@@ -21,6 +21,8 @@ import type {
   ListCandidatesOptions,
   ListProposalsOptions,
   ListResolutionTasksOptions,
+  PacketResolutionTask,
+  PacketTaskListing,
   ProposalSummary,
   RecordResolutionActionInput,
   RecordReviewDecisionInput,
@@ -40,7 +42,6 @@ import {
   importCandidates,
   listCandidates,
   listResolutionTasks,
-  readCandidatePacket,
   registerDemoCorrectionFixtures,
   registerDemoFixtures,
   requestReExtraction,
@@ -58,6 +59,7 @@ import {
   type CandidateSummaryItem,
   type ResolutionTaskItem
 } from "@recruitos/runtime";
+import { loadCandidatePacketSnapshot } from "./packet-snapshot.js";
 import { runClass1EvaluationForFinalizedCandidate } from "../evaluation/index.js";
 
 function toRuntimeCandidateStatus(
@@ -126,9 +128,38 @@ function rationalNumber(value: string): number {
   return denominator ? (numerator ?? 0) / denominator : 0;
 }
 
+function packetTaskListing(
+  task: ResolutionTaskSummary,
+  packetResultId: string,
+  isHistoricalResult: boolean
+): PacketTaskListing {
+  if (isHistoricalResult) {
+    return "current_candidate_work";
+  }
+  return task.candidateResultId === packetResultId
+    ? "this_result"
+    : "current_candidate_work";
+}
+
+function toPacketTasks(
+  tasks: readonly ResolutionTaskSummary[],
+  packetResultId: string,
+  isHistoricalResult: boolean
+): readonly PacketResolutionTask[] {
+  return tasks.map((task) => ({
+    ...task,
+    listing: packetTaskListing(task, packetResultId, isHistoricalResult)
+  }));
+}
+
 function toCandidatePacket(
   packet: CandidatePacketModel,
-  nativeClient: NativeClientHandle | null
+  nativeClient: NativeClientHandle | null,
+  tasks: readonly ResolutionTaskSummary[],
+  options: {
+    readonly isHistoricalResult: boolean;
+    readonly currentResultId: string;
+  }
 ): CandidatePacket {
   let arithmeticTerms: CandidatePacket["arithmeticTerms"] = [];
   let evidenceSpans: CandidatePacket["evidenceSpans"] = [];
@@ -227,10 +258,12 @@ function toCandidatePacket(
     evidenceSpans,
     evidenceGaps,
     documents,
-    tasks: [],
+    tasks: toPacketTasks(tasks, packet.resultId, options.isHistoricalResult),
+    isHistoricalResult: options.isHistoricalResult,
     resultId: packet.resultId,
     resultKind: packet.resultKind,
-    headVersion: packet.headVersion
+    headVersion: packet.headVersion,
+    currentResultId: options.currentResultId
   };
 }
 
@@ -536,22 +569,33 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
     candidateId: string,
     options?: { resultId?: string }
   ): Promise<Result<CandidatePacket, RuntimeError>> {
-    const packetResult = readCandidatePacket(
-      this.runtime.connection.database,
+    const snapshot = loadCandidatePacketSnapshot(
+      this.runtime.connection,
       candidateId,
-      options
+      options?.resultId === undefined ? undefined : { resultId: options.resultId }
     );
-    if (packetResult.ok) {
-      return ok(toCandidatePacket(packetResult.value, getNativeClient(this.runtime.connection.database)));
+    if (!snapshot.ok) {
+      if (this.allowStubFallback && !this.hasCandidatesInDb()) {
+        return this.fallback.getCandidatePacket(candidateId);
+      }
+      return err({
+        code: snapshot.error.code,
+        message: snapshot.error.message,
+        retryable: false
+      });
     }
-    if (this.allowStubFallback && !this.hasCandidatesInDb()) {
-      return this.fallback.getCandidatePacket(candidateId);
-    }
-    return err({
-      code: packetResult.error.code,
-      message: packetResult.error.message,
-      retryable: false
-    });
+
+    return ok(
+      toCandidatePacket(
+        snapshot.value.selected,
+        getNativeClient(this.runtime.connection.database),
+        snapshot.value.tasks.map(toResolutionTaskSummary),
+        {
+          isHistoricalResult: snapshot.value.isHistoricalResult,
+          currentResultId: snapshot.value.currentResultId
+        }
+      )
+    );
   }
 
   async runTriage(
