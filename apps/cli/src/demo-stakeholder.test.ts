@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const makefilePath = join(repoRoot, "Makefile");
 const scriptPath = join(repoRoot, "scripts/demo-stakeholder.mjs");
 const cliPath = join(repoRoot, "apps/cli/dist/bin.js");
