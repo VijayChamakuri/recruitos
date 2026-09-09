@@ -44,4 +44,10 @@ describe("self-hosted font-display policy", () => {
     expect(TOKENS_CSS).toContain(".conflict-band");
     expect(TOKENS_CSS).toContain("var(--contradict)");
   });
+
+  it("declares the historical packet desaturation state", () => {
+    expect(TOKENS_CSS).toContain(".packet-historical");
+    expect(TOKENS_CSS).toMatch(/\.packet-historical\s*\{[^}]*grayscale\(0\.68\)/);
+    expect(TOKENS_CSS).toMatch(/\.packet-historical\s*\{[^}]*saturate\(0\.38\)/);
+  });
 });

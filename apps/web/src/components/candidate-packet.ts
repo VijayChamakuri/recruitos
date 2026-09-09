@@ -35,6 +35,15 @@ function inspectingLabel(packet: CandidatePacket): string {
   return "Inspecting: current head";
 }
 
+function historicalSurfaceClass(isHistorical: boolean): string {
+  // Filter cannot be undone on children, so this class stays off .packet-shell.
+  return isHistorical ? " packet-historical" : "";
+}
+
+function historicalSurfaceAttr(isHistorical: boolean): string {
+  return isHistorical ? ` data-testid="${TEST_IDS.PACKET_HISTORICAL}"` : "";
+}
+
 function renderConfidenceInputs(packet: CandidatePacket): string {
   const input = packet.confidenceInput;
   if (input === null) {
@@ -235,7 +244,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
   const candidateIdAttr = ` data-candidate-id="${escapeHtml(p.candidateId)}"`;
 
   const headerHtml = [
-    `  <div style="padding:10px 16px 8px;border-bottom:1px solid var(--hairline-strong);background:var(--surface)">`,
+    `  <div class="packet-header${historicalSurfaceClass(p.isHistoricalResult)}"${historicalSurfaceAttr(p.isHistoricalResult)} style="padding:10px 16px 8px;border-bottom:1px solid var(--hairline-strong);background:var(--surface)">`,
     `    <div style="display:flex;align-items:baseline;gap:12px">`,
     `      <a href="${escapeHtml(returnHref)}" class="mono link" style="font-size:12px" data-testid="${TEST_IDS.RETURN_TO_QUEUE}">Return to triage queue</a>`,
     `      <span style="flex:1"></span>`,
@@ -272,7 +281,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
   ].join("\n");
 
   const panesHtml = [
-    `  <div class="packet-b" data-testid="candidate-packet-view"${candidateIdAttr}${resultIdAttr}${resultKindAttr}${sourceKeyAttr}>`,
+    `  <div class="packet-b${inspector === undefined ? historicalSurfaceClass(p.isHistoricalResult) : ""}" data-testid="candidate-packet-view"${candidateIdAttr}${resultIdAttr}${resultKindAttr}${sourceKeyAttr}${p.isHistoricalResult ? ` data-historical="true"` : ""}>`,
     `    <svg class="thread" aria-hidden="true">`,
     `      <!-- The thread connects focused claim to evidence card and source span -->`,
     `    </svg>`,
@@ -296,7 +305,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     headerHtml,
     conflictSlot,
     `    <div class="packet-with-inspector">`,
-    `      <div class="packet-main">`,
+    `      <div class="packet-main${historicalSurfaceClass(p.isHistoricalResult)}">`,
     panesHtml,
     `      </div>`,
     renderTaskInspector(inspector),
