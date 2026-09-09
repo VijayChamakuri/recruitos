@@ -34,6 +34,10 @@ test.describe("Workflow 2: Candidate Packet", () => {
     await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).toBeVisible();
     await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).toContainText("8.3%");
     await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).not.toContainText("8.333333333333332");
+    await expect(page.getByTestId(TEST_IDS.LEVEL_CHIP).first()).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.LEVEL_CHIP).first().locator(".sr-only")).toHaveText(
+      /strong|partial|weak|none/
+    );
     await expect(page.getByTestId(TEST_IDS.PANE_SOURCE)).toBeVisible();
     await expect(page.getByTestId(TEST_IDS.RESUME_VIEWER)).toBeVisible();
     const header = page.locator("main.work > div").first();

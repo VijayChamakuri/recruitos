@@ -61,7 +61,9 @@ export const TEST_IDS = {
   SPAN_INTEGRITY_FAILURE: "span-integrity-failure",
   SUPERSEDING_BADGE: "superseding-badge",
   PRIOR_VERSION_LINK: "prior-version-link",
+  CURRENT_VERSION_LINK: "current-version-link",
   VERSION_HISTORY: "version-history",
+  LEVEL_CHIP: "level-chip",
 
   // Workflow 3: fixture correction request and completion
   TASK_ITEM: (id: string) => `task-item-${id}`,

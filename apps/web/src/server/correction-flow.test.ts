@@ -371,6 +371,7 @@ describe("fixture correction HTTP flow", () => {
     expect(current.body).toContain("scored");
     expect(current.body).toContain("review_required");
     expect(current.body).toContain(`data-testid="${TEST_IDS.PRIOR_VERSION_LINK}"`);
+    expect(current.body).not.toContain(`data-testid="${TEST_IDS.CURRENT_VERSION_LINK}"`);
     expect(current.body).toContain(`data-result-kind="correction"`);
 
     const priorId = completeUrl.searchParams.get("prior") ?? originalResultId;
@@ -382,6 +383,9 @@ describe("fixture correction HTTP flow", () => {
     );
     expect(historical.body).toContain("Inspecting: historical result");
     expect(historical.body).toContain(`data-testid="${TEST_IDS.PACKET_HISTORICAL}"`);
+    expect(historical.body).toContain(`data-testid="${TEST_IDS.CURRENT_VERSION_LINK}"`);
+    expect(historical.body).toContain("Inspect current result");
+    expect(historical.body).toContain(`/packet/${encodeURIComponent(route4.candidateId)}?theme=light&amp;density=default`);
     expect(historical.body).toContain("packet-header packet-historical");
     expect(historical.body).toContain("escalated");
     expect(historical.body).toContain("assessment_unavailable");

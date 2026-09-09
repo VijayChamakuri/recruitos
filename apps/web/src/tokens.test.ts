@@ -50,4 +50,27 @@ describe("self-hosted font-display policy", () => {
     expect(TOKENS_CSS).toMatch(/\.packet-historical\s*\{[^}]*grayscale\(0\.68\)/);
     expect(TOKENS_CSS).toMatch(/\.packet-historical\s*\{[^}]*saturate\(0\.38\)/);
   });
+
+  it("aligns document and evidence quotation typography with tokens", () => {
+    expect(TOKENS_CSS).toMatch(/\.doc\s*\{[^}]*font-size:\s*var\(--t-doc\)/);
+    expect(TOKENS_CSS).toMatch(/\.doc\s*\{[^}]*line-height:\s*var\(--lh-doc\)/);
+    expect(TOKENS_CSS).toMatch(/\.card q\s*\{[^}]*font-size:\s*var\(--t-doc-sm\)/);
+    expect(TOKENS_CSS).toMatch(/\.card q\s*\{[^}]*line-height:\s*var\(--lh-doc-sm\)/);
+  });
+
+  it("declares consistent focus-visible treatment with 80ms transition and suppresses pointer outlines", () => {
+    expect(TOKENS_CSS).toContain(":focus:not(:focus-visible)");
+    expect(TOKENS_CSS).toMatch(/:focus:not\(:focus-visible\)\s*\{\s*outline:\s*none;\s*\}/);
+    expect(TOKENS_CSS).toContain(":focus-visible");
+    expect(TOKENS_CSS).toMatch(/:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent\)/);
+    expect(TOKENS_CSS).toMatch(/:focus-visible\s*\{[^}]*transition:\s*outline 80ms ease/);
+  });
+
+  it("declares the four-segment level chip and sr-only styling", () => {
+    expect(TOKENS_CSS).toContain(".level-chip");
+    expect(TOKENS_CSS).toContain(".level-chip-segments");
+    expect(TOKENS_CSS).toContain(".level-seg");
+    expect(TOKENS_CSS).toContain(".level-seg.filled");
+    expect(TOKENS_CSS).toContain(".sr-only");
+  });
 });

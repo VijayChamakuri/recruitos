@@ -15,7 +15,13 @@ import { renderEvidenceGapCard } from "./evidence-gap-card.js";
 import { escapeHtml } from "./safe-text.js";
 import { formatWeightPercent } from "../format.js";
 import { TEST_IDS } from "../testids.js";
-import { renderConflictBand, renderPriorResultLink, renderTaskInspector } from "./task-inspector.js";
+import {
+  renderConflictBand,
+  renderCurrentResultLink,
+  renderPriorResultLink,
+  renderTaskInspector
+} from "./task-inspector.js";
+import { renderLevelChip } from "./level-chip.js";
 import type { PacketInspectorModel } from "../server/inspector-model.js";
 
 export type CandidatePacketViewProps = Readonly<{
@@ -132,7 +138,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
       `      <tr class="${onClass}" data-term-dim="${escapeHtml(term.dimensionId)}" data-testid="${TEST_IDS.ARITHMETIC_TERM(term.dimensionId)}">`,
       `        <td>${escapeHtml(term.dimensionName)}</td>`,
       `        <td class="n">${formatWeightPercent(term.weight)}</td>`,
-      `        <td>${escapeHtml(term.level)}</td>`,
+      `        <td>${renderLevelChip(term.level)}</td>`,
       `        <td class="n">${term.levelScore.toFixed(0)}</td>`,
       `        <td class="n">${term.weightedScore.toFixed(2)}</td>`,
       `      </tr>`
@@ -170,10 +176,14 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
   const dimBlocks = ledgerDimensions(p).map((term, idx) => {
     const spans = p.evidenceSpans.filter((s) => s.dimensionId === term.dimensionId);
     const gaps = p.evidenceGaps.filter((g) => g.dimensionId === term.dimensionId);
-    const levelLabel =
-      term.level !== undefined && term.weightedScore !== undefined
-        ? `${term.level} (${term.weightedScore.toFixed(1)})`
-        : "unavailable";
+    const levelChipHtml =
+      term.level !== undefined
+        ? renderLevelChip(term.level)
+        : `<span class="muted faint">unavailable</span>`;
+    const scoreText =
+      term.weightedScore !== undefined
+        ? ` (${term.weightedScore.toFixed(1)})`
+        : "";
 
     const spanCards = spans.map((span: EvidenceSpan) => {
       const isFocused = span.evidenceSpanId === props.focusedSpanId;
@@ -194,7 +204,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
       `        <div class="dimhead">`,
       `          <span class="idx">0${idx + 1}</span>`,
       `          <span class="nm">${escapeHtml(term.dimensionName)}</span>`,
-      `          <span class="caps">${escapeHtml(levelLabel)}</span>`,
+      `          <span class="caps" style="display:inline-flex;align-items:center;gap:6px">${levelChipHtml}${escapeHtml(scoreText)}</span>`,
       `        </div>`,
       spanCards.length > 0 ? spanCards.join("\n") : "",
       gapCards.length > 0 ? gapCards.join("\n") : "",
@@ -262,9 +272,9 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     `    <div style="display:flex;align-items:center;gap:12px;margin-top:6px" data-testid="${TEST_IDS.VERSION_HISTORY}">`,
     `      <span class="badge" data-testid="${TEST_IDS.SUPERSEDING_BADGE}">${p.sealed ? "Sealed Version" : "Active Head"}</span>`,
     `      <span class="sep">&#124;</span>`,
-    priorResultId
-      ? renderPriorResultLink(p.candidateId, appearance, priorResultId)
-      : "",
+    p.isHistoricalResult
+      ? renderCurrentResultLink(p.candidateId, appearance)
+      : (priorResultId ? renderPriorResultLink(p.candidateId, appearance, priorResultId) : ""),
     `      <div data-testid="${TEST_IDS.ROUTING_REASONS}" style="display:inline-flex;gap:6px;flex-wrap:wrap">`,
     routingReasons.length > 0
       ? routingReasons

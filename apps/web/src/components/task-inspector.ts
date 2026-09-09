@@ -175,3 +175,11 @@ export function renderPriorResultLink(
   const href = packetHref(candidateId, appearance, priorResultId);
   return `<a href="${escapeHtml(href)}" class="link mono" style="font-size:12px" data-testid="${TEST_IDS.PRIOR_VERSION_LINK}">Inspect original result</a>`;
 }
+
+export function renderCurrentResultLink(
+  candidateId: string,
+  appearance: PacketInspectorModel["appearance"]
+): string {
+  const href = packetHref(candidateId, appearance);
+  return `<a href="${escapeHtml(href)}" class="link mono" style="font-size:12px" data-testid="${TEST_IDS.CURRENT_VERSION_LINK}">Inspect current result</a>`;
+}
