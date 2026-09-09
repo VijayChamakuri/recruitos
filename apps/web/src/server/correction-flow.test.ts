@@ -382,7 +382,7 @@ describe("fixture correction HTTP flow", () => {
     );
     expect(historical.body).toContain("Inspecting: historical result");
     expect(historical.body).toContain(`data-testid="${TEST_IDS.PACKET_HISTORICAL}"`);
-    expect(historical.body).toContain("packet-historical");
+    expect(historical.body).toContain("packet-header packet-historical");
     expect(historical.body).toContain("escalated");
     expect(historical.body).toContain("assessment_unavailable");
     expect(historical.body).toContain("Inspecting a historical result. Mutations apply to the current head.");
