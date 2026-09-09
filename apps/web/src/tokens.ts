@@ -184,6 +184,15 @@ a, .link {
   cursor: pointer;
 }
 
+:focus:not(:focus-visible) {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  transition: outline 80ms ease, outline-offset 80ms ease;
+}
+
 .app {
   display: grid;
   grid-template-rows: var(--bar-h) 1fr;
@@ -525,8 +534,44 @@ table.terms tr.total td { border-top: 1px solid var(--text); border-bottom: none
   padding: 8px 10px;
   margin-bottom: 6px;
 }
-.card q { font-family: var(--f-serif); font-size: 14px; line-height: 22px; display: block; quotes: none; }
+.card q { font-family: var(--f-serif); font-size: var(--t-doc-sm); line-height: var(--lh-doc-sm); display: block; quotes: none; }
 .card .meta { font-family: var(--f-mono); font-size: 11px; color: var(--text-faint); margin-top: 4px; }
 .card.focused { border-color: var(--accent); background: var(--accent-wash); }
-.doc { padding: 20px 24px; max-width: 68ch; font-family: var(--f-serif); font-size: 16px; line-height: 26px; }
+.doc { padding: 20px 24px; max-width: 68ch; font-family: var(--f-serif); font-size: var(--t-doc); line-height: var(--lh-doc); }
+
+.level-chip {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  line-height: 1;
+}
+.level-chip-segments {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+.level-seg {
+  display: inline-block;
+  width: 4px;
+  height: 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-mark);
+  background: transparent;
+  box-sizing: border-box;
+}
+.level-seg.filled {
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 `;

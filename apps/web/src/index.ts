@@ -16,6 +16,8 @@ export {
   renderCandidatePacketView,
   type CandidatePacketViewProps
 } from "./components/candidate-packet.js";
+export { renderLevelChip, levelSegmentCount } from "./components/level-chip.js";
+export { renderPriorResultLink, renderCurrentResultLink } from "./components/task-inspector.js";
 
 export { handleRequest, type HttpResponse, type IncomingRequest } from "./server/handlers.js";
 export { renderPage, type PageRenderOptions } from "./server/ssr.js";

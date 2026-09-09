@@ -68,11 +68,28 @@ test.describe("Workflow 3: Fixture correction", () => {
     await expect(page.locator("main")).toContainText("review_required");
     await expect(page.getByTestId(TEST_IDS.SUPERSEDING_BADGE)).toBeVisible();
     await expect(page.getByTestId(TEST_IDS.PRIOR_VERSION_LINK)).toBeVisible();
+    await page.screenshot({ path: "dist/qa/candidate-packet-current.png" });
 
     await page.getByTestId(TEST_IDS.PRIOR_VERSION_LINK).click();
     await expect(page.getByTestId(TEST_IDS.PACKET_INSPECTING_LABEL)).toContainText("historical result");
     await expect(page.locator("main")).toContainText("escalated");
     await expect(page.getByTestId(TEST_IDS.ROUTING_REASON_TAG("assessment_unavailable"))).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.CURRENT_VERSION_LINK)).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.CURRENT_VERSION_LINK)).toHaveText("Inspect current result");
+    await page.screenshot({ path: "dist/qa/candidate-packet-historical.png" });
+
+    // Verify keyboard focus-visible treatment
+    await page.keyboard.press("Tab");
+    const focused = page.locator(":focus-visible");
+    const focusedCount = await focused.count();
+    expect(focusedCount).toBeGreaterThanOrEqual(1);
+
+    // Symmetric return back to the candidate's current result
+    await page.getByTestId(TEST_IDS.CURRENT_VERSION_LINK).click();
+    await expect(page.getByTestId(TEST_IDS.PACKET_INSPECTING_LABEL)).toHaveText("Inspecting: current head");
+    await expect(page.locator("main")).toContainText("result kind: correction");
+    await expect(page.locator("main")).toContainText("scored");
+    await expect(page.getByTestId(TEST_IDS.CURRENT_VERSION_LINK)).toHaveCount(0);
 
     await page.goto(
       `${ROUTES.PACKET(candidateId ?? "")}?theme=light&density=default&result=${originalResultId}`
