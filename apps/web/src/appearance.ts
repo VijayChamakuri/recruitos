@@ -29,8 +29,23 @@ export function appearanceQuery(appearance: Appearance): string {
   return `theme=${appearance.theme}&density=${appearance.density}`;
 }
 
-export function hrefWithAppearance(pathname: string, appearance: Appearance): string {
-  return `${pathname}?${appearanceQuery(appearance)}`;
+export function hrefWithAppearance(
+  pathname: string,
+  appearance: Appearance,
+  preserved?: URLSearchParams
+): string {
+  const params = new URLSearchParams();
+  if (preserved !== undefined) {
+    for (const [key, value] of preserved.entries()) {
+      if (key === "theme" || key === "density") {
+        continue;
+      }
+      params.append(key, value);
+    }
+  }
+  params.set("theme", appearance.theme);
+  params.set("density", appearance.density);
+  return `${pathname}?${params.toString()}`;
 }
 
 export function packetHref(
@@ -39,9 +54,9 @@ export function packetHref(
   resultId?: string
 ): string {
   const encodedId = encodeURIComponent(candidateId);
-  const base = hrefWithAppearance(`/packet/${encodedId}`, appearance);
-  if (resultId === undefined) {
-    return base;
+  const preserved = new URLSearchParams();
+  if (resultId !== undefined) {
+    preserved.set("result", resultId);
   }
-  return `${base}&result=${encodeURIComponent(resultId)}`;
+  return hrefWithAppearance(`/packet/${encodedId}`, appearance, preserved);
 }

@@ -8,6 +8,7 @@ export type GlobalBarProps = Readonly<{
   roleTitle?: string | undefined;
   appearance: Appearance;
   currentPath?: string | undefined;
+  searchParams?: URLSearchParams | undefined;
   outstandingTaskCount?: number | undefined;
 }>;
 
@@ -20,7 +21,11 @@ export function renderGlobalBar(props: GlobalBarProps): string {
   const roleTitle = props.roleTitle;
   const currentPath = props.currentPath ?? "/triage";
   const otherTheme = appearance.theme === "light" ? "dark" : "light";
-  const themeHref = `${currentPath}?theme=${otherTheme}&amp;density=${appearance.density}`;
+  const themeHref = hrefWithAppearance(
+    currentPath,
+    { theme: otherTheme, density: appearance.density },
+    props.searchParams
+  );
   const runTag = props.status
     ? `${props.status.activeRunId} ${props.status.isSealed ? "sealed" : "active"}`
     : "status unavailable";
@@ -46,7 +51,7 @@ export function renderGlobalBar(props: GlobalBarProps): string {
       ? `  <span class="mono muted" style="font-size:12px">limitations unavailable</span>`
       : `  <a href="${escapeHtml(hrefWithAppearance("/status", appearance))}" class="mono link" style="font-size:12px">${knownLimitations} known limitations</a>`,
     `  <span class="spacer"></span>`,
-    `  <a href="${themeHref}" class="mono muted" style="font-size:12px;text-decoration:none">theme: ${appearance.theme}</a>`,
+    `  <a href="${escapeHtml(themeHref)}" class="mono muted" style="font-size:12px;text-decoration:none">theme: ${appearance.theme}</a>`,
     `  <span class="sep">&#124;</span>`,
     `  <span class="mono muted" style="font-size:12px">density: ${appearance.density}</span>`,
     `</header>`

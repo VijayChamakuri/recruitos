@@ -13,6 +13,7 @@ import {
 import { renderAnnotatedDocument } from "./span-highlight.js";
 import { renderEvidenceGapCard } from "./evidence-gap-card.js";
 import { escapeHtml } from "./safe-text.js";
+import { formatWeightPercent } from "../format.js";
 import { TEST_IDS } from "../testids.js";
 
 export type CandidatePacketViewProps = Readonly<{
@@ -118,7 +119,7 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     return [
       `      <tr class="${onClass}" data-term-dim="${escapeHtml(term.dimensionId)}" data-testid="${TEST_IDS.ARITHMETIC_TERM(term.dimensionId)}">`,
       `        <td>${escapeHtml(term.dimensionName)}</td>`,
-      `        <td class="n">${term.weight}%</td>`,
+      `        <td class="n">${formatWeightPercent(term.weight)}</td>`,
       `        <td>${escapeHtml(term.level)}</td>`,
       `        <td class="n">${term.levelScore.toFixed(0)}</td>`,
       `        <td class="n">${term.weightedScore.toFixed(2)}</td>`,

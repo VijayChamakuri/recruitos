@@ -16,6 +16,7 @@ export type PageRenderOptions = Readonly<{
   packetCandidateId?: string | undefined;
   reasonCodeCounts?: readonly { code: string; count: number }[] | undefined;
   roleTitle?: string | undefined;
+  searchParams?: URLSearchParams | undefined;
 }>;
 
 /**
@@ -32,7 +33,8 @@ export function renderPage(options: PageRenderOptions): string {
     ...(options.outstandingTaskCount === undefined
       ? {}
       : { outstandingTaskCount: options.outstandingTaskCount }),
-    ...(options.roleTitle === undefined ? {} : { roleTitle: options.roleTitle })
+    ...(options.roleTitle === undefined ? {} : { roleTitle: options.roleTitle }),
+    ...(options.searchParams === undefined ? {} : { searchParams: options.searchParams })
   });
 
   const railHtml = renderNavigationRail({

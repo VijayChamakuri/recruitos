@@ -32,6 +32,8 @@ test.describe("Workflow 2: Candidate Packet", () => {
     );
     await expect(page.getByTestId(TEST_IDS.SCORE_CARD)).toContainText("467/6");
     await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).toContainText("8.3%");
+    await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).not.toContainText("8.333333333333332");
     await expect(page.getByTestId(TEST_IDS.PANE_SOURCE)).toBeVisible();
     await expect(page.getByTestId(TEST_IDS.RESUME_VIEWER)).toBeVisible();
     const header = page.locator("main.work > div").first();
@@ -61,5 +63,12 @@ test.describe("Workflow 2: Candidate Packet", () => {
     await expect(page.getByTestId(TEST_IDS.PACKET_NOT_FOUND)).toContainText(
       "Candidate Packet Not Found"
     );
+
+    await page.goto(
+      `${ROUTES.PACKET("does-not-exist")}?theme=light&density=default&result=hist-result-1`
+    );
+    const themeLink = page.locator("a", { hasText: "theme: light" });
+    await expect(themeLink).toHaveAttribute("href", /result=hist-result-1/);
+    await expect(themeLink).toHaveAttribute("href", /theme=dark/);
   });
 });

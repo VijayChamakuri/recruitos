@@ -35,6 +35,12 @@ test.describe("Workflow 1: Demo Start", () => {
     await expect(page.getByText("rejected_hard_requirement", { exact: true })).toBeVisible();
     await expect(page.getByText("escalated").first()).toBeVisible();
     await expect(page.getByText("scored").first()).toBeVisible();
+    await expect(page.getByText("57.1% of corpus")).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("128.6%");
+    const html = await page.content();
+    expect(html).toContain("@font-face");
+    expect(html).not.toContain("fonts.googleapis");
+    expect(html).not.toMatch(/run-\d{10,}/);
 
     expect(externalRequests).toEqual([]);
     expect(testEnvironment.dbPath.length).toBeGreaterThan(0);

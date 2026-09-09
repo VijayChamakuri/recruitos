@@ -9,6 +9,7 @@ export type InstrumentBandProps = Readonly<{
   sourcedCount: number;
   scoredCount: number;
   outstandingTaskCount: number;
+  routedCandidateCount: number;
   corpusSublabel?: string | undefined;
 }>;
 
@@ -25,7 +26,7 @@ export function renderInstrumentBand(props: InstrumentBandProps): string {
     `${props.inboundCount} inbound · ${props.sourcedCount} sourced · synthetic`;
   const routedPercent =
     s.candidateCount > 0
-      ? ((props.outstandingTaskCount / s.candidateCount) * 100).toFixed(1)
+      ? ((props.routedCandidateCount / s.candidateCount) * 100).toFixed(1)
       : "0.0";
 
   return [

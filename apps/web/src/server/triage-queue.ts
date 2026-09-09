@@ -4,11 +4,16 @@ import type {
   RecruitosComposition,
   ResolutionTaskSummary
 } from "@recruitos/cli";
-import { err, ok, type Result } from "@recruitos/core";
+import { ok, type Result } from "@recruitos/core";
 import {
   coverageCellsForPacket,
   type EvidenceCoverageCell
 } from "../components/evidence-coverage-strip.js";
+import { getServerRuntime } from "./composition.js";
+import {
+  listAllCandidateSummaries,
+  listAllResolutionTaskSummaries
+} from "./read-pages.js";
 
 const OUTSTANDING_TASK_STATUSES = new Set(["open", "review_required"]);
 
@@ -30,6 +35,8 @@ export type TriageQueueModel = Readonly<{
   rejectedHardRequirementCount: number;
   escalatedCount: number;
   outstandingTaskCount: number;
+  routedCandidateCount: number;
+  allTasks: readonly ResolutionTaskSummary[];
   reasonCodeCounts: readonly { code: string; count: number }[];
   firstCandidateId: string | undefined;
 }>;
@@ -79,9 +86,33 @@ function confidenceLabel(candidate: CandidateSummary, packet: CandidatePacket | 
   return "n/a";
 }
 
-export async function loadTriageQueueModel(
+export function distinctOutstandingCandidateCount(
+  tasks: readonly ResolutionTaskSummary[]
+): number {
+  return new Set(tasks.filter(isOutstanding).map((task) => task.candidateId)).size;
+}
+
+async function loadCandidatesAndTasks(
   composition: RecruitosComposition
-): Promise<Result<TriageQueueModel, { code: string; message: string; retryable: boolean }>> {
+): Promise<
+  Result<
+    { candidates: readonly CandidateSummary[]; tasks: readonly ResolutionTaskSummary[] },
+    { code: string; message: string; retryable: boolean }
+  >
+> {
+  const runtime = getServerRuntime();
+  if (runtime !== null) {
+    const candidates = listAllCandidateSummaries(runtime.connection.database);
+    if (!candidates.ok) {
+      return candidates;
+    }
+    const tasks = listAllResolutionTaskSummaries(runtime.connection.database);
+    if (!tasks.ok) {
+      return tasks;
+    }
+    return ok({ candidates: candidates.value, tasks: tasks.value });
+  }
+
   const candidatesResult = await composition.listCandidates({ limit: 50 });
   if (!candidatesResult.ok) {
     return candidatesResult;
@@ -90,9 +121,19 @@ export async function loadTriageQueueModel(
   if (!tasksResult.ok) {
     return tasksResult;
   }
+  return ok({ candidates: candidatesResult.value, tasks: tasksResult.value });
+}
 
-  const candidates = candidatesResult.value;
-  const outstandingTasks = tasksResult.value.filter(isOutstanding);
+export async function loadTriageQueueModel(
+  composition: RecruitosComposition
+): Promise<Result<TriageQueueModel, { code: string; message: string; retryable: boolean }>> {
+  const listed = await loadCandidatesAndTasks(composition);
+  if (!listed.ok) {
+    return listed;
+  }
+
+  const candidates = listed.value.candidates;
+  const outstandingTasks = listed.value.tasks.filter(isOutstanding);
   const packets = await Promise.all(
     candidates.map((candidate) => composition.getCandidatePacket(candidate.candidateId))
   );
@@ -121,6 +162,8 @@ export async function loadTriageQueueModel(
     ).length,
     escalatedCount: candidates.filter((candidate) => candidate.status === "escalated").length,
     outstandingTaskCount: outstandingTasks.length,
+    routedCandidateCount: distinctOutstandingCandidateCount(outstandingTasks),
+    allTasks: listed.value.tasks,
     reasonCodeCounts: tallyReasonCodes(candidates),
     firstCandidateId: candidates[0]?.candidateId
   });

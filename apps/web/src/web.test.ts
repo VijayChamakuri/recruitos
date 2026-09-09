@@ -24,10 +24,18 @@ import { renderCandidatePacketView } from "./components/candidate-packet.js";
 import { handleRequest } from "./server/handlers.js";
 import {
   getServerComposition,
+  getServerRuntime,
   openExplicitDatabaseComposition,
   resetServerComposition,
   setServerComposition
 } from "./server/composition.js";
+import { readPersistedTriageRun } from "./server/persisted-run.js";
+import {
+  drainPagedRead,
+  listAllCandidateSummaries,
+  listAllResolutionTaskSummaries
+} from "./server/read-pages.js";
+import { listCandidates, listResolutionTasks } from "@recruitos/runtime";
 import { parseWebServerOptions } from "./server/options.js";
 import { TEST_IDS } from "./testids.js";
 
@@ -322,6 +330,7 @@ describe("Prepared seven-candidate demo composition", () => {
       sourcedCount: 0,
       scoredCount: 2,
       outstandingTaskCount: 1,
+      routedCandidateCount: 1,
       corpusSublabel: "seven-candidate proving corpus"
     });
     expect(html).toContain('class="band"');
@@ -331,6 +340,54 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(html).toContain("Routed to humans");
     expect(html).toContain("Scored");
     expect(html).not.toContain("cut at 62.9");
+  });
+
+  it("computes routed corpus percent from distinct candidates with outstanding tasks", () => {
+    const html = renderInstrumentBand({
+      status: {
+        databasePath: "/tmp/runtime.db",
+        schemaVersion: 1,
+        activeRunId: "demo-run",
+        candidateCount: 7,
+        openTasksCount: 9,
+        pendingProposalsCount: 0,
+        auditEventsCount: 0,
+        knownLimitationsCount: 3,
+        isSealed: true
+      },
+      appearance: DEFAULT_APPEARANCE,
+      inboundCount: 7,
+      sourcedCount: 0,
+      scoredCount: 2,
+      outstandingTaskCount: 9,
+      routedCandidateCount: 4
+    });
+    expect(html).toContain("9 open tasks");
+    expect(html).toContain("57.1% of corpus");
+    expect(html).not.toContain("128.6%");
+  });
+
+  it("shows 0.0 percent when the corpus is empty", () => {
+    const html = renderInstrumentBand({
+      status: {
+        databasePath: "/tmp/runtime.db",
+        schemaVersion: 1,
+        activeRunId: "none",
+        candidateCount: 0,
+        openTasksCount: 0,
+        pendingProposalsCount: 0,
+        auditEventsCount: 0,
+        knownLimitationsCount: 3,
+        isSealed: false
+      },
+      appearance: DEFAULT_APPEARANCE,
+      inboundCount: 0,
+      sourcedCount: 0,
+      scoredCount: 0,
+      outstandingTaskCount: 0,
+      routedCandidateCount: 0
+    });
+    expect(html).toContain("0.0% of corpus");
   });
 
   it("renders the route-1 packet with visible arithmetic and no header score badge", async () => {
@@ -352,6 +409,8 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(html).toContain("Inspecting: current head");
     expect(html).toContain("SYNTHETIC DATA");
     expect(html).toContain("Return to triage queue");
+    expect(html).toContain("8.3%");
+    expect(html).not.toContain("8.333333333333332");
     const header = html.slice(0, html.indexOf('data-testid="candidate-packet-view"'));
     expect(header).not.toContain("/ 100");
     expect(header).not.toContain("Overall Score");
@@ -364,6 +423,11 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(res.body).toContain("--surface-paper");
     expect(res.body).toContain("--support");
     expect(res.body).toContain("--contradict");
+    expect(res.body).toContain("@font-face");
+    expect(res.body).toContain("IBM Plex Sans");
+    expect(res.body).toContain("Source Serif 4");
+    expect(res.body).not.toContain("fonts.googleapis");
+    expect(res.body).not.toContain("cdn.jsdelivr");
   });
 
   it("renders the triage queue with seven candidates and SYNTHETIC DATA", async () => {
@@ -377,6 +441,8 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(res.body).toContain("data-testid=\"instrument-band\"");
     expect((res.body.match(/data-testid="candidate-row"/g) ?? []).length).toBe(7);
     expect(res.body).not.toContain("candidate-1");
+    expect(res.body).toContain("57.1% of corpus");
+    expect(res.body).not.toContain("128.6%");
   });
 
   it("falls back to default appearance for invalid query values", async () => {
@@ -451,6 +517,7 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(res.body).toContain("Human Resolution Queue");
     expect(res.body).toContain("Resolution Tasks");
     expect(res.body).not.toContain("prop-1");
+    expect((res.body.match(/data-testid="task-item-/g) ?? []).length).toBeGreaterThan(2);
   });
 
   it("renders Audit Timeline as an honest deferred state", async () => {
@@ -479,6 +546,67 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(statusRes.statusCode).toBe(200);
     const status = JSON.parse(statusRes.body);
     expect(status.activeRunId).toBeDefined();
+    expect(status.activeRunId).not.toMatch(/^run-\d+$/);
+  });
+
+  it("uses the persisted triage_run id and seal, stable across status reads", async () => {
+    const runtime = getServerRuntime();
+    expect(runtime).not.toBeNull();
+    if (runtime === null) return;
+    const persisted = readPersistedTriageRun(runtime.connection.database);
+    expect(persisted.ok).toBe(true);
+    if (!persisted.ok || persisted.value === null) {
+      throw new Error("expected a persisted triage run");
+    }
+    const first = JSON.parse((await handleRequest("/api/status", new URLSearchParams())).body);
+    const second = JSON.parse((await handleRequest("/api/status", new URLSearchParams())).body);
+    expect(first.activeRunId).toBe(persisted.value.runId);
+    expect(second.activeRunId).toBe(first.activeRunId);
+    expect(first.isSealed).toBe(persisted.value.sealed);
+    const page = await handleRequest("/triage", new URLSearchParams());
+    expect(page.body).toContain(persisted.value.runId);
+    expect(page.body).toContain(persisted.value.sealed ? "sealed" : "active");
+  });
+
+  it("drains every candidate and resolution-task page", async () => {
+    const runtime = getServerRuntime();
+    expect(runtime).not.toBeNull();
+    if (runtime === null) return;
+    const database = runtime.connection.database;
+    const candidates = listAllCandidateSummaries(database);
+    const tasks = listAllResolutionTaskSummaries(database);
+    expect(candidates.ok).toBe(true);
+    expect(tasks.ok).toBe(true);
+    if (!candidates.ok || !tasks.ok) return;
+    expect(candidates.value).toHaveLength(7);
+    const pagedCandidates = drainPagedRead((cursor) =>
+      listCandidates(database, {
+        limit: 2,
+        ...(cursor === undefined ? {} : { cursor })
+      })
+    );
+    const pagedTasks = drainPagedRead((cursor) =>
+      listResolutionTasks(database, {
+        limit: 2,
+        ...(cursor === undefined ? {} : { cursor })
+      })
+    );
+    expect(pagedCandidates.ok).toBe(true);
+    expect(pagedTasks.ok).toBe(true);
+    if (!pagedCandidates.ok || !pagedTasks.ok) return;
+    expect(pagedCandidates.value).toHaveLength(candidates.value.length);
+    expect(pagedTasks.value).toHaveLength(tasks.value.length);
+    expect(tasks.value.length).toBeGreaterThan(2);
+  });
+
+  it("preserves the historical result query when switching theme", async () => {
+    const res = await handleRequest(
+      "/packet/does-not-exist",
+      new URLSearchParams("theme=light&density=default&result=hist-result-1")
+    );
+    expect(res.body).toContain("result=hist-result-1");
+    expect(res.body).toContain("theme=dark");
+    expect(res.body).toContain("density=default");
   });
 
   it("returns 404 for unknown route", async () => {

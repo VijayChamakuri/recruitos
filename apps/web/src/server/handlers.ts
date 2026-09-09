@@ -6,7 +6,8 @@ import { renderInstrumentBand } from "../components/instrument-band.js";
 import { escapeHtml } from "../components/safe-text.js";
 import { TEST_IDS } from "../testids.js";
 import { TOKENS_CSS } from "../tokens.js";
-import { getServerComposition } from "./composition.js";
+import { getServerComposition, getServerRuntime } from "./composition.js";
+import { overlayPersistedRunStatus } from "./persisted-run.js";
 import { renderPage } from "./ssr.js";
 import { loadTriageQueueModel } from "./triage-queue.js";
 
@@ -35,7 +36,8 @@ function typedErrorPage(
   message: string,
   appearance: Appearance,
   currentPath: string,
-  statusCode: number
+  statusCode: number,
+  searchParams?: URLSearchParams
 ): HttpResponse {
   const contentHtml = [
     `      <div style="padding:40px;text-align:center" data-testid="typed-error">`,
@@ -52,9 +54,22 @@ function typedErrorPage(
       activeDestination: "triage",
       appearance,
       currentPath,
-      contentHtml
+      contentHtml,
+      ...(searchParams === undefined ? {} : { searchParams })
     })
   };
+}
+
+async function loadDisplayedStatus(composition: RecruitosComposition) {
+  const statusResult = await composition.getStatus();
+  if (!statusResult.ok) {
+    return statusResult;
+  }
+  const runtime = getServerRuntime();
+  if (runtime === null) {
+    return statusResult;
+  }
+  return overlayPersistedRunStatus(statusResult.value, runtime.connection.database);
 }
 
 export async function handleRequest(
@@ -85,13 +100,14 @@ export async function handleRequest(
       compositionResult.error.message,
       appearance,
       urlPath,
-      503
+      503,
+      searchParams
     );
   }
   const composition: RecruitosComposition = compositionResult.value;
 
   if (urlPath === "/api/status") {
-    const statusResult = await composition.getStatus();
+    const statusResult = await loadDisplayedStatus(composition);
     return {
       statusCode: statusResult.ok ? 200 : 500,
       headers: jsonHeaders(),
@@ -99,18 +115,22 @@ export async function handleRequest(
     };
   }
 
+  const queueModelResult = await loadTriageQueueModel(composition);
+
   if (urlPath === "/api/candidates") {
-    const listResult = await composition.listCandidates({ limit: 50 });
     return {
-      statusCode: listResult.ok ? 200 : 500,
+      statusCode: queueModelResult.ok ? 200 : 500,
       headers: jsonHeaders(),
-      body: JSON.stringify(listResult.ok ? listResult.value : { error: listResult.error })
+      body: JSON.stringify(
+        queueModelResult.ok
+          ? queueModelResult.value.rows.map((row) => row.candidate)
+          : { error: queueModelResult.error }
+      )
     };
   }
 
-  const statusResult = await composition.getStatus();
+  const statusResult = await loadDisplayedStatus(composition);
   const status = statusResult.ok ? statusResult.value : undefined;
-  const queueModelResult = await loadTriageQueueModel(composition);
   const queueModel = queueModelResult.ok ? queueModelResult.value : undefined;
   const outstandingTaskCount = queueModel?.outstandingTaskCount;
   const packetCandidateId = queueModel?.firstCandidateId;
@@ -120,6 +140,7 @@ export async function handleRequest(
   const pageShell = {
     status,
     appearance,
+    searchParams,
     ...(outstandingTaskCount === undefined ? {} : { outstandingTaskCount }),
     ...(packetCandidateId === undefined ? {} : { packetCandidateId }),
     ...(reasonCodeCounts === undefined ? {} : { reasonCodeCounts }),
@@ -145,6 +166,7 @@ export async function handleRequest(
           sourcedCount: model.sourcedCount,
           scoredCount: model.scoredCount,
           outstandingTaskCount: model.outstandingTaskCount,
+          routedCandidateCount: model.routedCandidateCount,
           corpusSublabel: `${model.inboundCount} inbound · ${model.sourcedCount} sourced · seven-candidate proving corpus`
         })
       : "";
@@ -213,8 +235,7 @@ export async function handleRequest(
   }
 
   if (urlPath === "/review") {
-    const tasksResult = await composition.listResolutionTasks();
-    const tasks = tasksResult.ok ? tasksResult.value : [];
+    const tasks = queueModel?.allTasks ?? [];
 
     const taskRows = tasks.map((t) => [
       `        <tr data-testid="${TEST_IDS.TASK_ITEM(t.resolutionTaskId)}">`,

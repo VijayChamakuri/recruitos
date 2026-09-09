@@ -33,4 +33,23 @@ describe("URL appearance", () => {
       "/triage?theme=light&density=default"
     );
   });
+
+  it("preserves non-appearance query parameters when replacing theme", () => {
+    const href = hrefWithAppearance(
+      "/packet/demo-1",
+      { theme: "dark", density: "compact" },
+      new URLSearchParams("result=hist-9&theme=light&density=default")
+    );
+    expect(href).toContain("result=hist-9");
+    expect(href).toContain("theme=dark");
+    expect(href).toContain("density=compact");
+    expect(href).not.toContain("theme=light");
+  });
+
+  it("includes result on packet hrefs", () => {
+    const href = packetHref("cand-1", DEFAULT_APPEARANCE, "result-9");
+    expect(href).toContain("/packet/cand-1");
+    expect(href).toContain("result=result-9");
+    expect(href).toContain("theme=light");
+  });
 });

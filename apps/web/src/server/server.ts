@@ -1,5 +1,6 @@
 import http from "node:http";
 import { openExplicitDatabaseComposition, setServerComposition } from "./composition.js";
+import { serveWebFont } from "./fonts.js";
 import { handleRequest } from "./handlers.js";
 import { parseWebServerOptions } from "./options.js";
 
@@ -9,6 +10,12 @@ export function createWebServer(): http.Server {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "127.0.0.1"}`);
+      const font = serveWebFont(url.pathname);
+      if (font !== null) {
+        res.writeHead(font.statusCode, font.headers);
+        res.end(font.body);
+        return;
+      }
       const response = await handleRequest(url.pathname, url.searchParams);
 
       res.writeHead(response.statusCode, response.headers);
