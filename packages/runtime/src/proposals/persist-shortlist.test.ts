@@ -8,6 +8,7 @@ import {
   computeAggregateScore,
   computeConfidence,
   formatRational,
+  ok,
   type Result
 } from "@recruitos/core";
 import type BetterSqlite3 from "better-sqlite3";
@@ -235,7 +236,9 @@ function seedScoredResult(
     createdAt: CREATED_AT
   });
   if (!result.ok) return result;
-  return insertCandidateTriageResult(context, result.value);
+  const insertedResult = insertCandidateTriageResult(context, result.value);
+  if (!insertedResult.ok) return insertedResult;
+  return ok(undefined);
 }
 
 function sealSeededResult(
@@ -248,7 +251,9 @@ function sealSeededResult(
     createdAt: CREATED_AT
   });
   if (!prepared.ok) return prepared;
-  return insertCandidateResultSeal(context, prepared.value);
+  const insertedSeal = insertCandidateResultSeal(context, prepared.value);
+  if (!insertedSeal.ok) return insertedSeal;
+  return ok(undefined);
 }
 
 function persistArgs(
