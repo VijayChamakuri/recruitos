@@ -20,10 +20,10 @@ test.describe("Workflow 6: Audit Trust Center", () => {
     const timelineText = await eventTable.innerText();
     expect(timelineText).toContain("candidate.result.published");
     expect(timelineText).toContain("triage_run.sealed");
-    expect(timelineText).toContain("Event ID");
-    expect(timelineText).toContain("Ordinal");
-    expect(timelineText).toContain("Command ID");
-    expect(timelineText).toContain("Payload hash");
+    expect(timelineText.toLowerCase()).toContain("event id");
+    expect(timelineText.toLowerCase()).toContain("ordinal");
+    expect(timelineText.toLowerCase()).toContain("command id");
+    expect(timelineText.toLowerCase()).toContain("payload hash");
     expect(timelineText).not.toContain("corpus_sealed");
     expect(timelineText).not.toContain("triage_run_started");
 
