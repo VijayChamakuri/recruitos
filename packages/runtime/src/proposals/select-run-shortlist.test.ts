@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createRational, SHORTLIST_N, type Rational } from "@recruitos/core";
 
-import { selectRunShortlistProposals, type RunShortlistCandidate } from "./select-run-shortlist.js";
+import { selectRunShortlistProposals, shortlistProposalsForCandidate, type RunShortlistCandidate } from "./select-run-shortlist.js";
 
 function rational(value: number): Rational {
   const result = createRational(BigInt(value), 1n);
@@ -127,5 +127,16 @@ describe("selectRunShortlistProposals", () => {
       return;
     }
     expect(result.error.message).toContain("Invalid proposal settings");
+  });
+
+  it("wraps a selected proposal as a one-element persist list", () => {
+    const selected = unwrapSelected([scored("candidate_a", 90)]);
+    expect(shortlistProposalsForCandidate(selected, "candidate_a")).toEqual([
+      {
+        payload: { kind: "shortlist_inclusion" },
+        evidenceSpanIds: ["span_1"]
+      }
+    ]);
+    expect(shortlistProposalsForCandidate(selected, "candidate_missing")).toEqual([]);
   });
 });

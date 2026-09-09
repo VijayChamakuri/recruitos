@@ -74,3 +74,14 @@ export function selectRunShortlistProposals(args: {
   }
   return ok(selected);
 }
+
+export function shortlistProposalsForCandidate(
+  selected: ReadonlyMap<string, DerivedShortlistProposal>,
+  candidateId: string
+): readonly DerivedShortlistProposal[] {
+  const selectedProposal = selected.get(candidateId);
+  if (selectedProposal === undefined) {
+    return [];
+  }
+  return [selectedProposal];
+}

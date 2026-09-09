@@ -65,7 +65,7 @@ import {
   persistDerivedShortlistProposals,
   type DerivedShortlistProposal
 } from "../proposals/persist-shortlist.js";
-import { selectRunShortlistProposals } from "../proposals/select-run-shortlist.js";
+import { selectRunShortlistProposals, shortlistProposalsForCandidate } from "../proposals/select-run-shortlist.js";
 import { insertResolutionTask, prepareResolutionTask } from "../resolution/index.js";
 import * as candidateResults from "../results/index.js";
 import {
@@ -480,13 +480,10 @@ function deriveFinalizePlan(args: {
     workItemIdentities: args.snapshot.workItemIdentities,
     extractorVersion: args.snapshot.extractorVersion,
     policy: policyResult.value,
-    candidates: candidates.map((candidate) => {
-      const shortlist = selected.value.get(candidate.candidateId);
-      return {
-        ...candidate,
-        shortlistProposals: shortlist === undefined ? [] : [shortlist]
-      };
-    }),
+    candidates: candidates.map((candidate) => ({
+      ...candidate,
+      shortlistProposals: shortlistProposalsForCandidate(selected.value, candidate.candidateId)
+    })),
     importOrdinalByCandidate: args.snapshot.importOrdinalByCandidate,
     triageRunId: args.requestedTriageRunId ?? nextId(),
     kind: resolveOfficialTriageRunKind(args.snapshot.attempt.kind, candidates.length)
