@@ -14,20 +14,20 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | f3c1824 |
+| origin/main | e500633 |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Import (MERGED #54), extraction contract (MERGED #55), scheduler (MERGED #57), start-run (MERGED #59), bridge plus OQ-7 policy (MERGED #60), finalize (MERGED #61), scheduler `extraction_run` wiring (MERGED #62), T10.6 correction and re-extraction (MERGED #70 at f3c1824). |
-| Demo spine phase | `docs/plans/demo-spine-phase.md`. ACTIVE. `/plan-ceo-review` on main `f3c1824` returned conditionally ready: both product promises work as software, but `make demo` hid the correction loop and CLI packets hardcoded `tasks: []`. Narrow next slice: `make demo-stakeholder` prints both promises on one temporary database, and packets list real resolution tasks. No T12, no live LLM, no web serve, no corpus expansion. |
+| Demo spine phase | `docs/plans/demo-spine-phase.md`. ACTIVE. Stakeholder CLI sitting landed on main `e500633` (PR #74). T12 Phase 1 started: read-only web spine over the seven-candidate proving corpus. `make demo` stays Codex-owned. Cursor adds `make demo-web` only. No live LLM, no web mutations, no 140-candidate corpus. |
 
 ## Lanes and file locks
 
 | Agent | Branch prefix | Owns (may edit) | Must not touch |
 |---|---|---|---|
-| Cursor | `a/` or `cursor/` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, stores and core IDs for `triage_run` / `triage_attempt` tables | `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md`, `packages/runtime/src/adapters/` implementations, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, `packages/core/src/matching/**`, `packages/core/src/pipeline/**` |
+| Cursor | `a/` or `cursor/` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, stores and core IDs for `triage_run` / `triage_attempt` tables. Temporarily `apps/web/**` plus root `Makefile` `demo-web` only (user authorized T12 Phase 1 while Antigravity is out). | `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md`, `packages/runtime/src/adapters/` implementations, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, `packages/core/src/matching/**`, `packages/core/src/pipeline/**`, `apps/cli/**`, `make demo` / `make demo-stakeholder` |
 | Claude Code | `b/` | `packages/core/src/matching/**`, `packages/core/src/pipeline/**`, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, command use-cases, scheduler runtime (T5), `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, any migration |
 | Codex | `c/` | `apps/cli/**`, `tests/eval/**`, `make demo` / root Makefile (held for the demo-spine phase while Antigravity is out of usage). Also merge-gate `/review` on every PR. | `packages/runtime/src/db/**`, `packages/runtime/drizzle/**`, `packages/runtime/src/use-cases/**`, any migration |
-| Antigravity | `c/` | OUT OF USAGE. `apps/cli/**` + `tests/eval/**` + `make demo` lane held by Codex for the demo-spine phase. `apps/web/**` still Antigravity's when it returns. | `packages/runtime/src/db/**`, `packages/runtime/drizzle/**`, any migration |
+| Antigravity | `c/` | OUT OF USAGE. `apps/cli/**` + `tests/eval/**` + `make demo` lane held by Codex. `apps/web/**` temporarily reassigned to Cursor for T12 Phase 1 (user authorized). Web returns to Antigravity when it is back in usage. | `packages/runtime/src/db/**`, `packages/runtime/drizzle/**`, any migration |
 
 ## Migration chain (Cursor, serial, one PR each)
 
@@ -44,10 +44,10 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | `cursor/demo-stakeholder-c42c` | PR #72 review fixes. Packet reads every resolution-task page and loads selected result, current head, and tasks in one deferred SQLite snapshot. Stakeholder final counts go through installed `better-sqlite3`, not host `sqlite3`. `make demo` unchanged. No T12, no web serve, no live LLM, no schema migration, no correction-runtime redesign. Codex owns merge-gate review. Do not merge from this lane. | ready |
+| Cursor | `cursor/t12-readonly-web-spine` | T12 Phase 1 read-only web spine (PR #75). Review fixes landed, including font-display block for IBM Plex Mono and Source Serif 4. No correction mutations. Codex owns merge-gate review. Do not merge from this lane. | review |
 | Claude Code | `b/t10-seven-route-corpus` | Step 6 PR #69: seven-route proving corpus + `parseResumeFacts` threading structured employment facts into finalization so route 1 reaches `scored`. Codex merge-gate review returned two blockers plus one P2, all addressed in a follow-up commit: strict all-or-nothing parser behind an `EXPERIENCE (STRUCTURED)` sentinel (no partial parse can force a wrong rejection); parsed non-work-auth facts must cite their source document and the bridge confirms the grounding quote relocates before accepting (no ungrounded parsed-fact bypass); `DEMO_EXPECTED_OUTCOMES` pins exact score, confidence, and extractor span counts per route. Awaiting Codex re-review. Step 7 (T10.6 CLI-only correction slice) next. | review |
 | Codex | `c/demo-spine-cli` | PR #66 merged at 8f86884. Implementation lane returns to Claude for Steps 6 and 7. Codex owns corpus outcome validation, merge-gate `/review`, clean-checkout verification, and the eventual CEO review. | idle |
-| Antigravity | (out) | Out of usage. `apps/cli/**` + `tests/eval/**` + `make demo` lane held by Codex for the demo-spine phase. | out |
+| Antigravity | (out) | Out of usage. `apps/web/**` temporarily held by Cursor for T12 Phase 1. CLI / `make demo` stay with Codex. | out |
 
 ## Hard rules
 
@@ -161,3 +161,7 @@ your own rows plus the log.
 - 2026-09-09 Cursor: starting `cursor/demo-stakeholder-c42c` from main `f3c1824` for the narrow stakeholder demo. One new Makefile target, one temporary database, packet tasks from the resolution-task read model, one operator card, and focused CLI verification. `make demo` stays unchanged. No T12, no web serve, no live LLM, no corpus expansion, no schema migration, no correction-runtime redesign. Codex owns merge-gate review. Do not merge from this lane.
 - 2026-09-09 Cursor: stakeholder demo PR #72 ready on `cursor/demo-stakeholder-c42c`. `corepack pnpm check` 1534 tests plus 27 integration exit 0. `corepack pnpm test:coverage` All files 100 percent. `make demo` still prints route-1 `scored` and Class 1 passed. `make demo-stakeholder` prints route-4 `escalated` then `correction`/`scored` with `review_required`, original result still readable, 1 `triage_run` and 7 members. Diff-check clean. No em dashes in the branch diff. Codex owns merge-gate review. Do not merge from this lane.
 - 2026-09-09 Cursor: PR #72 Codex review fixes on `cursor/demo-stakeholder-c42c`. Packet pages every resolution-task keyset page and reads selected result, current head, and tasks in one deferred snapshot. Stakeholder counts use installed `better-sqlite3`, not host `sqlite3`. Focused CLI tests 59 passed. `make demo` still route-1 `scored` and Class 1 passed. `make demo-stakeholder` still prints both promises, `review_required`, 1 `triage_run` and 7 members. Diff-check clean. No em dashes in the branch diff. Codex owns re-review and merge. Do not merge from this lane.
+- 2026-09-09 Cursor: user authorized temporarily reassigning `apps/web/**` from unavailable Antigravity to Cursor. Starting T12 Phase 1 read-only web spine on `cursor/t12-readonly-web-spine` from origin/main `e500633`. `make demo` unchanged. No web mutations. Codex owns merge-gate review. Do not merge from this lane.
+- 2026-09-09 Cursor: T12 Phase 1 PR #75 ready for Codex merge-gate review. `make demo-web` serves the seven-candidate proving corpus. `/triage` and `/packet/:id` read the real runtime. Playwright workflows 1 and 2 pass. No web mutations. Do not merge from this lane.
+- 2026-09-09 Cursor: addressing PR #75 review on `cursor/t12-readonly-web-spine`. Web overlay reads persisted `triage_run` id and `seal_id`, drains candidate and resolution-task pages, computes routed percent from distinct candidates with outstanding tasks, preserves non-appearance query params on theme switch, self-hosts the four DESIGN.md faces, and formats arithmetic weights. No CLI or runtime edits. Do not merge from this lane.
+- 2026-09-09 Cursor: PR #75 P2 font-display. IBM Plex Mono and both Source Serif 4 faces use `font-display: block`; sans faces stay `swap`. Pinned in the tokens CSS test. No CLI or runtime edits. Do not merge from this lane.

@@ -21,7 +21,7 @@ export const triageFlowTestScaffold = {
     },
     {
       name: "navigates to candidate packet 3-pane view",
-      path: "/packet/candidate-1",
+      path: "/packet/:candidateId",
       assertions: [
         "pane arithmetic visible with 5-column terms table",
         "pane ledger visible with evidence cards",
@@ -30,7 +30,7 @@ export const triageFlowTestScaffold = {
     },
     {
       name: "renders refused span integrity badge for corrupt spans",
-      path: "/packet/candidate-1",
+      path: "/packet/:candidateId",
       assertions: [
         "span integrity failure rendered with class span-refused",
         "badge contains text: span integrity failed, highlight refused"

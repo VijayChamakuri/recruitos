@@ -33,9 +33,16 @@ export const TEST_IDS = {
   CANDIDATE_LINK: (id: string) => `candidate-link-${id}`,
   CANDIDATE_STATUS: (id: string) => `candidate-status-${id}`,
   EVIDENCE_STRIP: "evidence-strip",
+  SYNTHETIC_DATA_PILL: "synthetic-data-pill",
 
   // Workflow 2: Candidate Packet Review
   PACKET_VIEW: "candidate-packet-view",
+  PACKET_NOT_FOUND: "packet-not-found",
+  RETURN_TO_QUEUE: "return-to-queue",
+  PACKET_INSPECTING_LABEL: "packet-inspecting-label",
+  PACKET_TASKS: "packet-tasks",
+  PACKET_TASK_ITEM: (id: string) => `packet-task-${id}`,
+  CONFIDENCE_INPUTS: "confidence-inputs",
   PANE_ARITHMETIC: "pane-arithmetic",
   PANE_LEDGER: "pane-ledger",
   PANE_SOURCE: "pane-source",

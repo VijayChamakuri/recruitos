@@ -1,64 +1,74 @@
 import { expect, test } from "./harness.js";
 import { ROUTES, TEST_IDS } from "../../apps/web/src/testids.js";
 
+const ROUTE_1_SOURCE_KEY = "demo/route-1-scored";
+const ROUTE_4_SOURCE_KEY = "demo/route-4-reviewable-failure";
+
 /**
  * Required browser workflow 2: Candidate Packet
- * - open the pinned tier-one candidate
- * - assert normalized source text, supporting and contradicting spans,
- *   gaps, score arithmetic, confidence terms, and named routing reasons
- * - verify every highlight matches its stored UTF-16 slice
- * - verify markup payloads render as text
+ * Opens route 1 (scored) and route 4 (escalated / assessment_unavailable)
+ * from the seven-candidate proving corpus.
  */
 test.describe("Workflow 2: Candidate Packet", () => {
-  test.fixme(
-    "inspects pinned tier-one candidate packet with exact span highlights and arithmetic",
-    async ({ page }) => {
-      // 1. Navigate to pinned tier-one candidate packet
-      await page.goto(ROUTES.PACKET("candidate-1"));
+  test("opens route 1 and route 4 packets from the queue and rejects unknown ids", async ({
+    page
+  }) => {
+    await page.goto(`${ROUTES.TRIAGE}?theme=light&density=default`);
+    await expect(page.getByTestId(TEST_IDS.TRIAGE_QUEUE)).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.SYNTHETIC_DATA_PILL).first()).toHaveText(
+      "SYNTHETIC DATA"
+    );
 
-      // 2. Assert normalized text rendered safely without HTML injection
-      const resumeViewer = page.getByTestId(TEST_IDS.RESUME_VIEWER);
-      await expect(resumeViewer).toBeVisible();
-      const rawText = await resumeViewer.innerText();
-      // Markup payloads must render as literal text, never executed
-      expect(rawText).not.toContain("<script>alert(");
-      expect(rawText.length).toBeGreaterThan(0);
+    const route1Link = page.getByRole("link", { name: ROUTE_1_SOURCE_KEY });
+    await expect(route1Link).toBeVisible();
+    await route1Link.click();
 
-      // 3. Assert supporting and contradicting evidence spans with exact slice matches
-      const supportingHighlights = page.locator("[data-evidence-polarity='supporting']");
-      await expect(supportingHighlights.first()).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.PACKET_VIEW)).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.PACKET_INSPECTING_LABEL)).toHaveText(
+      "Inspecting: current head"
+    );
+    await expect(page.getByTestId(TEST_IDS.SYNTHETIC_DATA_PILL).first()).toHaveText(
+      "SYNTHETIC DATA"
+    );
+    await expect(page.getByTestId(TEST_IDS.SCORE_CARD)).toContainText("467/6");
+    await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).toContainText("8.3%");
+    await expect(page.getByTestId(TEST_IDS.ARITHMETIC_TABLE)).not.toContainText("8.333333333333332");
+    await expect(page.getByTestId(TEST_IDS.PANE_SOURCE)).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.RESUME_VIEWER)).toBeVisible();
+    const header = page.locator("main.work > div").first();
+    await expect(header).not.toContainText("/ 100");
+    const sourceText = await page.getByTestId(TEST_IDS.RESUME_VIEWER).innerText();
+    expect(sourceText).not.toContain("<script>alert(");
+    expect(sourceText.length).toBeGreaterThan(0);
+    const highlights = page.getByTestId(TEST_IDS.SPAN_HIGHLIGHT);
+    await expect(highlights.first()).toBeVisible();
 
-      const contradictingHighlights = page.locator("[data-evidence-polarity='contradicting']");
-      await expect(contradictingHighlights.first()).toBeVisible();
+    await page.getByTestId(TEST_IDS.RETURN_TO_QUEUE).click();
+    await expect(page.getByTestId(TEST_IDS.TRIAGE_QUEUE)).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.CANDIDATE_ROW)).toHaveCount(7);
 
-      // Verify every highlight matches its stored UTF-16 slice in source text
-      const highlightCount = await supportingHighlights.count();
-      for (let i = 0; i < highlightCount; i++) {
-        const highlight = supportingHighlights.nth(i);
-        const text = await highlight.innerText();
-        expect(text.length).toBeGreaterThan(0);
-        expect(rawText).toContain(text);
-      }
+    const route4Link = page.getByRole("link", { name: ROUTE_4_SOURCE_KEY });
+    await expect(route4Link).toBeVisible();
+    await route4Link.click();
 
-      // 4. Assert evidence gap cards for dimensions lacking located evidence
-      const gapCards = page.locator("[data-gap-dimension]");
-      await expect(gapCards.first()).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.PACKET_VIEW)).toBeVisible();
+    await expect(page.locator("main")).toContainText("escalated");
+    await expect(page.getByTestId(TEST_IDS.ROUTING_REASON_TAG("assessment_unavailable"))).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.PACKET_TASKS)).toContainText("open");
+    await expect(page.getByTestId(TEST_IDS.SCORE_CARD)).toContainText("unavailable");
 
-      // 5. Assert 5-column score decomposition arithmetic and confidence interval
-      const scoreCard = page.getByTestId(TEST_IDS.SCORE_CARD);
-      await expect(scoreCard).toBeVisible();
-      const scoreText = await scoreCard.innerText();
-      expect(scoreText).toContain("Score:");
-      expect(scoreText).toContain("Confidence:");
+    await page.goto(`${ROUTES.PACKET("does-not-exist")}?theme=light&density=default`);
+    await expect(page.getByTestId(TEST_IDS.PACKET_NOT_FOUND)).toBeVisible();
+    await expect(page.getByTestId(TEST_IDS.PACKET_NOT_FOUND)).toContainText(
+      "Candidate Packet Not Found"
+    );
 
-      const arithTable = page.getByTestId(TEST_IDS.ARITHMETIC_TABLE);
-      await expect(arithTable).toBeVisible();
-
-      // 6. Assert named routing reasons
-      const routingReasons = page.getByTestId(TEST_IDS.ROUTING_REASONS);
-      await expect(routingReasons).toBeVisible();
-      const reasonsText = await routingReasons.innerText();
-      expect(reasonsText).toBeTruthy();
-    }
-  );
+    await page.goto(
+      `${ROUTES.PACKET("does-not-exist")}?theme=light&density=default&result=hist-result-1`
+    );
+    const themeLink = page.locator("a", { hasText: "theme: light" });
+    await expect(themeLink).toHaveAttribute("href", /result=hist-result-1/);
+    await expect(themeLink).toHaveAttribute("href", /theme=dark/);
+  });
 });

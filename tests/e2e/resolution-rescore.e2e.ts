@@ -3,6 +3,7 @@ import { ROUTES, TEST_IDS } from "../../apps/web/src/testids.js";
 
 /**
  * Required browser workflow 3: Resolution Rescore
+ * Deferred in T12 Phase 1. Seven-candidate proving corpus when activated.
  * - supply evidence and level for a pinned missing-evidence task
  * - assert score and confidence change in a superseding result
  * - keep the original result and evidence inspectable

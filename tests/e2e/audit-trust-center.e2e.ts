@@ -3,6 +3,7 @@ import { ROUTES, TEST_IDS } from "../../apps/web/src/testids.js";
 
 /**
  * Required browser workflow 6: Audit Trust Center
+ * Deferred in T12 Phase 1.
  * - trace extraction through score, route, resolution, supersession,
  *   proposal, and human decision
  * - assert event ordering, actor names, at least three visible limitations,

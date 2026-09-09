@@ -1,15 +1,15 @@
-import type {
-  CandidateSummary,
-  ProposalSummary,
-  ResolutionTaskSummary
-} from "@recruitos/cli";
+import type { RecruitosComposition } from "@recruitos/cli";
+import { parseAppearance, packetHref, type Appearance } from "../appearance.js";
 import { renderCandidatePacketView } from "../components/candidate-packet.js";
+import { renderEvidenceCoverageStrip } from "../components/evidence-coverage-strip.js";
 import { renderInstrumentBand } from "../components/instrument-band.js";
 import { escapeHtml } from "../components/safe-text.js";
 import { TEST_IDS } from "../testids.js";
 import { TOKENS_CSS } from "../tokens.js";
-import { getServerComposition } from "./composition.js";
+import { getServerComposition, getServerRuntime } from "./composition.js";
+import { overlayPersistedRunStatus } from "./persisted-run.js";
 import { renderPage } from "./ssr.js";
+import { loadTriageQueueModel } from "./triage-queue.js";
 
 export type HttpResponse = Readonly<{
   statusCode: number;
@@ -17,15 +17,67 @@ export type HttpResponse = Readonly<{
   body: string;
 }>;
 
+function htmlHeaders(): Record<string, string> {
+  return { "Content-Type": "text/html; charset=utf-8" };
+}
+
+function jsonHeaders(): Record<string, string> {
+  return { "Content-Type": "application/json" };
+}
+
+function rowClassForStatus(status: string): string {
+  if (status === "escalated") return "row-escalated";
+  if (status === "rejected_hard_requirement") return "rejected";
+  return "";
+}
+
+function typedErrorPage(
+  title: string,
+  message: string,
+  appearance: Appearance,
+  currentPath: string,
+  statusCode: number,
+  searchParams?: URLSearchParams
+): HttpResponse {
+  const contentHtml = [
+    `      <div style="padding:40px;text-align:center" data-testid="typed-error">`,
+    `        <h2 style="color:var(--danger)">${escapeHtml(title)}</h2>`,
+    `        <p class="muted">${escapeHtml(message)}</p>`,
+    `        <p><a href="/triage?${escapeHtml(`theme=${appearance.theme}&density=${appearance.density}`)}" class="link">Return to Triage Queue</a></p>`,
+    `      </div>`
+  ].join("\n");
+  return {
+    statusCode,
+    headers: htmlHeaders(),
+    body: renderPage({
+      title,
+      activeDestination: "triage",
+      appearance,
+      currentPath,
+      contentHtml,
+      ...(searchParams === undefined ? {} : { searchParams })
+    })
+  };
+}
+
+async function loadDisplayedStatus(composition: RecruitosComposition) {
+  const statusResult = await composition.getStatus();
+  if (!statusResult.ok) {
+    return statusResult;
+  }
+  const runtime = getServerRuntime();
+  if (runtime === null) {
+    return statusResult;
+  }
+  return overlayPersistedRunStatus(statusResult.value, runtime.connection.database);
+}
+
 export async function handleRequest(
   urlPath: string,
   searchParams: URLSearchParams
 ): Promise<HttpResponse> {
-  const theme = (searchParams.get("theme") as "light" | "dark" | null) ?? "light";
-  const density = (searchParams.get("density") as "compact" | "default" | "comfortable" | null) ?? "default";
-  const composition = getServerComposition();
+  const appearance = parseAppearance(searchParams);
 
-  // Route: tokens.css
   if (urlPath === "/tokens.css") {
     return {
       statusCode: 200,
@@ -34,60 +86,111 @@ export async function handleRequest(
     };
   }
 
-  // API Route: /api/status
+  const compositionResult = getServerComposition();
+  if (!compositionResult.ok) {
+    if (urlPath.startsWith("/api/")) {
+      return {
+        statusCode: 503,
+        headers: jsonHeaders(),
+        body: JSON.stringify({ error: compositionResult.error })
+      };
+    }
+    return typedErrorPage(
+      "Database unavailable",
+      compositionResult.error.message,
+      appearance,
+      urlPath,
+      503,
+      searchParams
+    );
+  }
+  const composition: RecruitosComposition = compositionResult.value;
+
   if (urlPath === "/api/status") {
-    const statusResult = await composition.getStatus();
+    const statusResult = await loadDisplayedStatus(composition);
     return {
       statusCode: statusResult.ok ? 200 : 500,
-      headers: { "Content-Type": "application/json" },
+      headers: jsonHeaders(),
       body: JSON.stringify(statusResult.ok ? statusResult.value : { error: statusResult.error })
     };
   }
 
-  // API Route: /api/candidates
+  const queueModelResult = await loadTriageQueueModel(composition);
+
   if (urlPath === "/api/candidates") {
-    const listResult = await composition.listCandidates();
     return {
-      statusCode: listResult.ok ? 200 : 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(listResult.ok ? listResult.value : { error: listResult.error })
+      statusCode: queueModelResult.ok ? 200 : 500,
+      headers: jsonHeaders(),
+      body: JSON.stringify(
+        queueModelResult.ok
+          ? queueModelResult.value.rows.map((row) => row.candidate)
+          : { error: queueModelResult.error }
+      )
     };
   }
 
-  // Common status for page shell
-  const statusResult = await composition.getStatus();
+  const statusResult = await loadDisplayedStatus(composition);
   const status = statusResult.ok ? statusResult.value : undefined;
+  const queueModel = queueModelResult.ok ? queueModelResult.value : undefined;
+  const outstandingTaskCount = queueModel?.outstandingTaskCount;
+  const packetCandidateId = queueModel?.firstCandidateId;
+  const reasonCodeCounts = queueModel?.reasonCodeCounts;
+  const roleTitle = queueModel?.rows[0]?.candidate.roleTitle;
 
-  // Route 1: / and /triage (Triage Queue Command Center)
+  const pageShell = {
+    status,
+    appearance,
+    searchParams,
+    ...(outstandingTaskCount === undefined ? {} : { outstandingTaskCount }),
+    ...(packetCandidateId === undefined ? {} : { packetCandidateId }),
+    ...(reasonCodeCounts === undefined ? {} : { reasonCodeCounts }),
+    ...(roleTitle === undefined ? {} : { roleTitle })
+  };
+
   if (urlPath === "/" || urlPath === "/triage") {
-    const candidatesResult = await composition.listCandidates();
-    const candidates = candidatesResult.ok ? candidatesResult.value : [];
+    if (!queueModelResult.ok) {
+      return typedErrorPage(
+        "Triage queue unavailable",
+        queueModelResult.error.message,
+        appearance,
+        urlPath,
+        500
+      );
+    }
+    const model = queueModelResult.value;
+    const instrumentBandHtml = status
+      ? renderInstrumentBand({
+          status,
+          appearance,
+          inboundCount: model.inboundCount,
+          sourcedCount: model.sourcedCount,
+          scoredCount: model.scoredCount,
+          outstandingTaskCount: model.outstandingTaskCount,
+          routedCandidateCount: model.routedCandidateCount,
+          corpusSublabel: `${model.inboundCount} inbound · ${model.sourcedCount} sourced · seven-candidate proving corpus`
+        })
+      : "";
 
-    const instrumentBandHtml = status ? renderInstrumentBand({ status }) : "";
-
-    const candidateRows = candidates.map((c: CandidateSummary, idx: number) => {
-      const isEscalated = c.status === "escalated";
-      const isRejected = c.status === "rejected";
-      const rowClass = isEscalated ? "row-escalated" : isRejected ? "rejected" : "";
-
-      // Evidence strip mockup: 6 ticks
-      const stripHtml = isEscalated
-        ? `<span class="strip" data-testid="${TEST_IDS.EVIDENCE_STRIP}"><i class="sup"></i><i class="con"></i><i class="gap"></i><i class="sup"></i><i class="gap"></i><i class="sup"></i></span>`
-        : `<span class="strip" data-testid="${TEST_IDS.EVIDENCE_STRIP}"><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i><i class="sup"></i></span>`;
-
+    const candidateRows = model.rows.map((row, idx) => {
+      const c = row.candidate;
+      const isRejected = c.status === "rejected_hard_requirement";
+      const rowClass = rowClassForStatus(c.status);
+      const stripHtml = renderEvidenceCoverageStrip(row.coverage);
       const reasonsText = c.reasons.length > 0 ? c.reasons.join(", ") : "n/a";
+      const packetUrl = packetHref(c.candidateId, appearance);
+      const ordinal = String(idx + 1).padStart(3, "0");
 
       return [
         `        <tr class="${rowClass}" data-testid="${TEST_IDS.CANDIDATE_ROW}">`,
-        `          <td class="num">00${idx + 1}</td>`,
-        `          <td><a href="/packet/${escapeHtml(c.candidateId)}" class="link" data-testid="${TEST_IDS.CANDIDATE_LINK(c.candidateId)}" style="color:inherit;text-decoration:underline">${escapeHtml(c.sourceKey)}</a></td>`,
+        `          <td class="num">${ordinal}</td>`,
+        `          <td><a href="${escapeHtml(packetUrl)}" class="link" data-testid="${TEST_IDS.CANDIDATE_LINK(c.candidateId)}" style="color:inherit;text-decoration:underline">${escapeHtml(c.sourceKey)}</a></td>`,
         `          <td class="mono">${escapeHtml(c.channel === "inbound" ? "in" : "src")}</td>`,
         `          <td>${stripHtml}</td>`,
-        `          <td class="num">${c.score !== null ? c.score.toFixed(1) : '<span class="faint">n/a</span>'}</td>`,
-        `          <td class="num">${c.confidence !== null ? c.confidence.toFixed(2) : '<span class="faint">n/a</span>'}</td>`,
+        `          <td class="num">${row.scoreLabel === "n/a" ? '<span class="faint">n/a</span>' : escapeHtml(row.scoreLabel)}</td>`,
+        `          <td class="num">${row.confidenceLabel === "n/a" ? '<span class="faint">n/a</span>' : escapeHtml(row.confidenceLabel)}</td>`,
         `          <td><span class="status${isRejected ? " rejected" : ""}" data-testid="${TEST_IDS.CANDIDATE_STATUS(c.candidateId)}">${escapeHtml(c.status)}</span></td>`,
         `          <td class="reason">${escapeHtml(reasonsText)}</td>`,
-        `          <td class="num">${c.tasksCount}</td>`,
+        `          <td class="num">${row.tasksCount}</td>`,
         `          <td class="mono faint" style="font-size:12px">${c.sealed ? "sealed" : "mutable"}</td>`,
         `        </tr>`
       ].join("\n");
@@ -97,10 +200,12 @@ export async function handleRequest(
       instrumentBandHtml,
       `      <div style="display:flex;align-items:baseline;gap:16px;padding:8px 16px;border-bottom:1px solid var(--hairline)">`,
       `        <span style="font-size:19px;line-height:26px;font-weight:600" data-testid="${TEST_IDS.TRIAGE_HEADING}">Triage Queue</span>`,
+      `        <span class="mono faint" style="font-size:12px">${model.rows.length} candidates · ${model.scoredCount} scored · ${model.escalatedCount} escalated · ${model.rejectedHardRequirementCount} rejected_hard_requirement</span>`,
       `        <span style="flex:1"></span>`,
       `        <span class="strip"><i class="sup"></i></span><span class="mono faint" style="font-size:11px">supporting</span>`,
       `        <span class="strip"><i class="con"></i></span><span class="mono faint" style="font-size:11px">contradicting</span>`,
       `        <span class="strip"><i class="gap"></i></span><span class="mono faint" style="font-size:11px">evidence gap</span>`,
+      `        <span class="strip"><i class="na"></i></span><span class="mono faint" style="font-size:11px">unavailable</span>`,
       `        <span class="mono faint" style="font-size:11px">&middot; rubric order</span>`,
       `      </div>`,
       `      <table class="q" data-testid="${TEST_IDS.TRIAGE_QUEUE}">`,
@@ -118,80 +223,36 @@ export async function handleRequest(
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+      headers: htmlHeaders(),
       body: renderPage({
+        ...pageShell,
         title: "Triage Queue",
         activeDestination: "triage",
-        status,
-        theme,
-        density,
+        currentPath: "/triage",
         contentHtml
       })
     };
   }
 
-  // Route 2: /review (Resolution Queue & Stage Proposals)
   if (urlPath === "/review") {
-    const tasksResult = await composition.listResolutionTasks();
-    const proposalsResult = await composition.listProposals();
+    const tasks = queueModel?.allTasks ?? [];
 
-    const tasks = tasksResult.ok ? tasksResult.value : [];
-    const proposals = proposalsResult.ok ? proposalsResult.value : [];
-
-    const taskRows = tasks.map((t: ResolutionTaskSummary) => [
+    const taskRows = tasks.map((t) => [
       `        <tr data-testid="${TEST_IDS.TASK_ITEM(t.resolutionTaskId)}">`,
       `          <td class="mono"><strong>${escapeHtml(t.resolutionTaskId)}</strong></td>`,
-      `          <td><a href="/packet/${escapeHtml(t.candidateId)}" class="link">${escapeHtml(t.candidateId)}</a></td>`,
+      `          <td><a href="${escapeHtml(packetHref(t.candidateId, appearance))}" class="link">${escapeHtml(t.candidateId)}</a></td>`,
       `          <td class="mono">${escapeHtml(t.reasonCode)}</td>`,
       `          <td><span class="status" data-testid="${TEST_IDS.TASK_STATUS(t.resolutionTaskId)}">${escapeHtml(t.status)}</span></td>`,
       `          <td class="num">${t.taskOrdinal}</td>`,
       `          <td class="num">${t.version}</td>`,
-      `          <td class="mono faint">`,
-      `            <form class="res-form" data-testid="${TEST_IDS.RESOLUTION_FORM}" style="display:inline">`,
-      `              <input type="text" data-testid="${TEST_IDS.EVIDENCE_INPUT}" style="display:none" value="Sample evidence" />`,
-      `              <select data-testid="${TEST_IDS.LEVEL_SELECT}" style="display:none"><option value="strong">strong</option></select>`,
-      `              <button type="button" class="btn" data-testid="${TEST_IDS.SUBMIT_RESOLUTION_BTN}">Resolve</button>`,
-      `            </form>`,
-      `          </td>`,
-      `        </tr>`
-    ].join("\n"));
-
-    const proposalRows = proposals.map((p: ProposalSummary) => [
-      `        <tr data-testid="${TEST_IDS.PROPOSAL_ITEM(p.proposalId)}">`,
-      `          <td class="mono"><strong>${escapeHtml(p.proposalId)}</strong></td>`,
-      `          <td><a href="/packet/${escapeHtml(p.candidateId)}" class="link">${escapeHtml(p.candidateId)}</a></td>`,
-      `          <td class="mono">${escapeHtml(p.kind)}</td>`,
-      `          <td><span class="status" data-testid="${TEST_IDS.PROPOSAL_STATUS(p.proposalId)}">${escapeHtml(p.status)}</span></td>`,
-      `          <td class="num">${p.version}</td>`,
-      `          <td class="muted">`,
-      `            ${escapeHtml(p.proposedChange)}`,
-      `            <div style="margin-top:6px;display:flex;gap:6px">`,
-      `              <button type="button" class="btn" data-testid="${TEST_IDS.PROPOSAL_APPROVE_BTN(p.proposalId)}">Approve</button>`,
-      `              <button type="button" class="btn" data-testid="${TEST_IDS.PROPOSAL_EDIT_BTN(p.proposalId)}">Edit</button>`,
-      `              <button type="button" class="btn" data-testid="${TEST_IDS.PROPOSAL_REJECT_BTN(p.proposalId)}">Reject</button>`,
-      `            </div>`,
-      `            <div class="edit-box" style="display:none;margin-top:6px">`,
-      `              <input type="text" name="proposalComment" data-testid="${TEST_IDS.PROPOSAL_COMMENT_INPUT}" />`,
-      `              <button type="button" data-testid="${TEST_IDS.CONFIRM_EDIT_BTN}">Confirm Edit</button>`,
-      `            </div>`,
-      `          </td>`,
+      `          <td class="mono faint">Read-only in this phase</td>`,
       `        </tr>`
     ].join("\n"));
 
     const contentHtml = [
       `      <div style="padding:16px;border-bottom:1px solid var(--hairline);background:var(--surface)">`,
-      `        <div style="display:flex;align-items:center;justify-content:space-between">`,
-      `          <div>`,
-      `            <h2 style="margin:0 0 4px;font-size:20px">Human Resolution Queue</h2>`,
-      `            <div class="muted" style="font-size:13px">Candidate tasks requiring reviewer intervention or override</div>`,
-      `          </div>`,
-      `          <div style="display:flex;align-items:center;gap:8px">`,
-      `            <span class="mono faint" style="font-size:12px">Outbound mutations:</span>`,
-      `            <span class="badge mono" data-testid="${TEST_IDS.OUTBOUND_COUNTER}">0</span>`,
-      `          </div>`,
-      `        </div>`,
-      `        <div data-testid="${TEST_IDS.CONFLICT_ERROR_BANNER}" style="display:none" class="banner-danger">Conflict: stale head version detected. Refresh required.</div>`,
-      `        <div data-testid="${TEST_IDS.TOAST_SUCCESS}" style="display:none" class="toast-success">Action committed successfully.</div>`,
+      `        <h2 style="margin:0 0 4px;font-size:20px">Human Resolution Queue</h2>`,
+      `        <div class="muted" style="font-size:13px">Read-only listing. Correction mutations are deferred.</div>`,
       `      </div>`,
       `      <div style="padding:16px">`,
       `        <div data-testid="resolution-queue">`,
@@ -206,198 +267,165 @@ export async function handleRequest(
       `          </table>`,
       `        </div>`,
       `        <div data-testid="proposal-queue" style="margin-top:24px">`,
-      `          <h3 style="margin:0 0 8px;font-size:15px">Stage Proposals (${proposals.length})</h3>`,
-      `          <div data-testid="${TEST_IDS.VERSION_HISTORY}" class="muted faint" style="font-size:12px;margin-bottom:8px">Original proposal retained in immutable ledger</div>`,
-      `          <table class="q">`,
-      `            <thead><tr>`,
-      `              <th>Proposal ID</th><th>Candidate</th><th>Kind</th><th>Status</th><th style="text-align:right">Version</th><th>Proposed Change</th>`,
-      `            </tr></thead>`,
-      `            <tbody>`,
-      proposalRows.length > 0 ? proposalRows.join("\n") : `<tr><td colspan="6" class="muted">(no pending proposals)</td></tr>`,
-      `            </tbody>`,
-      `          </table>`,
-      `        </div>`,
-      `        <div data-testid="${TEST_IDS.BIAS_AUDIT_SUMMARY}" class="panel" style="padding:16px;margin-top:24px">`,
-      `          <h3 style="margin:0 0 8px;font-size:15px">Synthetic Bias Audit Demonstration (Class 3)</h3>`,
-      `          <div data-testid="${TEST_IDS.SYNTHETIC_DATA_DISCLAIMER}" class="mono faint" style="font-size:12px;margin-bottom:12px">`,
-      `            Notice: This is a synthetic data demonstration. Synthetic data and insufficient sample size prevent real fairness conclusions.`,
-      `          </div>`,
-      `          <div style="display:flex;gap:24px">`,
-      `            <div data-testid="${TEST_IDS.PROPOSED_BIAS_CUTS}" style="flex:1">`,
-      `              <div class="caps">Proposed Bias Cuts</div>`,
-      `              <div class="mono" style="font-size:12px;margin-top:4px">Reference group: Inbound engineering (1.00 ratio)</div>`,
-      `            </div>`,
-      `            <div data-testid="${TEST_IDS.APPROVED_BIAS_CUTS}" style="flex:1">`,
-      `              <div class="caps">Approved Bias Cuts</div>`,
-      `              <div class="mono" style="font-size:12px;margin-top:4px">Human-approved selections side-by-side</div>`,
-      `            </div>`,
-      `          </div>`,
+      `          <h3 style="margin:0 0 8px;font-size:15px">Stage Proposals</h3>`,
+      `          <p class="muted" style="font-size:13px">Proposal review is deferred. This page does not render stub proposal records as if they were real.</p>`,
       `        </div>`,
       `      </div>`
     ].join("\n");
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+      headers: htmlHeaders(),
       body: renderPage({
+        ...pageShell,
         title: "Resolution Queue",
         activeDestination: "review",
-        status,
-        theme,
-        density,
+        currentPath: "/review",
         contentHtml
       })
     };
   }
 
-  // Route 3: /packet and /packet/:id (Candidate Review Packet)
   if (urlPath === "/packet" || urlPath.startsWith("/packet/")) {
-    let candidateId = "candidate-1";
-    if (urlPath.startsWith("/packet/") && urlPath.length > "/packet/".length) {
-      candidateId = decodeURIComponent(urlPath.slice("/packet/".length));
+    if (urlPath === "/packet" || urlPath === "/packet/") {
+      const contentHtml = [
+        `      <div style="padding:40px;text-align:center" data-testid="${TEST_IDS.PACKET_NOT_FOUND}">`,
+        `        <h2 style="color:var(--danger)">Candidate Packet Not Found</h2>`,
+        `        <p class="muted">No candidate id was supplied.</p>`,
+        `        <p><a href="${escapeHtml(`/triage?theme=${appearance.theme}&density=${appearance.density}`)}" class="link" data-testid="${TEST_IDS.RETURN_TO_QUEUE}">Return to Triage Queue</a></p>`,
+        `      </div>`
+      ].join("\n");
+      return {
+        statusCode: 404,
+        headers: htmlHeaders(),
+        body: renderPage({
+          ...pageShell,
+          title: "Packet Not Found",
+          activeDestination: "packet",
+          currentPath: urlPath,
+          contentHtml
+        })
+      };
     }
 
-    const packetResult = await composition.getCandidatePacket(candidateId);
+    const candidateId = decodeURIComponent(urlPath.slice("/packet/".length));
+    const resultId = searchParams.get("result") ?? undefined;
+    const packetResult = await composition.getCandidatePacket(
+      candidateId,
+      resultId === undefined ? undefined : { resultId }
+    );
 
     if (!packetResult.ok) {
       const contentHtml = [
-        `      <div style="padding:40px;text-align:center">`,
+        `      <div style="padding:40px;text-align:center" data-testid="${TEST_IDS.PACKET_NOT_FOUND}">`,
         `        <h2 style="color:var(--danger)">Candidate Packet Not Found</h2>`,
         `        <p class="muted">No candidate evaluation packet matching ID: ${escapeHtml(candidateId)}</p>`,
-        `        <p><a href="/triage" class="link">Return to Triage Queue</a></p>`,
+        `        <p><a href="${escapeHtml(`/triage?theme=${appearance.theme}&density=${appearance.density}`)}" class="link" data-testid="${TEST_IDS.RETURN_TO_QUEUE}">Return to Triage Queue</a></p>`,
         `      </div>`
       ].join("\n");
 
       return {
         statusCode: 404,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: htmlHeaders(),
         body: renderPage({
+          ...pageShell,
           title: "Packet Not Found",
           activeDestination: "packet",
-          status,
-          theme,
-          density,
+          currentPath: urlPath,
           contentHtml
         })
       };
     }
 
     const packet = packetResult.value;
-    const contentHtml = renderCandidatePacketView({ packet });
+    const contentHtml = renderCandidatePacketView({ packet, appearance });
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+      headers: htmlHeaders(),
       body: renderPage({
+        ...pageShell,
         title: `Packet: ${packet.candidateId}`,
         activeDestination: "packet",
-        status,
-        theme,
-        density,
+        currentPath: urlPath,
+        packetCandidateId: packet.candidateId,
+        roleTitle: packet.roleTitle,
         contentHtml
       })
     };
   }
 
-  // Route 4: /runs (Audit Timeline & Runs)
   if (urlPath === "/runs") {
-    const auditResult = await composition.listAuditEvents({ limit: 50 });
-    const auditEvents = auditResult.ok ? auditResult.value : [];
-
-    const eventRows = auditEvents.map((e) => [
-      `        <tr data-testid="${TEST_IDS.AUDIT_EVENT_ROW}">`,
-      `          <td class="mono" data-testid="${TEST_IDS.AUDIT_EVENT_ITEM(e.auditEventId)}"><strong>${escapeHtml(e.auditEventId)}</strong></td>`,
-      `          <td class="mono">${escapeHtml(e.eventName)}</td>`,
-      `          <td class="mono">${escapeHtml(e.actorId)}</td>`,
-      `          <td class="mono">${new Date(e.occurredAt).toISOString()}</td>`,
-      `          <td class="mono faint">${escapeHtml(e.payloadHash.slice(0, 16))}...</td>`,
-      `        </tr>`
-    ].join("\n"));
-
     const contentHtml = [
       `      <div style="padding:16px;border-bottom:1px solid var(--hairline);background:var(--surface)">`,
       `        <h2 style="margin:0 0 4px;font-size:20px">Audit Timeline &amp; Run History</h2>`,
-      `        <div class="muted" style="font-size:13px">Verifiable ledger of automated triage runs and actor decisions</div>`,
+      `        <div class="muted" style="font-size:13px">The CLI audit adapter is not wired to the runtime ledger. This read-only slice does not display stub events as real history.</div>`,
       `      </div>`,
       `      <div style="padding:16px">`,
-      `        <table class="q" data-testid="${TEST_IDS.AUDIT_EVENT_TABLE}">`,
-      `          <thead><tr>`,
-      `            <th>Event ID</th><th>Event Name</th><th>Actor ID</th><th>Timestamp</th><th>Payload Hash</th>`,
-      `          </tr></thead>`,
-      `          <tbody>`,
-      eventRows.length > 0 ? eventRows.join("\n") : `<tr><td colspan="5" class="muted">(no audit events recorded)</td></tr>`,
-      `          </tbody>`,
-      `        </table>`,
+      `        <p class="muted" data-testid="${TEST_IDS.AUDIT_EVENT_TABLE}">Audit timeline is deferred with the Trust Center.</p>`,
       `      </div>`
     ].join("\n");
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+      headers: htmlHeaders(),
       body: renderPage({
+        ...pageShell,
         title: "Audit Timeline",
         activeDestination: "runs",
-        status,
-        theme,
-        density,
+        currentPath: "/runs",
         contentHtml
       })
     };
   }
 
-  // Route 5: /status (System & Corpus Seal Status)
   if (urlPath === "/status") {
     const contentHtml = [
       `      <div style="padding:16px;border-bottom:1px solid var(--hairline);background:var(--surface)">`,
       `        <h2 style="margin:0 0 4px;font-size:20px">System Status &amp; Trust Center</h2>`,
-      `        <div class="muted" style="font-size:13px">Database integrity, schema migrations, and corpus immutability</div>`,
+      `        <div class="muted" style="font-size:13px">Database path and seal flags from runtime status. Limitation catalog copy is deferred.</div>`,
       `      </div>`,
       `      <div style="padding:24px;max-width:800px">`,
       `        <div class="panel" data-testid="${TEST_IDS.CORPUS_SEAL_STATUS}" style="padding:16px;margin-bottom:16px">`,
       `          <h3 style="margin:0 0 12px;font-size:16px">Corpus Seal Verification</h3>`,
       `          <div class="mono" style="font-size:13px;line-height:22px">`,
-      `            <div>Status: <strong style="color:${status?.isSealed ? 'var(--support)' : 'var(--danger)'}">${status?.isSealed ? "SEALED (IMMUTABLE)" : "UNSEALED"}</strong></div>`,
+      `            <div>Status: <strong>${status?.isSealed ? "SEALED" : "UNSEALED"}</strong></div>`,
       `            <div>Active Run ID: ${escapeHtml(status?.activeRunId ?? "unknown")}</div>`,
       `            <div>Schema Version: ${status?.schemaVersion ?? "unknown"}</div>`,
       `            <div>Database Path: ${escapeHtml(status?.databasePath ?? "unknown")}</div>`,
       `          </div>`,
       `        </div>`,
       `        <div class="panel" style="padding:16px">`,
-      `          <h3 style="margin:0 0 12px;font-size:16px">Known Limitations (${status?.knownLimitationsCount ?? 0})</h3>`,
-      `          <ol data-testid="${TEST_IDS.KNOWN_LIMITATIONS}" style="margin:0;padding-left:20px;font-size:13px;line-height:22px" class="muted">`,
-      `            <li data-testid="${TEST_IDS.KNOWN_LIMITATION_ITEM}">Assessment data unavailable for unverified candidates (escalated to human review).</li>`,
-      `            <li data-testid="${TEST_IDS.KNOWN_LIMITATION_ITEM}">Seniority level inference requires external confirmation when title lacks year qualifiers.</li>`,
-      `            <li data-testid="${TEST_IDS.KNOWN_LIMITATION_ITEM}">Work authorization status verification requires manual compliance check.</li>`,
-      `          </ol>`,
+      `          <h3 style="margin:0 0 12px;font-size:16px">Known Limitations (${status?.knownLimitationsCount ?? "unavailable"})</h3>`,
+      `          <p class="muted" data-testid="${TEST_IDS.KNOWN_LIMITATIONS}" style="font-size:13px;line-height:22px">`,
+      `            The Trust Center limitation catalog is not wired in this read-only phase. The runtime reports a known-limitations count of ${status?.knownLimitationsCount ?? "unavailable"}. This page does not invent catalog copy to fill that count.`,
+      `          </p>`,
       `        </div>`,
       `      </div>`
     ].join("\n");
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+      headers: htmlHeaders(),
       body: renderPage({
+        ...pageShell,
         title: "System Status",
         activeDestination: "status",
-        status,
-        theme,
-        density,
+        currentPath: "/status",
         contentHtml
       })
     };
   }
 
-  // 404 for unknown route
   return {
     statusCode: 404,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: htmlHeaders(),
     body: renderPage({
+      ...pageShell,
       title: "Not Found",
       activeDestination: "triage",
-      status,
-      theme,
-      density,
-      contentHtml: `<div style="padding:40px;text-align:center"><h2 style="color:var(--danger)">404 Page Not Found</h2><p><a href="/triage" class="link">Return to Triage Queue</a></p></div>`
+      currentPath: urlPath,
+      contentHtml: `<div style="padding:40px;text-align:center"><h2 style="color:var(--danger)">404 Page Not Found</h2><p><a href="/triage?theme=${appearance.theme}&amp;density=${appearance.density}" class="link">Return to Triage Queue</a></p></div>`
     })
   };
 }

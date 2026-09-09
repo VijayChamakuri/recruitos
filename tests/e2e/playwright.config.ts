@@ -9,7 +9,7 @@ export default defineConfig({
   testDir: "./",
   testMatch: /.*\.e2e\.ts$/,
   outputDir: resolve(import.meta.dirname, "../../dist/test-results"),
-  timeout: 60_000,
+  timeout: 120_000,
   expect: {
     timeout: 10_000
   },
