@@ -53,10 +53,11 @@ export function formatHelp(targetCommand?: string): string {
         "  --task <id>           Inspect or act on specific resolution task",
         "  --action <kind>       Resolution action (resolve, request_re_extraction, ...)",
         "  --proposal <id>       Inspect or act on specific proposal",
-        "  --decision <kind>     Proposal decision (approve, reject)",
-        "  --rationale <text>    Justification for resolution action or decision",
+        "  --decision <kind>     Proposal decision (approve, reject, edit, request_evidence)",
+        "  --rationale <text>    Required for reject and request_evidence",
+        "  --edited-payload <json>  ProposalPayload JSON for edit; kind must match the stored proposal",
         "  --actor <id>          Actor ID recording the action (default: human:operator)",
-        "  --version-num <n>     Expected task head version for optimistic concurrency",
+        "  --version-num <n>     Expected task or proposal head version for optimistic concurrency",
         "  --candidate-version <n>  Expected candidate head version (request_re_extraction)",
         "  --command-id <id>     Durable command id so a lost receipt can be replayed",
         "  --status <status>     Filter tasks or proposals by status",
@@ -71,7 +72,10 @@ export function formatHelp(targetCommand?: string): string {
         "  recruitos review --task task-1 --action resolve --rationale \"Verified by recruiter\" --version-num 0",
         "  recruitos review --task task-1 --action request_re_extraction --version-num 0 --candidate-version 1",
         "  recruitos review --task task-1 --action request_re_extraction --version-num 0 --candidate-version 1 --command-id request-1",
-        "  recruitos review --proposal proposal-1 --decision approve --version-num 0"
+        "  recruitos review --proposal proposal-1 --decision approve --version-num 0",
+        "  recruitos review --proposal proposal-1 --decision reject --rationale \"Does not clear the bar.\" --version-num 0",
+        "  recruitos review --proposal proposal-1 --decision request_evidence --rationale \"Need the offer letter.\" --version-num 0",
+        "  recruitos review --proposal proposal-1 --decision edit --edited-payload '{\"kind\":\"shortlist_inclusion\"}' --version-num 0 --command-id decision-1"
       ].join("\n");
 
     case "packet":

@@ -616,7 +616,9 @@ export class StubRecruitosComposition implements RecruitosComposition {
 
   async recordReviewDecision(
     input: RecordReviewDecisionInput
-  ): Promise<Result<{ decisionId: string; newVersion: number }, RuntimeError>> {
+  ): Promise<
+    Result<{ decisionId: string; newVersion: number; status: ProposalSummary["status"]; commandId: string }, RuntimeError>
+  > {
     const proposal = this.proposals.get(input.proposalId);
     if (!proposal) {
       return err(notFound(`Proposal not found for ID: ${input.proposalId}`));
@@ -627,7 +629,14 @@ export class StubRecruitosComposition implements RecruitosComposition {
 
     const decisionId = `decision-${Date.now()}`;
     const newVersion = proposal.version + 1;
-    const newStatus = input.decision === "approve" ? "approved" : "rejected";
+    const newStatus =
+      input.decision.kind === "approve"
+        ? "approved"
+        : input.decision.kind === "reject"
+          ? "rejected"
+          : input.decision.kind === "edit"
+            ? "edited"
+            : "evidence_requested";
 
     this.proposals.set(input.proposalId, {
       ...proposal,
@@ -635,7 +644,12 @@ export class StubRecruitosComposition implements RecruitosComposition {
       version: newVersion
     });
 
-    return ok({ decisionId, newVersion });
+    return ok({
+      decisionId,
+      newVersion,
+      status: newStatus,
+      commandId: input.commandId ?? "command-stub-proposal-decision"
+    });
   }
 
   async listAuditEvents(

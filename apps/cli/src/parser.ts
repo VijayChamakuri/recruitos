@@ -33,6 +33,7 @@ export type ParsedArgs = Readonly<{
     candidateVersion?: number;
     result?: string;
     commandId?: string;
+    editedPayload?: string;
   }>;
   unknownOptions: readonly string[];
 }>;
@@ -75,6 +76,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     candidateVersion?: number;
     result?: string;
     commandId?: string;
+    editedPayload?: string;
   } = {};
 
   let index = 0;
@@ -183,6 +185,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         case "command-id":
           options.commandId = value;
+          break;
+        case "edited-payload":
+          options.editedPayload = value;
           break;
         default:
           unknownOptions.push(arg);

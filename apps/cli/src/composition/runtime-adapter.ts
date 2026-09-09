@@ -44,6 +44,7 @@ import {
   listCandidates,
   listProposals,
   listResolutionTasks,
+  recordReviewDecision as recordProposalReviewDecision,
   registerDemoCorrectionFixtures,
   registerDemoFixtures,
   requestReExtraction,
@@ -860,8 +861,33 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
 
   async recordReviewDecision(
     input: RecordReviewDecisionInput
-  ): Promise<Result<{ decisionId: string; newVersion: number }, RuntimeError>> {
-    return this.fallback.recordReviewDecision(input);
+  ): Promise<
+    Result<{ decisionId: string; newVersion: number; status: ProposalSummary["status"]; commandId: string }, RuntimeError>
+  > {
+    if (this.allowStubFallback) {
+      return this.fallback.recordReviewDecision(input);
+    }
+    const result = recordProposalReviewDecision(this.runtime, {
+      actorId: input.actorId,
+      proposalId: input.proposalId,
+      expectedVersion: input.expectedVersion,
+      decision: input.decision,
+      ...(input.commandId === undefined ? {} : { commandId: input.commandId })
+    });
+    if (!result.ok) {
+      return err({
+        code: result.error.code,
+        message: result.error.message,
+        retryable: result.error.retryable,
+        ...(result.error.details === undefined ? {} : { details: result.error.details })
+      });
+    }
+    return ok({
+      decisionId: result.value.result.decisionId,
+      newVersion: result.value.result.newVersion,
+      status: result.value.result.status,
+      commandId: result.value.metadata.commandId
+    });
   }
 
   async listAuditEvents(

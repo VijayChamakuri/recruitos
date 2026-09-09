@@ -1,4 +1,10 @@
-import { ProposalStatusSchema } from "@recruitos/core";
+import {
+  ProposalPayloadSchema,
+  ProposalStatusSchema,
+  ReviewDecisionKindSchema,
+  type Result,
+  type ReviewDecisionPayload
+} from "@recruitos/core";
 
 import {
   createErrorEnvelope,
@@ -16,6 +22,71 @@ import type {
   ResolutionTaskSummary
 } from "../composition/types.js";
 import type { CommandResult } from "./triage.js";
+
+function usageError(
+  flags: ParsedArgs["flags"],
+  startTime: number,
+  code: string,
+  message: string
+): CommandResult {
+  const durationMs = Date.now() - startTime;
+  if (flags.json) {
+    return {
+      exitCode: EXIT_USAGE_ERROR,
+      stderr: formatEnvelopeJson(
+        createErrorEnvelope("review", code, message, EXIT_USAGE_ERROR, durationMs)
+      )
+    };
+  }
+  return {
+    exitCode: EXIT_USAGE_ERROR,
+    stderr: `Usage error: ${message}`
+  };
+}
+
+function parseCliReviewDecision(args: ParsedArgs): Result<ReviewDecisionPayload, string> {
+  const parsedKind = ReviewDecisionKindSchema.safeParse(args.options.decision);
+  if (!parsedKind.success) {
+    return {
+      ok: false,
+      error: `Invalid decision '${args.options.decision}'. Must be 'approve', 'reject', 'edit', or 'request_evidence'`
+    };
+  }
+  if (parsedKind.data === "approve") {
+    return { ok: true, value: { kind: "approve" } };
+  }
+  if (parsedKind.data === "reject" || parsedKind.data === "request_evidence") {
+    const rationale = args.options.rationale?.trim() ?? "";
+    if (rationale.length === 0) {
+      return {
+        ok: false,
+        error: `--rationale is required when recording a ${parsedKind.data} decision`
+      };
+    }
+    return { ok: true, value: { kind: parsedKind.data, rationale } };
+  }
+  const raw = args.options.editedPayload;
+  if (raw === undefined || raw.trim().length === 0) {
+    return {
+      ok: false,
+      error: "--edited-payload is required when recording an edit decision"
+    };
+  }
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "--edited-payload must be valid JSON" };
+  }
+  const parsedPayload = ProposalPayloadSchema.safeParse(decoded);
+  if (!parsedPayload.success) {
+    return {
+      ok: false,
+      error: "--edited-payload must be a ProposalPayload JSON object whose kind matches the stored proposal"
+    };
+  }
+  return { ok: true, value: { kind: "edit", editedPayload: parsedPayload.data } };
+}
 
 export async function runReviewCommand(
   args: ParsedArgs,
@@ -221,46 +292,26 @@ export async function runReviewCommand(
   // Case 2: Act on specific proposal
   if (proposalId) {
     if (args.options.decision) {
-      if (args.options.decision !== "approve" && args.options.decision !== "reject") {
-        const durationMs = Date.now() - startTime;
-        const msg = `Invalid decision '${args.options.decision}'. Must be 'approve' or 'reject'`;
-        if (args.flags.json) {
-          return {
-            exitCode: EXIT_USAGE_ERROR,
-            stderr: formatEnvelopeJson(
-              createErrorEnvelope("review", "invalid_decision", msg, EXIT_USAGE_ERROR, durationMs)
-            )
-          };
-        }
-        return {
-          exitCode: EXIT_USAGE_ERROR,
-          stderr: `Usage error: ${msg}`
-        };
+      if (args.options.versionNum === undefined || Number.isNaN(args.options.versionNum)) {
+        return usageError(
+          args.flags,
+          startTime,
+          "missing_version",
+          "--version-num is required when recording a review decision"
+        );
       }
 
-      if (args.options.versionNum === undefined || Number.isNaN(args.options.versionNum)) {
-        const durationMs = Date.now() - startTime;
-        const msg = "--version-num is required when recording a review decision";
-        if (args.flags.json) {
-          return {
-            exitCode: EXIT_USAGE_ERROR,
-            stderr: formatEnvelopeJson(
-              createErrorEnvelope("review", "missing_version", msg, EXIT_USAGE_ERROR, durationMs)
-            )
-          };
-        }
-        return {
-          exitCode: EXIT_USAGE_ERROR,
-          stderr: `Usage error: ${msg}`
-        };
+      const parsedDecision = parseCliReviewDecision(args);
+      if (!parsedDecision.ok) {
+        return usageError(args.flags, startTime, "invalid_decision", parsedDecision.error);
       }
 
       const decisionResult = await composition.recordReviewDecision({
         proposalId,
-        decision: args.options.decision,
+        decision: parsedDecision.value,
         actorId: args.options.actor ?? "human:operator",
-        rationale: args.options.rationale ?? "Decision recorded via CLI",
-        expectedVersion: args.options.versionNum
+        expectedVersion: args.options.versionNum,
+        ...(args.options.commandId === undefined ? {} : { commandId: args.options.commandId })
       });
 
       const durationMs = Date.now() - startTime;
@@ -301,7 +352,9 @@ export async function runReviewCommand(
         stdout: [
           `Review decision recorded for proposal: ${proposalId}`,
           `Decision ID: ${res.decisionId}`,
-          `New Version: ${res.newVersion}`
+          `New Version: ${res.newVersion}`,
+          `Status:      ${res.status}`,
+          `Command ID:  ${res.commandId}`
         ].join("\n")
       };
     }
