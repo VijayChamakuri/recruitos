@@ -411,6 +411,10 @@ mark .tag {
 
 /* Packet B 3-pane Layout plus 420px inspector rail */
 .packet-shell { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* DESIGN historical state: desaturate the packet surface, not a status hue. */
+.packet-historical {
+  filter: grayscale(0.68) saturate(0.38);
+}
 .packet-conflict-slot { flex: 0 0 auto; }
 .packet-with-inspector {
   display: grid;

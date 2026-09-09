@@ -145,3 +145,54 @@ describe("packet inspector selection and rendering", () => {
     expect(html).not.toContain(`data-testid="${TEST_IDS.RESOLUTION_FORM}"`);
   });
 });
+
+describe("historical packet rendering", () => {
+  it("applies the historical class to the packet surface and keeps the banner", () => {
+    const historicalPacket: CandidatePacket = {
+      ...packet([]),
+      isHistoricalResult: true,
+      resultId: "result-old"
+    };
+    const html = renderCandidatePacketView({ packet: historicalPacket });
+    expect(html).toContain(`data-testid="${TEST_IDS.PACKET_HISTORICAL}"`);
+    expect(html).toContain("packet-header packet-historical");
+    expect(html).toContain("packet-b packet-historical");
+    expect(html).toContain('data-historical="true"');
+    expect(html).toContain("Inspecting: historical result result-old");
+    expect(html).not.toContain("packet-main packet-historical");
+  });
+
+  it("desaturates the packet with inspector and leaves the current-task rail unlabeled", () => {
+    const historicalPacket: CandidatePacket = {
+      ...packet([task("open")]),
+      isHistoricalResult: true,
+      resultId: "result-old"
+    };
+    const inspector = model({ packet: historicalPacket, historical: true });
+    const html = renderCandidatePacketView({
+      packet: historicalPacket,
+      appearance: inspector.appearance,
+      inspector
+    });
+    expect(html).toContain(`data-testid="${TEST_IDS.PACKET_HISTORICAL}"`);
+    expect(html).toContain("packet-header packet-historical");
+    expect(html).toContain("packet-main packet-historical");
+    expect(html).toContain("Inspecting: historical result result-old");
+    expect(html).toContain("Inspecting a historical result. Mutations apply to the current head.");
+    expect(html).toContain(`data-testid="${TEST_IDS.TASK_INSPECTOR}"`);
+    const inspectorHtml = html.slice(html.indexOf(`data-testid="${TEST_IDS.TASK_INSPECTOR}"`));
+    expect(inspectorHtml).not.toContain("packet-historical");
+    expect(html).not.toContain("packet-b packet-historical");
+  });
+
+  it("does not apply the historical class to the current head", () => {
+    const live = packet([task("open")]);
+    const html = renderCandidatePacketView({
+      packet: live,
+      inspector: model({ packet: live })
+    });
+    expect(html).not.toContain("packet-historical");
+    expect(html).not.toContain(`data-testid="${TEST_IDS.PACKET_HISTORICAL}"`);
+    expect(html).toContain("Inspecting: current head");
+  });
+});

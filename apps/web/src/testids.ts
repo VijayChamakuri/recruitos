@@ -40,6 +40,7 @@ export const TEST_IDS = {
   PACKET_NOT_FOUND: "packet-not-found",
   RETURN_TO_QUEUE: "return-to-queue",
   PACKET_INSPECTING_LABEL: "packet-inspecting-label",
+  PACKET_HISTORICAL: "packet-historical",
   PACKET_TASKS: "packet-tasks",
   PACKET_TASK_ITEM: (id: string) => `packet-task-${id}`,
   CONFIDENCE_INPUTS: "confidence-inputs",

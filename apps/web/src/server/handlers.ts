@@ -38,6 +38,11 @@ export type IncomingRequest = Readonly<{
   body?: URLSearchParams;
 }>;
 
+type PageShell = Omit<
+  PageRenderOptions,
+  "title" | "activeDestination" | "currentPath" | "contentHtml"
+>;
+
 function htmlHeaders(): Record<string, string> {
   return { "Content-Type": "text/html; charset=utf-8" };
 }
@@ -58,7 +63,8 @@ function typedErrorPage(
   appearance: Appearance,
   currentPath: string,
   statusCode: number,
-  searchParams?: URLSearchParams
+  searchParams?: URLSearchParams,
+  pageShell?: PageShell
 ): HttpResponse {
   const contentHtml = [
     `      <div style="padding:40px;text-align:center" data-testid="typed-error">`,
@@ -71,9 +77,10 @@ function typedErrorPage(
     statusCode,
     headers: htmlHeaders(),
     body: renderPage({
+      appearance,
+      ...(pageShell ?? {}),
       title,
       activeDestination: "triage",
-      appearance,
       currentPath,
       contentHtml,
       ...(searchParams === undefined ? {} : { searchParams })
@@ -101,16 +108,12 @@ async function loadDisplayedStatus(composition: RecruitosComposition) {
   return overlayPersistedRunStatus(statusResult.value, runtime.connection.database);
 }
 
-type PageShell = Omit<
-  PageRenderOptions,
-  "title" | "activeDestination" | "currentPath" | "contentHtml"
->;
-
 function actionFailurePage(
   failure: WebActionFailure,
   appearance: Appearance,
   urlPath: string,
-  searchParams: URLSearchParams
+  searchParams: URLSearchParams,
+  pageShell: PageShell
 ): HttpResponse {
   return typedErrorPage(
     "Correction action failed",
@@ -118,7 +121,8 @@ function actionFailurePage(
     appearance,
     urlPath,
     failure.httpStatus,
-    searchParams
+    searchParams,
+    pageShell
   );
 }
 
@@ -221,7 +225,7 @@ async function handleCorrectionPost(
     if (result.error.httpStatus === 409) {
       const candidateId = requiredText(body, "candidateId");
       if (candidateId === undefined) {
-        return actionFailurePage(result.error, appearance, urlPath, searchParams);
+        return actionFailurePage(result.error, appearance, urlPath, searchParams, pageShell);
       }
       const preservedRationale = requiredText(body, "rationale");
       const expectedTaskHeadVersion = requiredInteger(body, "expectedTaskHeadVersion");
@@ -237,7 +241,7 @@ async function handleCorrectionPost(
           : { expectedCandidateHeadVersion })
       });
     }
-    return actionFailurePage(result.error, appearance, urlPath, searchParams);
+    return actionFailurePage(result.error, appearance, urlPath, searchParams, pageShell);
   }
 
   if (urlPath === "/actions/complete-fixture-extraction") {
@@ -256,7 +260,7 @@ async function handleCorrectionPost(
         `/packet/${encodeURIComponent(result.value.candidateId)}?${next.toString()}`
       );
     }
-    return actionFailurePage(result.error, appearance, urlPath, searchParams);
+    return actionFailurePage(result.error, appearance, urlPath, searchParams, pageShell);
   }
 
   return typedErrorPage(
@@ -265,7 +269,8 @@ async function handleCorrectionPost(
     appearance,
     urlPath,
     404,
-    searchParams
+    searchParams,
+    pageShell
   );
 }
 
@@ -355,7 +360,8 @@ export async function handleRequest(
         appearance,
         urlPath,
         405,
-        searchParams
+        searchParams,
+        pageShell
       );
     }
     return handleCorrectionPost(urlPath, searchParams, body, composition, appearance, pageShell);
@@ -368,7 +374,8 @@ export async function handleRequest(
       appearance,
       urlPath,
       405,
-      searchParams
+      searchParams,
+      pageShell
     );
   }
 
@@ -379,7 +386,9 @@ export async function handleRequest(
         queueModelResult.error.message,
         appearance,
         urlPath,
-        500
+        500,
+        searchParams,
+        pageShell
       );
     }
     const model = queueModelResult.value;
@@ -558,7 +567,8 @@ export async function handleRequest(
         appearance,
         "/runs",
         503,
-        searchParams
+        searchParams,
+        pageShell
       );
     }
     const listed = listAllAuditEventSummaries(runtime.connection.database);
@@ -569,7 +579,8 @@ export async function handleRequest(
         appearance,
         "/runs",
         500,
-        searchParams
+        searchParams,
+        pageShell
       );
     }
 
