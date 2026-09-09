@@ -1,6 +1,6 @@
 # RecruitOS multi-agent coordination
 
-Three agents build in parallel:
+Agents coordinate serially for the demo showcase:
 
 - **Cursor** (Grok 4.6)
 - **Claude Code** (Opus, in Conductor)
@@ -14,11 +14,11 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 703652d |
+| origin/main | ca9298b |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Import (MERGED #54), extraction contract (MERGED #55), scheduler (MERGED #57), start-run (MERGED #59), bridge plus OQ-7 policy (MERGED #60), finalize (MERGED #61), scheduler `extraction_run` wiring (MERGED #62), T10.6 correction and re-extraction (MERGED #70 at f3c1824). |
-| Demo spine phase | `docs/plans/demo-spine-phase.md`. T10 spine, stakeholder sitting, T12 Phase 1 read-only web, T12 Phase 2 browser correction, and T12 persisted audit history through `/runs` are merged. `main` is `703652d`. CEO readiness review is complete in HOLD SCOPE mode. Next gate is independent browser QA. No live LLM, no large corpus, no public deployment. |
+| Demo spine phase | `docs/plans/demo-spine-phase.md`. T10 spine, seven-route fixture corpus, stakeholder sitting, browser correction, persisted audit history, focused QA fixes, proposal persistence, proposal review decisions, and design polish are merged. `main` is `ca9298b`. CEO readiness review is complete in HOLD SCOPE mode. The product is ready for a controlled local stakeholder showcase. No live LLM, 140-candidate corpus, proposal UI, Trust Center expansion, or public deployment is required for this showcase. |
 
 ## Lanes and file locks
 
@@ -44,10 +44,10 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | (idle) | T12 Phase 1, Phase 2, and Audit Timeline merged to main. Handles confirmed web fixes after QA. | idle |
-| Claude Code | (available) | Runtime and use-case owner. Available for confirmed runtime contract or product-data gaps found during QA. | available |
-| Codex | `main` | Owns merge-gate review, clean-checkout verification, CEO readiness review, and QA adjudication. | active |
-| Antigravity | `c/` | Independent report-only browser QA owner for the merged T12 flows. No edits or PR until Codex adjudicates findings. | assigned |
+| Cursor | (unavailable) | Completed the demo, T12, audit, QA-fix, and proposal slices before reaching its usage limit. | idle |
+| Claude Code | (available) | Runtime and use-case owner. Held unless a confirmed showcase blocker requires runtime work. | idle |
+| Codex | `codex/demo-showcase-readiness` | Refreshing the operator card and running the final focused showcase smoke. | active |
+| Antigravity | (idle) | Completed the focused design polish merged in PR #82. | idle |
 
 ## Hard rules
 
@@ -175,3 +175,8 @@ your own rows plus the log.
 - 2026-09-09 Antigravity: back online from usage pause. Rebuilt workspace, ran corepack pnpm check (1624 unit/arch tests + 28 integration tests passing), test:coverage 100 percent repo-wide, make demo and make demo-stakeholder passing. Reclaimed apps/web/** lane. Standing by for next assignment.
 - 2026-09-09 Codex: post-merge CEO readiness review completed in HOLD SCOPE mode. `make demo` and full `pnpm check` pass. Product is ready for a controlled stakeholder demo and independent browser QA. Proposal UI, Trust Center catalog, live providers, large corpus, and public deployment remain deferred.
 - 2026-09-09 Vijay: assigned Antigravity report-only independent browser QA for the merged T12 flows, using Claude Opus in Antigravity when available. Gemini Flash High is the fallback. Cursor handles only confirmed fixes; Codex adjudicates findings and owns the next merge gate.
+- 2026-09-09 Cursor: PR #79 merged at `fe7e99e`, fixing historical packet desaturation and the error-page global bar after independent browser QA.
+- 2026-09-09 Cursor: PR #80 merged at `bcfcada`, persisting run-level shortlist proposals and listing only proposals attached to the current candidate head.
+- 2026-09-09 Cursor: PR #81 merged at `bf9f4fd`, persisting proposal review decisions through the command execution path. Proposal UI remains deferred.
+- 2026-09-09 Antigravity: PR #82 merged at `ca9298b`, adding the historical-result link, visible keyboard focus, typography fixes, and the reusable level chip.
+- 2026-09-09 Vijay: narrowed the immediate goal to a controlled demo showcase. The 140-candidate corpus, proposal UI, Trust Center expansion, live providers, public deployment, and `/cso` are deferred. `/cso` runs before credentials, real candidate data, public access, or external effects are introduced.
