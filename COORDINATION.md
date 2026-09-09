@@ -14,11 +14,11 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | e500633 |
+| origin/main | 2e38b6f |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Import (MERGED #54), extraction contract (MERGED #55), scheduler (MERGED #57), start-run (MERGED #59), bridge plus OQ-7 policy (MERGED #60), finalize (MERGED #61), scheduler `extraction_run` wiring (MERGED #62), T10.6 correction and re-extraction (MERGED #70 at f3c1824). |
-| Demo spine phase | `docs/plans/demo-spine-phase.md`. ACTIVE. Stakeholder CLI sitting landed on main `e500633` (PR #74). T12 Phase 1 started: read-only web spine over the seven-candidate proving corpus. `make demo` stays Codex-owned. Cursor adds `make demo-web` only. No live LLM, no web mutations, no 140-candidate corpus. |
+| Demo spine phase | `docs/plans/demo-spine-phase.md`. ACTIVE. Stakeholder CLI sitting landed on main `e500633` (PR #74). T12 Phase 1 read-only web spine MERGED #75 at `2e38b6f`. `make demo` stays Codex-owned. `make demo-web` is on main. No live LLM, no web mutations, no 140-candidate corpus. |
 
 ## Lanes and file locks
 
@@ -44,7 +44,7 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | `cursor/t12-readonly-web-spine` | T12 Phase 1 read-only web spine (PR #75). Review fixes landed, including font-display block for IBM Plex Mono and Source Serif 4. No correction mutations. Codex owns merge-gate review. Do not merge from this lane. | review |
+| Cursor | (none) | T12 Phase 1 PR #75 squash-merged to main at `2e38b6f`. `make demo-web` serves `/triage` and `/packet/:id` over the seven-candidate proving corpus. `apps/web/**` stays with Cursor only while Antigravity is out; no T12 Phase 2 started. | idle |
 | Claude Code | `b/t10-seven-route-corpus` | Step 6 PR #69: seven-route proving corpus + `parseResumeFacts` threading structured employment facts into finalization so route 1 reaches `scored`. Codex merge-gate review returned two blockers plus one P2, all addressed in a follow-up commit: strict all-or-nothing parser behind an `EXPERIENCE (STRUCTURED)` sentinel (no partial parse can force a wrong rejection); parsed non-work-auth facts must cite their source document and the bridge confirms the grounding quote relocates before accepting (no ungrounded parsed-fact bypass); `DEMO_EXPECTED_OUTCOMES` pins exact score, confidence, and extractor span counts per route. Awaiting Codex re-review. Step 7 (T10.6 CLI-only correction slice) next. | review |
 | Codex | `c/demo-spine-cli` | PR #66 merged at 8f86884. Implementation lane returns to Claude for Steps 6 and 7. Codex owns corpus outcome validation, merge-gate `/review`, clean-checkout verification, and the eventual CEO review. | idle |
 | Antigravity | (out) | Out of usage. `apps/web/**` temporarily held by Cursor for T12 Phase 1. CLI / `make demo` stay with Codex. | out |
@@ -165,3 +165,4 @@ your own rows plus the log.
 - 2026-09-09 Cursor: T12 Phase 1 PR #75 ready for Codex merge-gate review. `make demo-web` serves the seven-candidate proving corpus. `/triage` and `/packet/:id` read the real runtime. Playwright workflows 1 and 2 pass. No web mutations. Do not merge from this lane.
 - 2026-09-09 Cursor: addressing PR #75 review on `cursor/t12-readonly-web-spine`. Web overlay reads persisted `triage_run` id and `seal_id`, drains candidate and resolution-task pages, computes routed percent from distinct candidates with outstanding tasks, preserves non-appearance query params on theme switch, self-hosts the four DESIGN.md faces, and formats arithmetic weights. No CLI or runtime edits. Do not merge from this lane.
 - 2026-09-09 Cursor: PR #75 P2 font-display. IBM Plex Mono and both Source Serif 4 faces use `font-display: block`; sans faces stay `swap`. Pinned in the tokens CSS test. No CLI or runtime edits. Do not merge from this lane.
+- 2026-09-09 Cursor: PR #75 squash-merged to main at `2e38b6f`. T12 Phase 1 is on main. Cursor lane idle. `apps/web/**` remains temporarily with Cursor while Antigravity is out. No T12 Phase 2 started.
