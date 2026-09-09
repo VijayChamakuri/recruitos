@@ -21,6 +21,8 @@ import type {
   ListCandidatesOptions,
   ListProposalsOptions,
   ListResolutionTasksOptions,
+  PacketResolutionTask,
+  PacketTaskListing,
   ProposalSummary,
   RecordResolutionActionInput,
   RecordReviewDecisionInput,
@@ -126,9 +128,38 @@ function rationalNumber(value: string): number {
   return denominator ? (numerator ?? 0) / denominator : 0;
 }
 
+function packetTaskListing(
+  task: ResolutionTaskSummary,
+  packetResultId: string,
+  isHistoricalResult: boolean
+): PacketTaskListing {
+  if (isHistoricalResult) {
+    return "current_candidate_work";
+  }
+  return task.candidateResultId === packetResultId
+    ? "this_result"
+    : "current_candidate_work";
+}
+
+function toPacketTasks(
+  tasks: readonly ResolutionTaskSummary[],
+  packetResultId: string,
+  isHistoricalResult: boolean
+): readonly PacketResolutionTask[] {
+  return tasks.map((task) => ({
+    ...task,
+    listing: packetTaskListing(task, packetResultId, isHistoricalResult)
+  }));
+}
+
 function toCandidatePacket(
   packet: CandidatePacketModel,
-  nativeClient: NativeClientHandle | null
+  nativeClient: NativeClientHandle | null,
+  tasks: readonly ResolutionTaskSummary[],
+  options: {
+    readonly isHistoricalResult: boolean;
+    readonly currentResultId: string;
+  }
 ): CandidatePacket {
   let arithmeticTerms: CandidatePacket["arithmeticTerms"] = [];
   let evidenceSpans: CandidatePacket["evidenceSpans"] = [];
@@ -227,10 +258,12 @@ function toCandidatePacket(
     evidenceSpans,
     evidenceGaps,
     documents,
-    tasks: [],
+    tasks: toPacketTasks(tasks, packet.resultId, options.isHistoricalResult),
+    isHistoricalResult: options.isHistoricalResult,
     resultId: packet.resultId,
     resultKind: packet.resultKind,
-    headVersion: packet.headVersion
+    headVersion: packet.headVersion,
+    currentResultId: options.currentResultId
   };
 }
 
@@ -541,17 +574,57 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       candidateId,
       options
     );
-    if (packetResult.ok) {
-      return ok(toCandidatePacket(packetResult.value, getNativeClient(this.runtime.connection.database)));
+    if (!packetResult.ok) {
+      if (this.allowStubFallback && !this.hasCandidatesInDb()) {
+        return this.fallback.getCandidatePacket(candidateId);
+      }
+      return err({
+        code: packetResult.error.code,
+        message: packetResult.error.message,
+        retryable: false
+      });
     }
-    if (this.allowStubFallback && !this.hasCandidatesInDb()) {
-      return this.fallback.getCandidatePacket(candidateId);
+
+    let currentResultId = packetResult.value.resultId;
+    let isHistoricalResult = false;
+    if (options?.resultId !== undefined) {
+      const currentPacket = readCandidatePacket(
+        this.runtime.connection.database,
+        candidateId
+      );
+      if (!currentPacket.ok) {
+        return err({
+          code: currentPacket.error.code,
+          message: currentPacket.error.message,
+          retryable: false
+        });
+      }
+      currentResultId = currentPacket.value.resultId;
+      isHistoricalResult = packetResult.value.resultId !== currentResultId;
     }
-    return err({
-      code: packetResult.error.code,
-      message: packetResult.error.message,
-      retryable: false
+
+    const tasksResult = listResolutionTasks(this.runtime.connection.database, {
+      candidateId
     });
+    if (!tasksResult.ok) {
+      return err({
+        code: tasksResult.error.code,
+        message: tasksResult.error.message,
+        retryable: false
+      });
+    }
+
+    return ok(
+      toCandidatePacket(
+        packetResult.value,
+        getNativeClient(this.runtime.connection.database),
+        tasksResult.value.items.map(toResolutionTaskSummary),
+        {
+          isHistoricalResult,
+          currentResultId
+        }
+      )
+    );
   }
 
   async runTriage(

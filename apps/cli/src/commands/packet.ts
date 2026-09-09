@@ -11,9 +11,50 @@ import type {
   CandidatePacket,
   EvidenceGap,
   EvidenceSpan,
+  PacketResolutionTask,
   RecruitosComposition
 } from "../composition/types.js";
 import type { CommandResult } from "./triage.js";
+
+function inspectingLine(packet: CandidatePacket): string {
+  if (!packet.isHistoricalResult) {
+    return "Inspecting: current head";
+  }
+  const current = packet.currentResultId ?? "unknown";
+  return `Inspecting: historical result (${packet.resultId ?? "unknown"}; current head is ${current})`;
+}
+
+function outstandingReviewLine(packet: CandidatePacket): string {
+  const outstanding = packet.tasks.filter(
+    (task) => task.status === "open" || task.status === "review_required"
+  );
+  if (outstanding.length === 0) {
+    return "Outstanding review: none";
+  }
+  const statuses = [...new Set(outstanding.map((task) => task.status))].join(", ");
+  if (packet.isHistoricalResult) {
+    return `Outstanding review: required (${statuses}; current candidate work, not a decision on this historical result)`;
+  }
+  return `Outstanding review: required (${statuses})`;
+}
+
+function formatPacketTasks(tasks: readonly PacketResolutionTask[]): readonly string[] {
+  if (tasks.length === 0) {
+    return ["Tasks: none"];
+  }
+  return [
+    `Tasks (${tasks.length}):`,
+    formatTable(
+      ["Task ID", "Status", "Reason", "Listing"],
+      tasks.map((task) => [
+        task.resolutionTaskId,
+        task.status,
+        task.reasonCode,
+        task.listing
+      ])
+    )
+  ];
+}
 
 export async function runPacketCommand(
   args: ParsedArgs,
@@ -91,7 +132,8 @@ export async function runPacketCommand(
     `Score:        ${packet.scoreText ?? (packet.score !== null ? packet.score.toFixed(1) : "-")}`,
     `Confidence:   ${packet.confidenceText ?? (packet.confidence !== null ? `${Math.round(packet.confidence * 100)}%` : "-")}`,
     `Sealed:       ${packet.sealed ? "yes" : "no"}`,
-    `Content Hash: ${packet.contentHash}`
+    `Content Hash: ${packet.contentHash}`,
+    ...(format === "full" ? [inspectingLine(packet), outstandingReviewLine(packet)] : [])
   ];
 
   if (packet.confidenceInput !== null) {
@@ -112,6 +154,11 @@ export async function runPacketCommand(
       ? ["  none"]
       : packet.reasons.map((reason) => `  ${reason}`))
   );
+
+  if (format === "full") {
+    lines.push("");
+    lines.push(...formatPacketTasks(packet.tasks));
+  }
 
   if (format === "full" || format === "arithmetic") {
     lines.push("");
