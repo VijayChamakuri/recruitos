@@ -194,8 +194,34 @@ function toCandidatePacket(
   let evidenceSpans: CandidatePacket["evidenceSpans"] = [];
   let evidenceGaps: CandidatePacket["evidenceGaps"] = [];
   let documents: CandidatePacket["documents"] = [];
+  let roleId = "role-default";
+  let roleTitle = "Staff Software Engineer";
 
   if (nativeClient) {
+    const role = nativeClient.prepare(
+      `WITH RECURSIVE result_lineage(result_id, supersedes_result_id) AS (
+        SELECT candidate_triage_result_id, supersedes_result_id
+        FROM candidate_triage_result
+        WHERE candidate_triage_result_id = ?
+        UNION ALL
+        SELECT parent.candidate_triage_result_id, parent.supersedes_result_id
+        FROM candidate_triage_result parent
+        JOIN result_lineage child
+          ON parent.candidate_triage_result_id = child.supersedes_result_id
+      )
+      SELECT snapshot.role_id AS roleId, role.title AS roleTitle
+      FROM result_lineage lineage
+      JOIN triage_run_member member ON member.initial_result_id = lineage.result_id
+      JOIN triage_run run ON run.triage_run_id = member.triage_run_id
+      JOIN run_input_snapshot snapshot ON snapshot.run_input_snapshot_id = run.snapshot_id
+      JOIN role ON role.role_id = snapshot.role_id
+      LIMIT 1`
+    ).get(packet.resultId) as { roleId?: unknown; roleTitle?: unknown } | undefined;
+    if (typeof role?.roleId === "string" && typeof role.roleTitle === "string") {
+      roleId = role.roleId;
+      roleTitle = role.roleTitle;
+    }
+
     const score = nativeClient
       .prepare("SELECT content_json AS contentJson FROM score_result WHERE candidate_result_id = ?")
       .get(packet.resultId) as { contentJson: string } | undefined;
@@ -265,8 +291,8 @@ function toCandidatePacket(
     sourceKey: packet.sourceKey,
     channel: packet.channel,
     corpusTag: packet.corpusTag,
-    roleId: "role-default",
-    roleTitle: "Staff Software Engineer",
+    roleId,
+    roleTitle,
     status: toCliCandidateStatus(packet.resultStatus),
     score:
       packet.scoreAggregateBasisPoints === null

@@ -482,6 +482,8 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("Triage Queue");
     expect(res.body).toContain("SYNTHETIC DATA");
+    expect(res.body).toContain("Applied AI Engineer");
+    expect(res.body).not.toContain("Staff Software Engineer");
     expect(res.body).toContain("demo/route-1-scored");
     expect(res.body).toContain("demo/route-4-reviewable-failure");
     expect(res.body).toContain("rejected_hard_requirement");
@@ -529,6 +531,8 @@ describe("Prepared seven-candidate demo composition", () => {
     expect(res.body).toContain("data-testid=\"pane-source\"");
     expect(res.body).toContain("Inspecting: current head");
     expect(res.body).toContain("SYNTHETIC DATA");
+    expect(res.body).toContain("Applied AI Engineer");
+    expect(res.body).not.toContain("Staff Software Engineer");
     expect(res.body).toContain(`data-testid="${TEST_IDS.LEVEL_CHIP}"`);
     expect(res.body).toContain('data-level="strong"');
     expect(res.body).toContain('<span class="sr-only">strong</span>');

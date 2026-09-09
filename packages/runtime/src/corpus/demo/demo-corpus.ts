@@ -128,6 +128,8 @@ type DemoCandidate = Readonly<{
   bodies: Readonly<Record<string, DimensionBody>>;
   /** A dimension whose body carries a second, deliberately unlocatable quote. */
   droppedQuoteDimension?: string;
+  /** A located resume statement that contradicts evidence for one dimension. */
+  contradiction?: Readonly<{ dimensionId: string; narrative: string }>;
   expected: ExpectedOutcome;
 }>;
 
@@ -363,6 +365,10 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       data_and_pipeline_work: { proposedLevel: "strong", quoteDimension: "data" }
     }),
     droppedQuoteDimension: "applied_ml_llm_systems",
+    contradiction: {
+      dimensionId: "production_software_engineering",
+      narrative: "Post-launch notes state that the evaluation service had no automated rollback and depended on manual recovery during incidents."
+    },
     expected: {
       sourceKey: "demo/route-7-quote-grounding",
       status: "scored",
@@ -370,10 +376,10 @@ const DEMO_CANDIDATES: readonly DemoCandidate[] = [
       reasonCodes: [],
       sealed: true,
       scoreText: "345/4",
-      confidenceText: "93/140",
-      // The deliberately dropped quote: one extractor span returned, not located.
-      spansReturned: 7,
-      spansLocated: 6
+      confidenceText: "61/96",
+      // One dropped quote and one located contradiction are both visible.
+      spansReturned: 8,
+      spansLocated: 7
     }
   }
 ];
@@ -388,6 +394,13 @@ function resumeText(candidate: DemoCandidate): string {
     candidate.profileSummary,
     ...DIMENSION_KEYS.map((dimension) => narrativeLine(dimension, candidate))
   ];
+  if (candidate.contradiction !== undefined) {
+    lines.push(
+      "",
+      "LIMITATIONS",
+      `${candidate.contradiction.narrative} ${token(candidate.sourceKey)}`
+    );
+  }
   if (candidate.experienceBlock.length > 0) {
     lines.push("", "EXPERIENCE (STRUCTURED)", ...candidate.experienceBlock);
   }
@@ -454,6 +467,12 @@ export function demoExtractionResponseBody(dimensionId: string, sourceKey: strin
   }
   if (candidate.droppedQuoteDimension === dimensionId) {
     spans.push({ quotedText: DROPPED_QUOTE_TEXT, polarity: "supporting" });
+  }
+  if (candidate.contradiction?.dimensionId === dimensionId) {
+    spans.push({
+      quotedText: `${candidate.contradiction.narrative} ${token(candidate.sourceKey)}`,
+      polarity: "contradicting"
+    });
   }
   return JSON.stringify({
     dimensionId,
@@ -523,7 +542,8 @@ export const DEMO_CORPUS_SEED_HASH: string = (() => {
       resumeText: resumeText(candidate),
       workAuthorized: candidate.workAuthorized,
       bodies: candidate.bodies,
-      droppedQuoteDimension: candidate.droppedQuoteDimension ?? null
+      droppedQuoteDimension: candidate.droppedQuoteDimension ?? null,
+      contradiction: candidate.contradiction ?? null
     }))
   });
   /* v8 ignore next 3 -- the literal above is closed, string-valued, and canonical. */

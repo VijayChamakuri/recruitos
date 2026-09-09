@@ -76,7 +76,7 @@ describe("demo corpus", () => {
         expect(body.rejectedClaims).toEqual([]);
         expect(body.spans.length).toBeGreaterThan(0);
         for (const span of body.spans) {
-          expect(span.polarity).toBe("supporting");
+          expect(["supporting", "contradicting"]).toContain(span.polarity);
           // Every quote carrying the candidate token is a real narrative line
           // and must be a verbatim contiguous slice of that candidate's resume.
           if (span.quotedText.includes(sourceKey)) {
@@ -110,8 +110,18 @@ describe("demo corpus", () => {
         .filter((line) => line.includes("[ref demo/"))
         .map((line) => line.replace(/ \[ref demo\/[^\]]+\]$/, ""))
     );
-    expect(statements).toHaveLength(42);
-    expect(new Set(statements).size).toBe(42);
+    expect(statements).toHaveLength(43);
+    expect(new Set(statements).size).toBe(43);
+  });
+
+  it("includes one located contradiction in the quote-grounding route", () => {
+    const sourceKey = "demo/route-7-quote-grounding";
+    const resume = demoCandidateSourceRecords().find((record) => record.sourceKey === sourceKey)!
+      .documents[0]!.rawText;
+    const body = bodyFor("production_software_engineering", sourceKey);
+    const contradictions = body.spans.filter((span) => span.polarity === "contradicting");
+    expect(contradictions).toHaveLength(1);
+    expect(resume).toContain(contradictions[0]!.quotedText);
   });
 
   it("correction overlay locates the evaluation quote for the reviewable-failure candidate", () => {
