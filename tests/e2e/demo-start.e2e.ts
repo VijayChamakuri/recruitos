@@ -32,7 +32,7 @@ test.describe("Workflow 1: Demo Start", () => {
     await expect(candidateRows).toHaveCount(7);
     await expect(page.getByText(ROUTE_1_SOURCE_KEY)).toBeVisible();
     await expect(page.getByText(ROUTE_4_SOURCE_KEY)).toBeVisible();
-    await expect(page.getByText("rejected_hard_requirement")).toBeVisible();
+    await expect(page.getByText("rejected_hard_requirement", { exact: true })).toBeVisible();
     await expect(page.getByText("escalated").first()).toBeVisible();
     await expect(page.getByText("scored").first()).toBeVisible();
 
