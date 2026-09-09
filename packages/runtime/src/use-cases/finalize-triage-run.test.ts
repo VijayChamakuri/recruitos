@@ -682,6 +682,10 @@ describe("finalizeTriageRun", () => {
       .prepare("SELECT COUNT(*) AS count FROM resolution_task WHERE candidate_result_id = ?")
       .get(packet.resultId) as { count: number };
     expect(taskCount.count).toBe(packet.reasons.length);
+    const proposalCount = db
+      .prepare("SELECT COUNT(*) AS count FROM proposal WHERE candidate_result_id = ?")
+      .get(packet.resultId) as { count: number };
+    expect(proposalCount.count).toBe(0);
   });
 
   it("finalizes a run whose work items predate extraction_run persistence", async () => {

@@ -454,6 +454,21 @@ describe("completeReExtraction", () => {
     expect(task.actionKind).toBe("reextraction_completed");
     expect(count(runtime, "SELECT count(*) AS n FROM triage_run")).toBe(runsBefore);
     expect(count(runtime, "SELECT count(*) AS n FROM triage_run_member")).toBe(membersBefore);
+    expect(
+      count(
+        runtime,
+        "SELECT count(*) AS n FROM proposal WHERE candidate_result_id = ?",
+        ids.resultId
+      )
+    ).toBe(0);
+    expect(
+      count(
+        runtime,
+        "SELECT count(*) AS n FROM proposal WHERE candidate_result_id = ?",
+        completed.result.resultId
+      )
+    ).toBe(1);
+    expect(count(runtime, "SELECT count(*) AS n FROM proposal_head")).toBe(0);
     unwrap(runtime.close());
   });
 

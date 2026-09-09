@@ -60,6 +60,7 @@ import {
   readStructuredFactByContentHash
 } from "../facts/index.js";
 import { createHardRequirementPolicyV1 } from "../policy/index.js";
+import { persistDerivedShortlistProposals } from "../proposals/persist-shortlist.js";
 import { insertResolutionTask, prepareResolutionTask } from "../resolution/index.js";
 import * as candidateResults from "../results/index.js";
 import {
@@ -1523,6 +1524,18 @@ function persistCompleteResult(args: {
   /* v8 ignore next 3 -- drafts and stored rows already passed their store contracts */
   if (!reasons.ok) {
     return reasons;
+  }
+
+  const proposals = persistDerivedShortlistProposals({
+    context: args.context,
+    nextId: args.nextId,
+    createdAt: args.createdAt,
+    resultId: args.resultId,
+    proposals: args.decision.proposals.proposals
+  });
+  /* v8 ignore next 3 -- persist-shortlist.test.ts owns the fail-closed persist cases */
+  if (!proposals.ok) {
+    return proposals;
   }
 
   const sealed = sealResultAndHead({

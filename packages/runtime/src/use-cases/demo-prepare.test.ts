@@ -120,6 +120,35 @@ describe("demoPrepare", () => {
     unwrap(runtime.close());
   });
 
+  it("does not persist shortlist proposals for the seven-route variant_run demo", async () => {
+    const runtime = await demoRuntime();
+    unwrap(await demoPrepare(runtime));
+
+    const scoredResultIds = nativeClient(runtime)
+      .prepare(
+        `SELECT candidate_triage_result_id AS resultId
+         FROM candidate_triage_result
+         WHERE status = 'scored' AND availability = 'complete'`
+      )
+      .all() as Array<{ resultId: string }>;
+    expect(scoredResultIds.length).toBeGreaterThan(0);
+
+    const attempt = nativeClient(runtime)
+      .prepare("SELECT kind FROM triage_attempt")
+      .get() as { kind: string };
+    expect(attempt.kind).toBe("variant_run");
+
+    const proposals = nativeClient(runtime)
+      .prepare("SELECT count(*) AS n FROM proposal")
+      .get() as { n: number };
+    expect(proposals.n).toBe(0);
+    expect(
+      nativeClient(runtime).prepare("SELECT count(*) AS n FROM proposal_head").get()
+    ).toEqual({ n: 0 });
+
+    unwrap(runtime.close());
+  });
+
   it("rejects a composition without a fixture extraction adapter", async () => {
     const liveShaped = {
       descriptor: { adapterId: "not-fixture", mode: "live" as const, contractVersion: 1 },
