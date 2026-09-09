@@ -119,6 +119,11 @@ describe("Runtime Composition Wiring in Apps", () => {
 
     expect(candidatesResult.value).toEqual([]);
 
+    const proposalsResult = await composition.listProposals();
+    expect(proposalsResult.ok).toBe(true);
+    if (!proposalsResult.ok) return;
+    expect(proposalsResult.value).toEqual([]);
+
     const packetResult = await composition.getCandidatePacket("candidate-1");
     expect(packetResult).toMatchObject({ ok: false, error: { code: "not_found" } });
 
@@ -162,6 +167,55 @@ describe("Runtime Composition Wiring in Apps", () => {
     expect(listed.value.every((event) => event.payloadHash.length === 64)).toBe(true);
     expect(listed.value.some((event) => event.commandId !== null)).toBe(true);
     expect(listed.value.some((event) => event.eventOrdinal !== null)).toBe(true);
+
+    expect(composition.runtime.close().ok).toBe(true);
+  }, 120_000);
+
+  it("lists persisted proposals from the database after demo:prepare, never stub ids", async () => {
+    const filename = await databaseFilename();
+    const created = createDemoRuntimeComposition(filename);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const composition = created.value as RuntimeRecruitosComposition;
+    expect(composition.prepareDemo).toBeDefined();
+    if (!composition.prepareDemo) {
+      composition.runtime.close();
+      return;
+    }
+    const prepared = await composition.prepareDemo({});
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) {
+      composition.runtime.close();
+      return;
+    }
+
+    const listed = await composition.listProposals();
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) {
+      composition.runtime.close();
+      return;
+    }
+    expect(listed.value).toEqual([]);
+    expect(listed.value.some((proposal) => proposal.proposalId === "proposal-1")).toBe(false);
+    expect(listed.value.some((proposal) => proposal.kind === "stage_advancement")).toBe(false);
+
+    const pendingOnly = await composition.listProposals({ status: "pending" });
+    expect(pendingOnly.ok).toBe(true);
+    if (pendingOnly.ok) {
+      expect(pendingOnly.value).toEqual([]);
+    }
+
+    const approvedOnly = await composition.listProposals({ status: "approved" });
+    expect(approvedOnly.ok).toBe(true);
+    if (approvedOnly.ok) {
+      expect(approvedOnly.value).toEqual([]);
+    }
+
+    const status = await composition.getStatus();
+    expect(status.ok).toBe(true);
+    if (status.ok) {
+      expect(status.value.pendingProposalsCount).toBe(0);
+    }
 
     expect(composition.runtime.close().ok).toBe(true);
   }, 120_000);
