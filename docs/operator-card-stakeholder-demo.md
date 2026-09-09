@@ -1,5 +1,30 @@
 # Stakeholder demo operator card
 
+RecruitOS is ready for a controlled local showcase with synthetic data. No additional product work is required before the sitting.
+
+## Recommended browser showcase
+
+Start the correction-enabled local app:
+
+```text
+make demo-web-correction
+```
+
+Open the printed local URL, then use this short path:
+
+1. Start at `/triage` and point out the seven synthetic candidates and the three routing outcomes.
+2. Open route 1. Show the sealed score, arithmetic, confidence inputs, evidence spans, and source text.
+3. Return to the queue and open route 4. Show `escalated`, `assessment_unavailable`, and the open resolution task.
+4. Request re-extraction, run the fixture correction, and show the new `correction` result with `scored` status and `review_required` human follow-up.
+5. Open the original result from the historical link to show that it remains unchanged.
+6. Open `/runs` to show the persisted append-only audit history for the initial result and correction.
+
+Say at the start that the candidates and extraction responses are synthetic fixtures. The product behavior, persistence, scoring, evidence linking, correction workflow, and audit history use the real runtime.
+
+If the browser path has an environment problem, use the terminal sitting below. It proves the two core promises without relying on browser automation.
+
+## Terminal fallback
+
 One command presents both RecruitOS product promises in one terminal sitting.
 
 ```text
@@ -33,6 +58,7 @@ Correction writes a new sealed result and moves the candidate head. It does not 
 - Fixture extraction only. There is no live LLM and no provider credential.
 - The route-4 flip needs `--correction-overlay`. The default demo fixtures keep the reviewable failure.
 - The corpus is synthetic. Seven routes, not a production applicant pool.
-- No T12 correction inspector and no web mutations. `make demo-web` is the read-only UI path: it prepares the seven-candidate database and serves `/triage` and `/packet/:id`. `make demo` and `make demo-stakeholder` stay CLI text.
+- The showcase is local. There is no public deployment, authentication, real candidate data, or outbound ATS action.
+- Proposal persistence and review decisions exist in the runtime, but the synthetic demo does not create a main-run shortlist and no proposal UI is shown.
 - A `review_required` task does not accept a second `request_re_extraction` from this slice.
 - `make demo` still shows only promise 1. Use `make demo-stakeholder` when both promises must appear together.
