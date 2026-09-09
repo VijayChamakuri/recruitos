@@ -20,45 +20,83 @@ import { FIXTURE_CORRECTION_SOURCE_KEY } from "./form-body.js";
 import { listAllResolutionTaskSummaries } from "./read-pages.js";
 
 function nativeClient(): {
-  prepare: (sql: string) => { get: (...parameters: readonly unknown[]) => { n?: number; id?: string } };
+  prepare: (sql: string) => {
+    get: (...parameters: readonly unknown[]) => unknown;
+    all: (...parameters: readonly unknown[]) => unknown;
+  };
 } {
   const runtime = getServerRuntime();
   if (runtime === null) {
     throw new Error("runtime required");
   }
-  return (
-    runtime.connection.database as {
-      $client: {
-        prepare: (sql: string) => {
-          get: (...parameters: readonly unknown[]) => { n?: number; id?: string };
-        };
+  const database = runtime.connection.database as {
+    $client?: {
+      prepare: (sql: string) => {
+        get: (...parameters: readonly unknown[]) => unknown;
+        all: (...parameters: readonly unknown[]) => unknown;
       };
-    }
-  ).$client;
+    };
+    prepare?: (sql: string) => {
+      get: (...parameters: readonly unknown[]) => unknown;
+      all: (...parameters: readonly unknown[]) => unknown;
+    };
+  };
+  const client = database.$client ?? database;
+  if (client.prepare === undefined) {
+    throw new Error("native sqlite client required");
+  }
+  return { prepare: client.prepare.bind(client) };
 }
 
 function countRequestActions(): number {
-  return nativeClient()
+  const row = nativeClient()
     .prepare(
       `SELECT COUNT(*) AS n FROM resolution_action WHERE action_kind = 'request_re_extraction'`
     )
-    .get().n as number;
+    .get() as { n?: number } | undefined;
+  if (typeof row?.n !== "number") {
+    throw new Error("request action count required");
+  }
+  return row.n;
 }
 
 function countCorrectionAttempts(): number {
-  return nativeClient()
+  const row = nativeClient()
     .prepare(`SELECT COUNT(*) AS n FROM triage_attempt WHERE kind = 'candidate_correction'`)
-    .get().n as number;
+    .get() as { n?: number } | undefined;
+  if (typeof row?.n !== "number") {
+    throw new Error("correction attempt count required");
+  }
+  return row.n;
 }
 
-function readMainRunAttemptId(): string {
-  const id = nativeClient()
-    .prepare(`SELECT triage_attempt_id AS id FROM triage_attempt WHERE kind = 'main_run' LIMIT 1`)
-    .get().id;
-  if (typeof id !== "string" || id.length === 0) {
-    throw new Error("main_run attempt required");
+function readOfficialAttemptId(): string {
+  const rows = nativeClient()
+    .prepare(
+      `SELECT triage_attempt_id AS triageAttemptId, kind AS kind FROM triage_attempt`
+    )
+    .all();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error("official triage attempt required");
   }
-  return id;
+  const official = rows.find((row) => {
+    return (
+      typeof row === "object" &&
+      row !== null &&
+      "kind" in row &&
+      (row as { kind: unknown }).kind === "main_run"
+    );
+  });
+  const chosen = official ?? rows[0];
+  if (
+    typeof chosen !== "object" ||
+    chosen === null ||
+    !("triageAttemptId" in chosen) ||
+    typeof (chosen as { triageAttemptId: unknown }).triageAttemptId !== "string"
+  ) {
+    throw new Error("official triage attempt required");
+  }
+  return (chosen as { triageAttemptId: string }).triageAttemptId;
 }
 
 async function loadRoute4PacketForm(): Promise<{
@@ -177,7 +215,7 @@ describe("fixture correction HTTP flow", () => {
         body: new URLSearchParams({
           candidateId: route4.candidateId,
           taskId: route4.taskId,
-          triageAttemptId: readMainRunAttemptId(),
+          triageAttemptId: readOfficialAttemptId(),
           expectedTaskHeadVersion: route4.taskVersion,
           expectedCandidateHeadVersion: route4.candidateVersion
         })
