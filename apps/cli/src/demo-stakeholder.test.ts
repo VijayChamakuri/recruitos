@@ -39,6 +39,18 @@ describe("demo-stakeholder sitting", () => {
     expect(makefile).not.toMatch(/demo-stakeholder:[\s\S]*\bmake demo\b/u);
     expect(script).toContain("better-sqlite3");
     expect(script).not.toContain('spawnSync("sqlite3"');
+    expect(script).toContain("Executive summary");
+    expect(script).toContain("human-triggered correction with required review");
+    expect(script).toContain("The fixture overlay simulates a corrected extraction response.");
+    expect(script).toContain(
+      "The human action requests re-extraction but does not manually provide the extracted facts."
+    );
+    expect(script).not.toContain("Promise 2: human correction");
+
+    const operatorCard = readFileSync(join(repoRoot, "docs/operator-card-stakeholder-demo.md"), "utf8");
+    expect(operatorCard).toContain("executive summary");
+    expect(operatorCard).toContain("human-triggered correction with required review");
+    expect(operatorCard).toContain("does not manually provide extracted facts");
 
     const demoIndex = makefile.indexOf("\ndemo:\n");
     const stakeholderIndex = makefile.indexOf("\ndemo-stakeholder:\n");
@@ -69,6 +81,14 @@ describe("demo-stakeholder sitting", () => {
         expect(output).toContain("Status:       scored");
         expect(output).toContain("=== Class 1 ===");
         expect(output).toContain("Passed:                    yes");
+        expect(output).toContain(
+          "=== Promise 2: human-triggered correction with required review ==="
+        );
+        expect(output).toContain("The fixture overlay simulates a corrected extraction response.");
+        expect(output).toContain(
+          "The human action requests re-extraction but does not manually provide the extracted facts."
+        );
+        expect(output).not.toContain("=== Promise 2: human correction ===");
         expect(output).toContain("=== Route 4 before correction ===");
         expect(output).toContain("Status:       escalated");
         expect(output).toContain("assessment_unavailable");
@@ -91,6 +111,21 @@ describe("demo-stakeholder sitting", () => {
         expect(output).toContain("=== Final checks ===");
         expect(output).toContain("triage_run count: 1");
         expect(output).toContain("triage_run_member count: 7");
+        expect(output).toContain("=== Executive summary ===");
+        expect(output).toContain("Promise 1: PASS");
+        expect(output).toContain("Initial route-1 result: scored");
+        expect(output).toContain("Score: 467/6 (approximately 77.83/100)");
+        expect(output).toContain("Evidence resolution: 6/6");
+        expect(output).toContain(
+          "Class 1: PASS (sealed arithmetic and evidence consistency check)"
+        );
+        expect(output).toContain("Promise 2: PASS");
+        expect(output).toContain(
+          "Route 4: escalated -> human-requested re-extraction -> correction/scored"
+        );
+        expect(output).toContain("Human review after correction: review_required");
+        expect(output).toContain("Original result preserved: yes");
+        expect(output).toContain("Run integrity: 1 triage run and 7 members");
         expect(output).toContain("Stakeholder demo checks passed.");
       } finally {
         rmSync(directory, { recursive: true, force: true });

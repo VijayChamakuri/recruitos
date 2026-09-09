@@ -8,15 +8,17 @@ make demo-stakeholder
 
 `make demo` is unchanged. It still prepares a fresh temporary database, prints the route-1 scored packet, and runs Class 1. It does not run the correction loop. `make demo-stakeholder` uses its own fresh temporary SQLite database for the whole sitting. It does not call `make demo`, because that target deletes its database when it exits.
 
+The sitting keeps the detailed packets and checks. It ends with an executive summary: Promise 1 PASS (scored `467/6`, approximately `77.83/100`, evidence `6/6`, Class 1 PASS) and Promise 2 PASS (escalated to human-requested re-extraction to correction/scored, `review_required`, original result preserved, 1 triage run and 7 members). Class 1 is the sealed arithmetic and evidence consistency check.
+
 ## What the route-1 packet proves
 
 Route 1 is explainable deterministic triage. The packet shows a sealed `scored` result, visible arithmetic, located evidence, and confidence inputs. Class 1 then checks that sealed packet against the locked rubric. No model is called. The score is not a badge. It is the printed sum of the weighted dimension terms.
 
 ## What changes between the route-4 packets
 
-The initial route-4 packet is `escalated` with `assessment_unavailable`. The real `review` command finds the open task. A human `request_re_extraction` uses durable `--command-id stakeholder-request-1`. Fixture extraction with `--correction-overlay` supplies the proving correction body. `triage:complete-correction` uses durable `--command-id stakeholder-complete-1`.
+The initial route-4 packet is `escalated` with `assessment_unavailable`. The real `review` command finds the open task. A human `request_re_extraction` uses durable `--command-id stakeholder-request-1`. That human action requests re-extraction. It does not manually provide extracted facts. Fixture extraction with `--correction-overlay` simulates a corrected extraction response. `triage:complete-correction` uses durable `--command-id stakeholder-complete-1`.
 
-The current packet is then a `correction` result. Status becomes `scored`. The original reasons no longer describe the live head. The packet still lists the outstanding resolution task so the sitting does not look finished.
+The current packet is then a `correction` result. Status becomes `scored`. The original reasons no longer describe the live head. The packet still lists the outstanding resolution task so the sitting does not look finished. This is human-triggered correction with required review, not a finished human decision.
 
 ## Why the original result remains available
 
