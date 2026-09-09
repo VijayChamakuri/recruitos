@@ -1,5 +1,6 @@
 import {
   ActorIdSchema,
+  MAXIMUM_PROPOSAL_EVIDENCE_SPANS,
   RUBRIC_V1,
   TriageRunIdSchema,
   err,
@@ -60,7 +61,11 @@ import {
   readStructuredFactByContentHash
 } from "../facts/index.js";
 import { createHardRequirementPolicyV1 } from "../policy/index.js";
-import { persistDerivedShortlistProposals } from "../proposals/persist-shortlist.js";
+import {
+  persistDerivedShortlistProposals,
+  type DerivedShortlistProposal
+} from "../proposals/persist-shortlist.js";
+import { selectRunShortlistProposals } from "../proposals/select-run-shortlist.js";
 import { insertResolutionTask, prepareResolutionTask } from "../resolution/index.js";
 import * as candidateResults from "../results/index.js";
 import {
@@ -207,6 +212,7 @@ type PlannedCandidate = Readonly<{
   artifacts: readonly ExtractionArtifact[];
   decision: CandidateDecisionOutput;
   resultId: string;
+  shortlistProposals: readonly DerivedShortlistProposal[];
 }>;
 
 type FinalizePlan = Readonly<{
@@ -450,8 +456,23 @@ function deriveFinalizePlan(args: {
       documents: candidate.documents,
       artifacts: candidate.artifacts,
       decision: decisionResult.value,
-      resultId: nextId()
+      resultId: nextId(),
+      shortlistProposals: []
     });
+  }
+
+  const selected = selectRunShortlistProposals({
+    candidates: candidates.map((candidate) => ({
+      candidateId: candidate.candidateId,
+      status: candidate.decision.routing.status,
+      availability: candidate.decision.routing.availability,
+      aggregate: candidate.decision.score?.aggregate ?? null,
+      evidenceSpanIds: supportingSpanIdsForShortlist(candidate.decision)
+    })),
+    isVariant: args.snapshot.attempt.kind === "variant_run"
+  });
+  if (!selected.ok) {
+    return selected;
   }
 
   return ok({
@@ -459,7 +480,13 @@ function deriveFinalizePlan(args: {
     workItemIdentities: args.snapshot.workItemIdentities,
     extractorVersion: args.snapshot.extractorVersion,
     policy: policyResult.value,
-    candidates,
+    candidates: candidates.map((candidate) => {
+      const shortlist = selected.value.get(candidate.candidateId);
+      return {
+        ...candidate,
+        shortlistProposals: shortlist === undefined ? [] : [shortlist]
+      };
+    }),
     importOrdinalByCandidate: args.snapshot.importOrdinalByCandidate,
     triageRunId: args.requestedTriageRunId ?? nextId(),
     kind: resolveOfficialTriageRunKind(args.snapshot.attempt.kind, candidates.length)
@@ -503,7 +530,8 @@ function commitFinalize(args: {
       artifacts: candidate.artifacts,
       extractorVersion: plan.extractorVersion,
       decision: candidate.decision,
-      resultId: candidate.resultId
+      resultId: candidate.resultId,
+      shortlistProposals: candidate.shortlistProposals
     });
     if (!persisted.ok) {
       return persisted;
@@ -812,6 +840,18 @@ function loadImportOrdinals(
   return new Map(corpusMembers.map((member) => [member.candidateId, member.importOrdinal] as const));
 }
 
+function supportingSpanIdsForShortlist(decision: CandidateDecisionOutput): readonly string[] {
+  const evidenceSpanIds: string[] = [];
+  for (const assessment of decision.dimensionDerivation.assessments) {
+    for (const spanId of assessment.supportingSpanIds) {
+      if (evidenceSpanIds.length < MAXIMUM_PROPOSAL_EVIDENCE_SPANS) {
+        evidenceSpanIds.push(spanId);
+      }
+    }
+  }
+  return evidenceSpanIds;
+}
+
 function resolveOfficialTriageRunKind(
   attemptKind: TriageAttempt["kind"],
   memberCount: number
@@ -1037,6 +1077,7 @@ export function persistCandidateResult(args: {
   skipExistingSpans?: boolean;
   reuseAssessmentsFromResultId?: string | null;
   correctedDimensionIds?: readonly string[];
+  shortlistProposals?: readonly DerivedShortlistProposal[];
 }): Result<string, RuntimeError> {
   const sealId = args.nextId();
   const kind = args.kind ?? "initial";
@@ -1074,7 +1115,8 @@ export function persistCandidateResult(args: {
     expectedCandidateHeadVersion,
     skipExistingSpans,
     reuseAssessmentsFromResultId: args.reuseAssessmentsFromResultId ?? null,
-    correctedDimensionIds: args.correctedDimensionIds ?? []
+    correctedDimensionIds: args.correctedDimensionIds ?? [],
+    shortlistProposals: args.shortlistProposals ?? []
   });
 }
 
@@ -1204,6 +1246,7 @@ function persistCompleteResult(args: {
   skipExistingSpans: boolean;
   reuseAssessmentsFromResultId: string | null;
   correctedDimensionIds: readonly string[];
+  shortlistProposals: readonly DerivedShortlistProposal[];
 }): Result<string, RuntimeError> {
   // deriveCandidateDecision only scores when availability is complete.
   /* v8 ignore next 3 -- complete availability always carries score and confidence */
@@ -1531,7 +1574,7 @@ function persistCompleteResult(args: {
     nextId: args.nextId,
     createdAt: args.createdAt,
     resultId: args.resultId,
-    proposals: args.decision.proposals.proposals
+    proposals: args.shortlistProposals
   });
   /* v8 ignore next 3 -- persist-shortlist.test.ts owns the fail-closed persist cases */
   if (!proposals.ok) {

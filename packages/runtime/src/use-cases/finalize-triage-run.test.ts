@@ -1308,6 +1308,37 @@ describe("finalizeTriageRun", () => {
     expect(db.inTransaction).toBe(false);
   });
 
+  it("fails closed when run-level shortlist derivation cannot use a scored result", async () => {
+    const { runtime, adapter } = await createTestRuntime();
+    seedCandidates(runtime, ["cand-1"]);
+    const { triageAttemptId } = await startAndExtract(runtime, adapter, ["cand-1"]);
+    const original = candidateResults.deriveCandidateDecision;
+    vi.spyOn(candidateResults, "deriveCandidateDecision").mockImplementation((input) => {
+      const result = original(input);
+      if (!result.ok) {
+        return result;
+      }
+      return {
+        ok: true,
+        value: {
+          ...result.value,
+          score: null,
+          routing: {
+            ...result.value.routing,
+            status: "scored",
+            availability: "complete"
+          }
+        }
+      };
+    });
+    const finalized = finalizeTriageRun(runtime, { actorId: ACTOR_ID, triageAttemptId });
+    expect(finalized.ok).toBe(false);
+    if (finalized.ok) {
+      return;
+    }
+    expect(finalized.error.message).toContain("Run-level shortlist derivation failed");
+  });
+
   it("blocks a concurrent writer only during the short finalize commit", async () => {
     const { runtime, adapter } = await createTestRuntime();
     seedCandidates(runtime, ["cand-1"]);

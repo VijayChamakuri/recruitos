@@ -52,7 +52,7 @@ afterEach(async () => {
 });
 
 describe("proposal persistence and read model integration", () => {
-  it("does not list stub rows after demoPrepare, then lists the scored correction shortlist", async () => {
+  it("does not list stub rows after demoPrepare, and does not mint a correction shortlist", async () => {
     const runtime = await demoRuntime();
     unwrap(await demoPrepare(runtime));
 
@@ -103,28 +103,17 @@ describe("proposal persistence and read model integration", () => {
 
     const listed = unwrap(listProposals(runtime.connection.database));
     expect(listed.queryCount).toBe(1);
-    expect(listed.items).toHaveLength(1);
-    expect(listed.items[0]?.kind).toBe("shortlist_inclusion");
-    expect(listed.items[0]?.status).toBe("pending");
-    expect(listed.items[0]?.version).toBe(0);
-    expect(listed.items[0]?.proposedChange).toBe("shortlist_inclusion");
-    expect(listed.items[0]?.candidateResultId).toBe(completed.result.resultId);
-    expect(listed.items[0]?.proposalId).not.toBe("proposal-1");
-    expect(listed.nextCursor).toBeUndefined();
+    expect(listed.items).toHaveLength(0);
+    expect(listed.items.some((item) => item.proposalId === "proposal-1")).toBe(false);
 
-    const page = unwrap(listProposals(runtime.connection.database, { limit: 1 }));
-    expect(page.items).toHaveLength(1);
-    expect(page.nextCursor).toBeUndefined();
-
-    const pending = unwrap(listProposals(runtime.connection.database, { status: "pending" }));
-    expect(pending.items).toHaveLength(1);
-    const approved = unwrap(listProposals(runtime.connection.database, { status: "approved" }));
-    expect(approved.items).toHaveLength(0);
-
-    const heads = nativeClient(runtime)
-      .prepare("SELECT count(*) AS n FROM proposal_head")
-      .get() as { n: number };
-    expect(heads.n).toBe(0);
+    const originalCount = nativeClient(runtime)
+      .prepare("SELECT count(*) AS n FROM proposal WHERE candidate_result_id = ?")
+      .get(head.resultId) as { n: number };
+    const correctionCount = nativeClient(runtime)
+      .prepare("SELECT count(*) AS n FROM proposal WHERE candidate_result_id = ?")
+      .get(completed.result.resultId) as { n: number };
+    expect(originalCount.n).toBe(0);
+    expect(correctionCount.n).toBe(0);
 
     unwrap(runtime.close());
   });
