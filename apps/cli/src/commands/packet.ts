@@ -39,7 +39,9 @@ export async function runPacketCommand(
     };
   }
 
-  const packetResult = await composition.getCandidatePacket(candidateId);
+  const packetResult = await composition.getCandidatePacket(candidateId, {
+    ...(args.options.result === undefined ? {} : { resultId: args.options.result })
+  });
   const durationMs = Date.now() - startTime;
 
   if (!packetResult.ok) {
@@ -84,6 +86,8 @@ export async function runPacketCommand(
       : [`Role:         ${packet.roleTitle} (${packet.roleId})`]),
     `Channel:      ${packet.channel}`,
     `Status:       ${packet.status}`,
+    ...(packet.resultId ? [`Result ID:    ${packet.resultId}`] : []),
+    ...(packet.resultKind ? [`Result kind:  ${packet.resultKind}`] : []),
     `Score:        ${packet.scoreText ?? (packet.score !== null ? packet.score.toFixed(1) : "-")}`,
     `Confidence:   ${packet.confidenceText ?? (packet.confidence !== null ? `${Math.round(packet.confidence * 100)}%` : "-")}`,
     `Sealed:       ${packet.sealed ? "yes" : "no"}`,

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +7,6 @@ import { err, ok, type Result } from "@recruitos/core";
 import {
   createRuntime,
   demoCompositionOptions,
-  type Clock,
   type CreateRuntimeOptions,
   type IdGenerator,
   type RuntimeComposition
@@ -35,14 +35,25 @@ import type {
 import { StubRecruitosComposition } from "./stub.js";
 
 import {
-  finalizeTriageRun,
+  completeReExtraction,
   demoPrepare,
   importCandidates,
   listCandidates,
   listResolutionTasks,
   readCandidatePacket,
+  registerDemoCorrectionFixtures,
+  registerDemoFixtures,
+  requestReExtraction,
   runExtractionAttempt,
   startTriageRun,
+  finalizeTriageRun,
+  createRuntimeError,
+  deriveResolutionTaskStatus,
+  runImmediateTransaction,
+  readResolutionTask,
+  readResolutionTaskHead,
+  readResolutionActions,
+  readCandidateTriageResult,
   type CandidatePacketModel,
   type CandidateSummaryItem,
   type ResolutionTaskItem
@@ -216,7 +227,10 @@ function toCandidatePacket(
     evidenceSpans,
     evidenceGaps,
     documents,
-    tasks: []
+    tasks: [],
+    resultId: packet.resultId,
+    resultKind: packet.resultKind,
+    headVersion: packet.headVersion
   };
 }
 
@@ -325,6 +339,33 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       ...result.value,
       droppedQuoteCount: result.value.droppedQuotes.length
     });
+  }
+
+  registerExtractionFixtures(
+    triageAttemptId: string,
+    options?: { overlay?: boolean }
+  ): Result<void, RuntimeError> {
+    return options?.overlay
+      ? registerDemoCorrectionFixtures(this.runtime, triageAttemptId)
+      : registerDemoFixtures(this.runtime, triageAttemptId);
+  }
+
+  async completeReExtraction(input: {
+    actorId: string;
+    triageAttemptId: string;
+    expectedTaskHeadVersion: number;
+    expectedCandidateHeadVersion: number;
+    commandId?: string;
+  }): Promise<Result<import("./types.js").CompleteReExtractionSummary, RuntimeError>> {
+    const result = completeReExtraction(this.runtime, {
+      actorId: input.actorId,
+      triageAttemptId: input.triageAttemptId,
+      expectedTaskHeadVersion: input.expectedTaskHeadVersion,
+      expectedCandidateHeadVersion: input.expectedCandidateHeadVersion,
+      ...(input.commandId === undefined ? {} : { commandId: input.commandId })
+    });
+    if (!result.ok) return result;
+    return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
   }
 
   async finalizeTriage(input: {
@@ -492,11 +533,13 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   }
 
   async getCandidatePacket(
-    candidateId: string
+    candidateId: string,
+    options?: { resultId?: string }
   ): Promise<Result<CandidatePacket, RuntimeError>> {
-    const packetResult = await readCandidatePacket(
+    const packetResult = readCandidatePacket(
       this.runtime.connection.database,
-      candidateId
+      candidateId,
+      options
     );
     if (packetResult.ok) {
       return ok(toCandidatePacket(packetResult.value, getNativeClient(this.runtime.connection.database)));
@@ -540,17 +583,136 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
   async getResolutionTask(
     taskId: string
   ): Promise<Result<ResolutionTaskDetail, RuntimeError>> {
-    return this.fallback.getResolutionTask(taskId);
+    const loaded = runImmediateTransaction(this.runtime.connection, (context) => {
+      const task = readResolutionTask(context, taskId);
+      if (!task.ok) {
+        return task;
+      }
+      if (task.value === undefined) {
+        return err(
+          createRuntimeError("not_found", `Resolution task "${taskId}" not found`, false)
+        );
+      }
+      const result = readCandidateTriageResult(context, task.value.candidateResultId);
+      if (!result.ok) {
+        return result;
+      }
+      if (result.value === undefined) {
+        return err(
+          createRuntimeError(
+            "not_found",
+            `Candidate result "${task.value.candidateResultId}" not found`,
+            false
+          )
+        );
+      }
+      const head = readResolutionTaskHead(context, taskId);
+      if (!head.ok) {
+        return head;
+      }
+      const actions = readResolutionActions(context, taskId);
+      if (!actions.ok) {
+        return actions;
+      }
+      const reason = context.nativeDatabase
+        .prepare(
+          `SELECT reason_code AS reasonCode
+           FROM candidate_result_reason
+           WHERE candidate_result_reason_id = ?`
+        )
+        .get(task.value.candidateResultReasonId) as { reasonCode: string } | undefined;
+      const currentAction =
+        head.value === undefined
+          ? undefined
+          : actions.value.find((action) => action.resolutionActionId === head.value!.currentActionId);
+      const status = deriveResolutionTaskStatus(currentAction?.actionKind ?? null);
+      return ok({
+        resolutionTaskId: task.value.resolutionTaskId,
+        candidateId: result.value.candidateId,
+        candidateResultId: task.value.candidateResultId,
+        reasonCode: reason?.reasonCode ?? "",
+        status,
+        taskOrdinal: task.value.taskOrdinal,
+        ...(head.value?.currentActionId ? { currentActionId: head.value.currentActionId } : {}),
+        version: head.value?.version ?? 0,
+        createdAt: task.value.createdAt,
+        actions: actions.value.map((action) => ({
+          actionId: action.resolutionActionId,
+          actorId: action.actorId,
+          actionKind: action.actionKind,
+          rationale:
+            "rationale" in action.payload && typeof action.payload.rationale === "string"
+              ? action.payload.rationale
+              : action.actionKind,
+          createdAt: action.createdAt
+        }))
+      });
+    });
+    if (loaded.ok) {
+      return loaded;
+    }
+    if (this.allowStubFallback) {
+      return this.fallback.getResolutionTask(taskId);
+    }
+    return err({
+      code: loaded.error.code,
+      message: loaded.error.message,
+      retryable: false
+    });
   }
 
   async recordResolutionAction(
     input: RecordResolutionActionInput
   ): Promise<
     Result<
-      { actionId: string; newVersion: number; derivedStatus: ResolutionTaskDetail["status"] },
+      {
+        actionId: string;
+        newVersion: number;
+        derivedStatus: ResolutionTaskDetail["status"];
+        triageAttemptId?: string;
+        commandId: string;
+      },
       RuntimeError
     >
   > {
+    if (input.actionKind === "reextraction_completed") {
+      return err({
+        code: "command_conflict",
+        message: "reextraction_completed is a system-only action",
+        retryable: false
+      });
+    }
+    if (input.actionKind === "request_re_extraction") {
+      if (input.expectedCandidateHeadVersion === undefined) {
+        return err({
+          code: "invalid_argument",
+          message: "--candidate-version is required when requesting re-extraction",
+          retryable: false
+        });
+      }
+      const result = requestReExtraction(this.runtime, {
+        actorId: input.actorId,
+        resolutionTaskId: input.taskId,
+        expectedTaskHeadVersion: input.expectedVersion,
+        expectedCandidateHeadVersion: input.expectedCandidateHeadVersion,
+        ...(input.commandId === undefined ? {} : { commandId: input.commandId })
+      });
+      if (!result.ok) {
+        return err({
+          code: result.error.code,
+          message: result.error.message,
+          retryable: result.error.retryable,
+          ...(result.error.details === undefined ? {} : { details: result.error.details })
+        });
+      }
+      return ok({
+        actionId: result.value.result.resolutionActionId,
+        newVersion: result.value.result.taskHeadVersion,
+        derivedStatus: result.value.result.derivedStatus,
+        triageAttemptId: result.value.result.triageAttemptId,
+        commandId: result.value.metadata.commandId
+      });
+    }
     return this.fallback.recordResolutionAction(input);
   }
 
@@ -591,6 +753,22 @@ function createTempDbFilename(): string {
   return join(dir, "runtime.db");
 }
 
+/**
+ * File-backed CLI commands each start a new process. The default incrementing
+ * generator would reuse `runtime-0000000001` as a command id and trip
+ * command_identity_mismatch on the next write. Namespace each process.
+ */
+export function createProcessUniqueIdGenerator(prefix: string): IdGenerator {
+  const namespace = randomBytes(8).toString("hex");
+  let counter = 0;
+  return Object.freeze({
+    next: (): string => {
+      counter += 1;
+      return `${prefix}-${namespace}-${counter.toString().padStart(10, "0")}`;
+    }
+  });
+}
+
 export function createDefaultRuntimeComposition(
   options?: Partial<CreateRuntimeOptions>
 ): Result<RecruitosComposition, RuntimeError> {
@@ -605,11 +783,15 @@ export function createDefaultRuntimeComposition(
       : {})
   };
 
+  const idGenerator =
+    options?.idGenerator ??
+    (isMemory ? undefined : createProcessUniqueIdGenerator("runtime"));
+
   const runtimeResult = createRuntime({
     database,
     migrate: options?.migrate ?? true,
     ...(options?.clock ? { clock: options.clock } : {}),
-    ...(options?.idGenerator ? { idGenerator: options.idGenerator } : {}),
+    ...(idGenerator === undefined ? {} : { idGenerator }),
     ...(options?.extraction ? { extraction: options.extraction } : {}),
     ...(options?.candidateSource ? { candidateSource: options.candidateSource } : {})
   });

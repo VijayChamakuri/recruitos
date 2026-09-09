@@ -159,6 +159,7 @@ export async function runCli(
     case "triage:start":
     case "triage:extract":
     case "triage:finalize":
+    case "triage:complete-correction":
       return runRuntimeCommand(parsed, composition, startTime);
     case "triage":
       return runTriageCommand(parsed, composition, startTime);

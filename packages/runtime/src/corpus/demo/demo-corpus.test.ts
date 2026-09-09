@@ -8,7 +8,9 @@ import {
   DEMO_DIMENSION_IDS,
   DEMO_EXPECTED_OUTCOMES,
   DEMO_WORK_AUTHORIZATION_QUESTION_KEY,
+  DEMO_REVIEWABLE_FAILURE_SOURCE_KEY,
   demoCandidateSourceRecords,
+  demoCorrectionExtractionResponseBody,
   demoExtractionResponseBody
 } from "./demo-corpus.js";
 
@@ -96,6 +98,43 @@ describe("demo corpus", () => {
         }
       }
     }
+  });
+
+  it("correction overlay locates the evaluation quote for the reviewable-failure candidate", () => {
+    const resume = demoCandidateSourceRecords().find(
+      (record) => record.sourceKey === DEMO_REVIEWABLE_FAILURE_SOURCE_KEY
+    )!.documents[0]!.rawText;
+    const initial = bodyFor("evaluation_and_measurement", DEMO_REVIEWABLE_FAILURE_SOURCE_KEY);
+    expect(resume).not.toContain(initial.spans[0]!.quotedText);
+    const corrected = JSON.parse(
+      demoCorrectionExtractionResponseBody(
+        "evaluation_and_measurement",
+        DEMO_REVIEWABLE_FAILURE_SOURCE_KEY
+      )
+    ) as ExtractionBody;
+    expect(corrected.proposedLevel).toBe("partial");
+    expect(corrected.spans).toHaveLength(1);
+    expect(resume).toContain(corrected.spans[0]!.quotedText);
+    expect(corrected.spans[0]!.quotedText).toContain(DEMO_REVIEWABLE_FAILURE_SOURCE_KEY);
+  });
+
+  it("reuses the initial fixture body for every other route during correction", () => {
+    for (const sourceKey of DEMO_CANDIDATE_SOURCE_KEYS) {
+      if (sourceKey === DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) {
+        continue;
+      }
+      for (const dimensionId of DEMO_DIMENSION_IDS) {
+        expect(demoCorrectionExtractionResponseBody(dimensionId, sourceKey)).toBe(
+          demoExtractionResponseBody(dimensionId, sourceKey)
+        );
+      }
+    }
+  });
+
+  it("throws for an unknown dimension on a correction body", () => {
+    expect(() =>
+      demoCorrectionExtractionResponseBody("not_a_dimension", DEMO_REVIEWABLE_FAILURE_SOURCE_KEY)
+    ).toThrow(/No demo extraction fixture/);
   });
 
   it("throws for an unknown dimension id", () => {

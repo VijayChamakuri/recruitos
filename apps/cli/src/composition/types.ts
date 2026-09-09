@@ -96,6 +96,9 @@ export type CandidatePacket = Readonly<{
   evidenceGaps: readonly EvidenceGap[];
   documents: readonly CandidateSourceDocumentView[];
   tasks: readonly ResolutionTaskSummary[];
+  resultId?: string;
+  resultKind?: string;
+  headVersion?: number;
 }>;
 
 export type TriageRunSummary = Readonly<{
@@ -221,6 +224,18 @@ export type FinalizeTriageSummary = Readonly<{
   resultIds: readonly string[];
 }>;
 
+export type CompleteReExtractionSummary = Readonly<{
+  commandId: string;
+  triageAttemptId: string;
+  resolutionTaskId: string;
+  resolutionActionId: string;
+  resultId: string;
+  baseResultId: string;
+  candidateHeadVersion: number;
+  taskHeadVersion: number;
+  derivedStatus: "review_required";
+}>;
+
 export type DemoPrepareSummary = Readonly<{
   candidateIds: readonly string[];
   triageAttemptId: string;
@@ -239,6 +254,8 @@ export type RecordResolutionActionInput = Readonly<{
   actorId: string;
   rationale: string;
   expectedVersion: number;
+  expectedCandidateHeadVersion?: number;
+  commandId?: string;
 }>;
 
 export type ListProposalsOptions = Readonly<{
@@ -283,6 +300,19 @@ export interface RecruitosComposition {
     triageAttemptId: string
   ): Promise<Result<ExtractionAttemptSummary, RuntimeError>>;
 
+  registerExtractionFixtures?(
+    triageAttemptId: string,
+    options?: { overlay?: boolean }
+  ): Result<void, RuntimeError>;
+
+  completeReExtraction?(input: Readonly<{
+    actorId: string;
+    triageAttemptId: string;
+    expectedTaskHeadVersion: number;
+    expectedCandidateHeadVersion: number;
+    commandId?: string;
+  }>): Promise<Result<CompleteReExtractionSummary, RuntimeError>>;
+
   finalizeTriage(input: Readonly<{
     actorId: string;
     triageAttemptId: string;
@@ -294,7 +324,8 @@ export interface RecruitosComposition {
   ): Promise<Result<readonly CandidateSummary[], RuntimeError>>;
 
   getCandidatePacket(
-    candidateId: string
+    candidateId: string,
+    options?: { resultId?: string }
   ): Promise<Result<CandidatePacket, RuntimeError>>;
 
   runTriage(
@@ -315,7 +346,13 @@ export interface RecruitosComposition {
     input: RecordResolutionActionInput
   ): Promise<
     Result<
-      { actionId: string; newVersion: number; derivedStatus: ResolutionTaskStatus },
+      {
+        actionId: string;
+        newVersion: number;
+        derivedStatus: ResolutionTaskStatus;
+        triageAttemptId?: string;
+        commandId: string;
+      },
       RuntimeError
     >
   >;

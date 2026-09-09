@@ -218,7 +218,10 @@ export class StubRecruitosComposition implements RecruitosComposition {
       ],
       evidenceGaps: [],
       documents: [resumeDoc],
-      tasks: []
+      tasks: [],
+      resultId: "result-1",
+      resultKind: "initial",
+      headVersion: 1
     };
 
     const task1: ResolutionTaskDetail = {
@@ -405,6 +408,29 @@ export class StubRecruitosComposition implements RecruitosComposition {
     });
   }
 
+  registerExtractionFixtures(): Result<void, RuntimeError> {
+    return ok(undefined);
+  }
+
+  async completeReExtraction(input: {
+    triageAttemptId: string;
+    expectedTaskHeadVersion: number;
+    expectedCandidateHeadVersion: number;
+    commandId?: string;
+  }): Promise<Result<import("./types.js").CompleteReExtractionSummary, RuntimeError>> {
+    return ok({
+      commandId: input.commandId ?? "command-stub-complete-correction",
+      triageAttemptId: input.triageAttemptId,
+      resolutionTaskId: "task-stub-correction",
+      resolutionActionId: "action-stub-correction",
+      resultId: "result-stub-correction",
+      baseResultId: "result-stub-base",
+      candidateHeadVersion: input.expectedCandidateHeadVersion + 1,
+      taskHeadVersion: input.expectedTaskHeadVersion + 1,
+      derivedStatus: "review_required"
+    });
+  }
+
   async finalizeTriage(input: {
     triageAttemptId: string;
   }): Promise<Result<import("./types.js").FinalizeTriageSummary, RuntimeError>> {
@@ -511,7 +537,13 @@ export class StubRecruitosComposition implements RecruitosComposition {
     input: RecordResolutionActionInput
   ): Promise<
     Result<
-      { actionId: string; newVersion: number; derivedStatus: ResolutionTaskStatus },
+      {
+        actionId: string;
+        newVersion: number;
+        derivedStatus: ResolutionTaskStatus;
+        triageAttemptId?: string;
+        commandId: string;
+      },
       RuntimeError
     >
   > {
@@ -547,7 +579,12 @@ export class StubRecruitosComposition implements RecruitosComposition {
 
     this.tasks.set(input.taskId, updatedTask);
 
-    return ok({ actionId, newVersion, derivedStatus });
+    return ok({
+      actionId,
+      newVersion,
+      derivedStatus,
+      commandId: input.commandId ?? "command-stub-review"
+    });
   }
 
   async listProposals(

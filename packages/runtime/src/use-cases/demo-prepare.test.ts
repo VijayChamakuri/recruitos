@@ -20,7 +20,7 @@ import {
 } from "../corpus/index.js";
 import type { RuntimeError } from "../errors/index.js";
 import { readCandidatePacket } from "../read-models/index.js";
-import { demoPrepare } from "./demo-prepare.js";
+import { demoPrepare, registerDemoCorrectionFixtures } from "./demo-prepare.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 const temporaryDirectories: string[] = [];
@@ -33,7 +33,11 @@ function unwrap<T>(result: Result<T, RuntimeError>): T {
 }
 
 function nativeClient(runtime: RuntimeComposition): {
-  prepare: (sql: string) => { get: (...a: unknown[]) => unknown; all: (...a: unknown[]) => unknown[] };
+  prepare: (sql: string) => {
+    get: (...a: unknown[]) => unknown;
+    all: (...a: unknown[]) => unknown[];
+    run: (...a: unknown[]) => { changes: number };
+  };
 } {
   return (runtime.connection.database as unknown as { $client: ReturnType<typeof nativeClient> })
     .$client;
@@ -133,7 +137,7 @@ describe("demoPrepare", () => {
     const result = await demoPrepare(runtime);
     expect(result).toMatchObject({
       ok: false,
-      error: { message: "demoPrepare requires a FixtureExtractionAdapter" }
+      error: { message: "Fixture registration requires a FixtureExtractionAdapter" }
     });
     unwrap(runtime.close());
   });
@@ -164,6 +168,20 @@ describe("demoPrepare", () => {
       .prepare("SELECT DISTINCT actor_id AS actorId FROM command_receipt")
       .get() as { actorId: string };
     expect(row.actorId).toBe("actor-custom-demo");
+    unwrap(runtime.close());
+  });
+
+  it("rejects correction fixture registration when the attempt has no work items", async () => {
+    const runtime = await demoRuntime();
+    const prepared = unwrap(await demoPrepare(runtime));
+    nativeClient(runtime).prepare("DROP TRIGGER IF EXISTS attempt_work_item_reject_delete").run();
+    nativeClient(runtime)
+      .prepare("DELETE FROM attempt_work_item WHERE triage_attempt_id = ?")
+      .run(prepared.triageAttemptId);
+    expect(registerDemoCorrectionFixtures(runtime, prepared.triageAttemptId)).toMatchObject({
+      ok: false,
+      error: { message: "Triage attempt produced no work items" }
+    });
     unwrap(runtime.close());
   });
 

@@ -381,6 +381,41 @@ export function demoExtractionResponseBody(dimensionId: string, sourceKey: strin
   });
 }
 
+/** Source key of the reviewable-extraction-failure proving candidate. */
+export const DEMO_REVIEWABLE_FAILURE_SOURCE_KEY = "demo/route-4-reviewable-failure";
+
+/**
+ * Fixture body for a correction attempt. For the reviewable-failure candidate
+ * this supplies the located evaluation quote the initial extraction withheld.
+ * Every other route reuses the initial body so an identical re-extraction is
+ * still possible and still creates a superseding result.
+ */
+export function demoCorrectionExtractionResponseBody(
+  dimensionId: string,
+  sourceKey: string
+): string {
+  if (sourceKey !== DEMO_REVIEWABLE_FAILURE_SOURCE_KEY) {
+    return demoExtractionResponseBody(dimensionId, sourceKey);
+  }
+  const body = FULL_COVERAGE[dimensionId];
+  if (body === undefined) {
+    throw new Error(`No demo extraction fixture for dimension "${dimensionId}"`);
+  }
+  const spans: Array<{ quotedText: string; polarity: "supporting" | "contradicting" }> = [];
+  if (body.quoteDimension !== null) {
+    spans.push({
+      quotedText: narrativeLine(body.quoteDimension, sourceKey),
+      polarity: "supporting"
+    });
+  }
+  return JSON.stringify({
+    dimensionId,
+    proposedLevel: body.proposedLevel,
+    spans,
+    rejectedClaims: []
+  });
+}
+
 /** Expected finalized outcomes, one per demo candidate, in import order. */
 export const DEMO_EXPECTED_OUTCOMES: readonly ExpectedOutcome[] = DEMO_CANDIDATES.map(
   (candidate) => candidate.expected
