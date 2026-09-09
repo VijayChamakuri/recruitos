@@ -409,7 +409,82 @@ mark .tag {
   text-decoration: line-through;
 }
 
-/* Packet B 3-pane Layout */
+/* Packet B 3-pane Layout plus 420px inspector rail */
+.packet-shell { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.packet-conflict-slot { flex: 0 0 auto; }
+.packet-with-inspector {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  flex: 1;
+  min-height: 0;
+}
+.packet-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.packet-inspector {
+  border-left: 1px solid var(--hairline-strong);
+  background: var(--surface);
+  overflow: auto;
+  padding: 12px;
+}
+.packet-inspector textarea {
+  display: block;
+  width: 100%;
+  min-height: 88px;
+  margin: 6px 0 10px;
+  padding: 8px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-paper);
+  color: var(--text);
+  resize: vertical;
+}
+.inspector-btn {
+  display: inline-block;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--text);
+  background: var(--surface-paper);
+  color: var(--text);
+  cursor: pointer;
+}
+.inspector-btn.primary {
+  background: var(--text);
+  color: var(--surface-paper);
+}
+.inspector-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.fixture-mark {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--hairline-strong);
+  padding: 3px 6px;
+  margin: 8px 0;
+  color: var(--text-muted);
+}
+.conflict-band {
+  border: 1px solid var(--contradict);
+  border-left-width: 3px;
+  background: var(--contradict-wash);
+  font-family: var(--f-mono);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.toast-success {
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-paper);
+  font-family: var(--f-mono);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
 .packet-b { display: grid; grid-template-columns: 5fr 7fr 6fr; height: 100%; position: relative; }
 .pane { overflow: auto; position: relative; }
 .pane.arith  { background: var(--surface-inset); border-right: 1px solid var(--hairline-strong); }

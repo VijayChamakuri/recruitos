@@ -1,4 +1,4 @@
-import type { RecruitosComposition } from "@recruitos/cli";
+import type { CandidatePacket, RecruitosComposition } from "@recruitos/cli";
 import { parseAppearance, packetHref, type Appearance } from "../appearance.js";
 import { renderCandidatePacketView } from "../components/candidate-packet.js";
 import { renderEvidenceCoverageStrip } from "../components/evidence-coverage-strip.js";
@@ -7,14 +7,28 @@ import { escapeHtml } from "../components/safe-text.js";
 import { TEST_IDS } from "../testids.js";
 import { TOKENS_CSS } from "../tokens.js";
 import { getServerComposition, getServerRuntime } from "./composition.js";
+import {
+  completeFixtureReExtractionAction,
+  requestReExtractionAction,
+  staleConflictCopy,
+  type WebActionFailure
+} from "./correction-actions.js";
+import { isCorrectionFixtureMode } from "./correction-mode.js";
+import { requiredInteger, requiredText } from "./form-body.js";
+import { loadPacketInspectorModel } from "./inspector-model.js";
 import { overlayPersistedRunStatus } from "./persisted-run.js";
-import { renderPage } from "./ssr.js";
+import { renderPage, type PageRenderOptions } from "./ssr.js";
 import { loadTriageQueueModel } from "./triage-queue.js";
 
 export type HttpResponse = Readonly<{
   statusCode: number;
   headers: Record<string, string>;
   body: string;
+}>;
+
+export type IncomingRequest = Readonly<{
+  method?: string;
+  body?: URLSearchParams;
 }>;
 
 function htmlHeaders(): Record<string, string> {
@@ -60,6 +74,14 @@ function typedErrorPage(
   };
 }
 
+function redirect(location: string): HttpResponse {
+  return {
+    statusCode: 303,
+    headers: { ...htmlHeaders(), Location: location },
+    body: ""
+  };
+}
+
 async function loadDisplayedStatus(composition: RecruitosComposition) {
   const statusResult = await composition.getStatus();
   if (!statusResult.ok) {
@@ -72,10 +94,181 @@ async function loadDisplayedStatus(composition: RecruitosComposition) {
   return overlayPersistedRunStatus(statusResult.value, runtime.connection.database);
 }
 
-export async function handleRequest(
+type PageShell = Omit<
+  PageRenderOptions,
+  "title" | "activeDestination" | "currentPath" | "contentHtml"
+>;
+
+function actionFailurePage(
+  failure: WebActionFailure,
+  appearance: Appearance,
   urlPath: string,
   searchParams: URLSearchParams
+): HttpResponse {
+  return typedErrorPage(
+    "Correction action failed",
+    failure.message,
+    appearance,
+    urlPath,
+    failure.httpStatus,
+    searchParams
+  );
+}
+
+async function renderPacketPage(
+  composition: RecruitosComposition,
+  candidateId: string,
+  searchParams: URLSearchParams,
+  appearance: Appearance,
+  pageShell: PageShell,
+  extras?: {
+    statusCode?: number;
+    conflictMessage?: string;
+    preservedRationale?: string;
+    freezeSubmit?: boolean;
+    expectedTaskHeadVersion?: number;
+    expectedCandidateHeadVersion?: number;
+  }
 ): Promise<HttpResponse> {
+  const resultId = searchParams.get("result") ?? undefined;
+  const packetResult = await composition.getCandidatePacket(
+    candidateId,
+    resultId === undefined ? undefined : { resultId }
+  );
+
+  if (!packetResult.ok) {
+    const contentHtml = [
+      `      <div style="padding:40px;text-align:center" data-testid="${TEST_IDS.PACKET_NOT_FOUND}">`,
+      `        <h2 style="color:var(--danger)">Candidate Packet Not Found</h2>`,
+      `        <p class="muted">No candidate evaluation packet matching ID: ${escapeHtml(candidateId)}</p>`,
+      `        <p><a href="${escapeHtml(`/triage?theme=${appearance.theme}&density=${appearance.density}`)}" class="link" data-testid="${TEST_IDS.RETURN_TO_QUEUE}">Return to Triage Queue</a></p>`,
+      `      </div>`
+    ].join("\n");
+    return {
+      statusCode: 404,
+      headers: htmlHeaders(),
+      body: renderPage({
+        ...pageShell,
+        title: "Packet Not Found",
+        activeDestination: "packet",
+        currentPath: `/packet/${candidateId}`,
+        contentHtml
+      })
+    };
+  }
+
+  const packet: CandidatePacket = packetResult.value;
+  const inspector = await loadPacketInspectorModel({
+    composition,
+    packet,
+    appearance,
+    searchParams,
+    ...(extras?.conflictMessage === undefined ? {} : { conflictMessage: extras.conflictMessage }),
+    ...(extras?.preservedRationale === undefined
+      ? {}
+      : { preservedRationale: extras.preservedRationale }),
+    ...(extras?.freezeSubmit === undefined ? {} : { freezeSubmit: extras.freezeSubmit }),
+    ...(extras?.expectedTaskHeadVersion === undefined
+      ? {}
+      : { expectedTaskHeadVersion: extras.expectedTaskHeadVersion }),
+    ...(extras?.expectedCandidateHeadVersion === undefined
+      ? {}
+      : { expectedCandidateHeadVersion: extras.expectedCandidateHeadVersion })
+  });
+  const contentHtml = renderCandidatePacketView({ packet, appearance, inspector });
+  return {
+    statusCode: extras?.statusCode ?? 200,
+    headers: htmlHeaders(),
+    body: renderPage({
+      ...pageShell,
+      title: `Packet: ${packet.candidateId}`,
+      activeDestination: "packet",
+      currentPath: `/packet/${encodeURIComponent(packet.candidateId)}`,
+      packetCandidateId: packet.candidateId,
+      roleTitle: packet.roleTitle,
+      contentHtml
+    })
+  };
+}
+
+async function handleCorrectionPost(
+  urlPath: string,
+  searchParams: URLSearchParams,
+  body: URLSearchParams,
+  composition: RecruitosComposition,
+  appearance: Appearance,
+  pageShell: PageShell
+): Promise<HttpResponse> {
+  if (urlPath === "/actions/request-re-extraction") {
+    const result = await requestReExtractionAction(composition, body);
+    if (result.ok) {
+      const next = new URLSearchParams(searchParams);
+      next.set("correction_attempt", result.value.triageAttemptId);
+      next.set("notice", "reextraction_requested");
+      next.delete("result");
+      next.delete("prior");
+      return redirect(
+        `/packet/${encodeURIComponent(result.value.candidateId)}?${next.toString()}`
+      );
+    }
+    if (result.error.httpStatus === 409) {
+      const candidateId = requiredText(body, "candidateId");
+      if (candidateId === undefined) {
+        return actionFailurePage(result.error, appearance, urlPath, searchParams);
+      }
+      const preservedRationale = requiredText(body, "rationale");
+      const expectedTaskHeadVersion = requiredInteger(body, "expectedTaskHeadVersion");
+      const expectedCandidateHeadVersion = requiredInteger(body, "expectedCandidateHeadVersion");
+      return renderPacketPage(composition, candidateId, searchParams, appearance, pageShell, {
+        statusCode: 409,
+        conflictMessage: staleConflictCopy(result.error),
+        freezeSubmit: true,
+        ...(preservedRationale === undefined ? {} : { preservedRationale }),
+        ...(expectedTaskHeadVersion === undefined ? {} : { expectedTaskHeadVersion }),
+        ...(expectedCandidateHeadVersion === undefined
+          ? {}
+          : { expectedCandidateHeadVersion })
+      });
+    }
+    return actionFailurePage(result.error, appearance, urlPath, searchParams);
+  }
+
+  if (urlPath === "/actions/complete-fixture-extraction") {
+    const result = await completeFixtureReExtractionAction(
+      composition,
+      body,
+      getServerRuntime()?.connection.database
+    );
+    if (result.ok) {
+      const next = new URLSearchParams(searchParams);
+      next.set("prior", result.value.baseResultId);
+      next.set("notice", "correction_complete");
+      next.delete("correction_attempt");
+      next.delete("result");
+      return redirect(
+        `/packet/${encodeURIComponent(result.value.candidateId)}?${next.toString()}`
+      );
+    }
+    return actionFailurePage(result.error, appearance, urlPath, searchParams);
+  }
+
+  return typedErrorPage(
+    "Not Found",
+    "Unknown correction action.",
+    appearance,
+    urlPath,
+    404,
+    searchParams
+  );
+}
+
+export async function handleRequest(
+  urlPath: string,
+  searchParams: URLSearchParams,
+  incoming?: IncomingRequest
+): Promise<HttpResponse> {
+  const method = (incoming?.method ?? "GET").toUpperCase();
+  const body = incoming?.body ?? new URLSearchParams();
   const appearance = parseAppearance(searchParams);
 
   if (urlPath === "/tokens.css") {
@@ -146,6 +339,31 @@ export async function handleRequest(
     ...(reasonCodeCounts === undefined ? {} : { reasonCodeCounts }),
     ...(roleTitle === undefined ? {} : { roleTitle })
   };
+
+  if (urlPath.startsWith("/actions/")) {
+    if (method !== "POST") {
+      return typedErrorPage(
+        "Method not allowed",
+        "Correction actions accept POST only.",
+        appearance,
+        urlPath,
+        405,
+        searchParams
+      );
+    }
+    return handleCorrectionPost(urlPath, searchParams, body, composition, appearance, pageShell);
+  }
+
+  if (method !== "GET" && method !== "HEAD") {
+    return typedErrorPage(
+      "Method not allowed",
+      "This resource accepts GET.",
+      appearance,
+      urlPath,
+      405,
+      searchParams
+    );
+  }
 
   if (urlPath === "/" || urlPath === "/triage") {
     if (!queueModelResult.ok) {
@@ -236,23 +454,33 @@ export async function handleRequest(
 
   if (urlPath === "/review") {
     const tasks = queueModel?.allTasks ?? [];
+    const sourceKeyByCandidateId = new Map(
+      (queueModel?.rows ?? []).map((row) => [row.candidate.candidateId, row.candidate.sourceKey])
+    );
+    const correctionCopy = isCorrectionFixtureMode()
+      ? "Fixture correction is on for demo/route-4-reviewable-failure. The browser requests re-extraction as human:operator. The overlay simulates the provider."
+      : "Listing is live. Correction mutations stay off until make demo-web-correction.";
 
-    const taskRows = tasks.map((t) => [
-      `        <tr data-testid="${TEST_IDS.TASK_ITEM(t.resolutionTaskId)}">`,
-      `          <td class="mono"><strong>${escapeHtml(t.resolutionTaskId)}</strong></td>`,
-      `          <td><a href="${escapeHtml(packetHref(t.candidateId, appearance))}" class="link">${escapeHtml(t.candidateId)}</a></td>`,
-      `          <td class="mono">${escapeHtml(t.reasonCode)}</td>`,
-      `          <td><span class="status" data-testid="${TEST_IDS.TASK_STATUS(t.resolutionTaskId)}">${escapeHtml(t.status)}</span></td>`,
-      `          <td class="num">${t.taskOrdinal}</td>`,
-      `          <td class="num">${t.version}</td>`,
-      `          <td class="mono faint">Read-only in this phase</td>`,
-      `        </tr>`
-    ].join("\n"));
+    const taskRows = tasks.map((t) => {
+      const sourceKey = sourceKeyByCandidateId.get(t.candidateId) ?? t.candidateId;
+      const packetUrl = packetHref(t.candidateId, appearance);
+      return [
+        `        <tr data-testid="${TEST_IDS.TASK_ITEM(t.resolutionTaskId)}">`,
+        `          <td class="mono"><strong>${escapeHtml(t.resolutionTaskId)}</strong></td>`,
+        `          <td><a href="${escapeHtml(packetUrl)}" class="link">${escapeHtml(sourceKey)}</a></td>`,
+        `          <td class="mono">${escapeHtml(t.reasonCode)}</td>`,
+        `          <td><span class="status" data-testid="${TEST_IDS.TASK_STATUS(t.resolutionTaskId)}">${escapeHtml(t.status)}</span></td>`,
+        `          <td class="num">${t.taskOrdinal}</td>`,
+        `          <td class="num">${t.version}</td>`,
+        `          <td><a href="${escapeHtml(packetUrl)}" class="link">Open packet</a></td>`,
+        `        </tr>`
+      ].join("\n");
+    });
 
     const contentHtml = [
       `      <div style="padding:16px;border-bottom:1px solid var(--hairline);background:var(--surface)">`,
       `        <h2 style="margin:0 0 4px;font-size:20px">Human Resolution Queue</h2>`,
-      `        <div class="muted" style="font-size:13px">Read-only listing. Correction mutations are deferred.</div>`,
+      `        <div class="muted" style="font-size:13px">${escapeHtml(correctionCopy)}</div>`,
       `      </div>`,
       `      <div style="padding:16px">`,
       `        <div data-testid="resolution-queue">`,
@@ -262,7 +490,9 @@ export async function handleRequest(
       `              <th>Task ID</th><th>Candidate</th><th>Reason Code</th><th>Status</th><th style="text-align:right">Ordinal</th><th style="text-align:right">Version</th><th>Action</th>`,
       `            </tr></thead>`,
       `            <tbody>`,
-      taskRows.length > 0 ? taskRows.join("\n") : `<tr><td colspan="7" class="muted">(no open resolution tasks)</td></tr>`,
+      taskRows.length > 0
+        ? taskRows.join("\n")
+        : `<tr><td colspan="7" class="muted">(no open resolution tasks)</td></tr>`,
       `            </tbody>`,
       `          </table>`,
       `        </div>`,
@@ -309,50 +539,7 @@ export async function handleRequest(
     }
 
     const candidateId = decodeURIComponent(urlPath.slice("/packet/".length));
-    const resultId = searchParams.get("result") ?? undefined;
-    const packetResult = await composition.getCandidatePacket(
-      candidateId,
-      resultId === undefined ? undefined : { resultId }
-    );
-
-    if (!packetResult.ok) {
-      const contentHtml = [
-        `      <div style="padding:40px;text-align:center" data-testid="${TEST_IDS.PACKET_NOT_FOUND}">`,
-        `        <h2 style="color:var(--danger)">Candidate Packet Not Found</h2>`,
-        `        <p class="muted">No candidate evaluation packet matching ID: ${escapeHtml(candidateId)}</p>`,
-        `        <p><a href="${escapeHtml(`/triage?theme=${appearance.theme}&density=${appearance.density}`)}" class="link" data-testid="${TEST_IDS.RETURN_TO_QUEUE}">Return to Triage Queue</a></p>`,
-        `      </div>`
-      ].join("\n");
-
-      return {
-        statusCode: 404,
-        headers: htmlHeaders(),
-        body: renderPage({
-          ...pageShell,
-          title: "Packet Not Found",
-          activeDestination: "packet",
-          currentPath: urlPath,
-          contentHtml
-        })
-      };
-    }
-
-    const packet = packetResult.value;
-    const contentHtml = renderCandidatePacketView({ packet, appearance });
-
-    return {
-      statusCode: 200,
-      headers: htmlHeaders(),
-      body: renderPage({
-        ...pageShell,
-        title: `Packet: ${packet.candidateId}`,
-        activeDestination: "packet",
-        currentPath: urlPath,
-        packetCandidateId: packet.candidateId,
-        roleTitle: packet.roleTitle,
-        contentHtml
-      })
-    };
+    return renderPacketPage(composition, candidateId, searchParams, appearance, pageShell);
   }
 
   if (urlPath === "/runs") {

@@ -1,4 +1,4 @@
-.PHONY: demo demo-stakeholder demo-web
+.PHONY: demo demo-stakeholder demo-web demo-web-correction
 
 demo:
 	@set -eu; \
@@ -23,3 +23,8 @@ demo-web:
 	@set -eu; \
 	corepack pnpm build >/dev/null; \
 	node scripts/demo-web.mjs
+
+demo-web-correction:
+	@set -eu; \
+	corepack pnpm build >/dev/null; \
+	node scripts/demo-web.mjs --correction

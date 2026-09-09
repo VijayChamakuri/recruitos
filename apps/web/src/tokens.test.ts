@@ -38,4 +38,10 @@ describe("self-hosted font-display policy", () => {
     expect(displays.get("IBM Plex Mono")).toEqual(["block"]);
     expect(displays.get("Source Serif 4")).toEqual(["block", "block"]);
   });
+
+  it("declares the 420px packet inspector rail", () => {
+    expect(TOKENS_CSS).toContain("grid-template-columns: 1fr 420px");
+    expect(TOKENS_CSS).toContain(".conflict-band");
+    expect(TOKENS_CSS).toContain("var(--contradict)");
+  });
 });

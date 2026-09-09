@@ -4,6 +4,7 @@ export type WebServerOptions = Readonly<{
   databasePath: string;
   port: number;
   host: string;
+  correctionFixture: boolean;
 }>;
 
 function readFlag(argv: readonly string[], name: string): string | undefined {
@@ -16,6 +17,18 @@ function readFlag(argv: readonly string[], name: string): string | undefined {
     return undefined;
   }
   return value;
+}
+
+function hasBareFlag(argv: readonly string[], name: string): boolean {
+  return argv.includes(name);
+}
+
+function correctionFixtureEnabled(argv: readonly string[], env: NodeJS.ProcessEnv): boolean {
+  if (hasBareFlag(argv, "--correction")) {
+    return true;
+  }
+  const fromEnv = env["CORRECTION_FIXTURE"];
+  return fromEnv === "1" || fromEnv === "true";
 }
 
 export function parseWebServerOptions(
@@ -41,6 +54,7 @@ export function parseWebServerOptions(
   return ok({
     databasePath,
     port,
-    host: "127.0.0.1"
+    host: "127.0.0.1",
+    correctionFixture: correctionFixtureEnabled(argv, env)
   });
 }
