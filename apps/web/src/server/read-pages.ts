@@ -1,9 +1,15 @@
-import type { CandidateSummary, ResolutionTaskSummary } from "@recruitos/cli";
+import type {
+  AuditEventSummary,
+  CandidateSummary,
+  ResolutionTaskSummary
+} from "@recruitos/cli";
 import { err, ok, type Result } from "@recruitos/core";
 import {
   createRuntimeError,
+  listAuditEvents,
   listCandidates,
   listResolutionTasks,
+  type AuditEventItem,
   type CandidateSummaryItem,
   type ResolutionTaskItem,
   type RuntimeError
@@ -62,6 +68,18 @@ function toCandidateSummary(item: CandidateSummaryItem): CandidateSummary {
   };
 }
 
+function toAuditEventSummary(item: AuditEventItem): AuditEventSummary {
+  return {
+    auditEventId: item.auditEventId,
+    eventName: item.eventName,
+    actorId: item.actorId,
+    occurredAt: item.occurredAt,
+    payloadHash: item.payloadHash,
+    commandId: item.commandId,
+    eventOrdinal: item.eventOrdinal
+  };
+}
+
 function toResolutionTaskSummary(item: ResolutionTaskItem): ResolutionTaskSummary {
   return {
     resolutionTaskId: item.resolutionTaskId,
@@ -104,4 +122,19 @@ export function listAllResolutionTaskSummaries(
     return pages;
   }
   return ok(Object.freeze(pages.value.map(toResolutionTaskSummary)));
+}
+
+export function listAllAuditEventSummaries(
+  database: unknown
+): Result<readonly AuditEventSummary[], RuntimeError> {
+  const pages = drainPagedRead((cursor) =>
+    listAuditEvents(database, {
+      limit: 50,
+      ...(cursor === undefined ? {} : { cursor })
+    })
+  );
+  if (!pages.ok) {
+    return pages;
+  }
+  return ok(Object.freeze(pages.value.map(toAuditEventSummary)));
 }

@@ -365,5 +365,16 @@ describe("fixture correction HTTP flow", () => {
     expect(historical.body).toContain("Inspecting: historical result");
     expect(historical.body).toContain("escalated");
     expect(historical.body).toContain("assessment_unavailable");
+
+    const runs = await handleRequest("/runs", new URLSearchParams());
+    expect(runs.statusCode).toBe(200);
+    expect(runs.body).toContain("candidate.result.published");
+    expect(runs.body).toContain("triage_run.sealed");
+    expect(runs.body).toContain("resolution.reextraction_requested");
+    expect(runs.body).toContain("resolution.reextraction_completed");
+    expect(runs.body).toContain(
+      "Append-only, enforced by database triggers. Not cryptographically tamper-proof. An administrator with file access can replace history."
+    );
+    expect(runs.body).not.toContain("corpus_sealed");
   }, 120_000);
 });

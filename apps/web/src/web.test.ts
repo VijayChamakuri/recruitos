@@ -33,10 +33,11 @@ import {
 import { readPersistedTriageRun } from "./server/persisted-run.js";
 import {
   drainPagedRead,
+  listAllAuditEventSummaries,
   listAllCandidateSummaries,
   listAllResolutionTaskSummaries
 } from "./server/read-pages.js";
-import { listCandidates, listResolutionTasks } from "@recruitos/runtime";
+import { listAuditEvents, listCandidates, listResolutionTasks } from "@recruitos/runtime";
 import { setCorrectionFixtureMode } from "./server/correction-mode.js";
 import { parseWebServerOptions } from "./server/options.js";
 import { TEST_IDS } from "./testids.js";
@@ -287,6 +288,16 @@ describe("Prepared seven-candidate demo composition", () => {
     if (!composition.ok) return;
     const missing = await composition.value.getCandidatePacket("candidate-1");
     expect(missing.ok).toBe(false);
+    const runtime = getServerRuntime();
+    expect(runtime).not.toBeNull();
+    if (runtime === null) return;
+    const audit = listAllAuditEventSummaries(runtime.connection.database);
+    expect(audit.ok).toBe(true);
+    if (!audit.ok) return;
+    expect(audit.value.some((event) => event.eventName === "corpus_sealed")).toBe(false);
+    expect(audit.value.some((event) => event.eventName === "candidate.result.published")).toBe(
+      true
+    );
   });
 
   it("lists seven real demo candidates including scored, escalated, and rejected_hard_requirement", async () => {
@@ -551,11 +562,25 @@ describe("Prepared seven-candidate demo composition", () => {
     expect((res.body.match(/data-testid="task-item-/g) ?? []).length).toBeGreaterThan(2);
   });
 
-  it("renders Audit Timeline as an honest deferred state", async () => {
+  it("renders persisted audit events on /runs with the append-only disclaimer", async () => {
     const res = await handleRequest("/runs", new URLSearchParams());
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("Audit Timeline");
-    expect(res.body).toContain("deferred");
+    expect(res.body).toContain(`data-testid="${TEST_IDS.AUDIT_EVENT_TABLE}"`);
+    expect(res.body).toContain("candidate.result.published");
+    expect(res.body).toContain("triage_run.sealed");
+    expect(res.body).toContain("Event ID");
+    expect(res.body).toContain("Ordinal");
+    expect(res.body).toContain("Command ID");
+    expect(res.body).toContain("Payload hash");
+    expect(res.body).toContain(
+      "Append-only, enforced by database triggers. Not cryptographically tamper-proof. An administrator with file access can replace history."
+    );
+    expect(res.body).toContain(`data-testid="${TEST_IDS.AUDIT_APPEND_ONLY_DISCLAIMER}"`);
+    expect(res.body).not.toContain("deferred");
+    expect(res.body).not.toContain("corpus_sealed");
+    expect(res.body).not.toContain("triage_run_started");
+    expect(res.body).not.toContain("cryptographically tamper-proof ledger");
   });
 
   it("renders System Status without invented limitation bullets", async () => {
@@ -606,10 +631,15 @@ describe("Prepared seven-candidate demo composition", () => {
     const database = runtime.connection.database;
     const candidates = listAllCandidateSummaries(database);
     const tasks = listAllResolutionTaskSummaries(database);
+    const events = listAllAuditEventSummaries(database);
     expect(candidates.ok).toBe(true);
     expect(tasks.ok).toBe(true);
-    if (!candidates.ok || !tasks.ok) return;
+    expect(events.ok).toBe(true);
+    if (!candidates.ok || !tasks.ok || !events.ok) return;
     expect(candidates.value).toHaveLength(7);
+    expect(events.value.map((event) => event.eventName)).toEqual(
+      expect.arrayContaining(["candidate.result.published", "triage_run.sealed"])
+    );
     const pagedCandidates = drainPagedRead((cursor) =>
       listCandidates(database, {
         limit: 2,
@@ -622,12 +652,21 @@ describe("Prepared seven-candidate demo composition", () => {
         ...(cursor === undefined ? {} : { cursor })
       })
     );
+    const pagedEvents = drainPagedRead((cursor) =>
+      listAuditEvents(database, {
+        limit: 2,
+        ...(cursor === undefined ? {} : { cursor })
+      })
+    );
     expect(pagedCandidates.ok).toBe(true);
     expect(pagedTasks.ok).toBe(true);
-    if (!pagedCandidates.ok || !pagedTasks.ok) return;
+    expect(pagedEvents.ok).toBe(true);
+    if (!pagedCandidates.ok || !pagedTasks.ok || !pagedEvents.ok) return;
     expect(pagedCandidates.value).toHaveLength(candidates.value.length);
     expect(pagedTasks.value).toHaveLength(tasks.value.length);
+    expect(pagedEvents.value).toHaveLength(events.value.length);
     expect(tasks.value.length).toBeGreaterThan(2);
+    expect(events.value.length).toBeGreaterThan(2);
   });
 
   it("preserves the historical result query when switching theme", async () => {
