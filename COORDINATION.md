@@ -14,20 +14,20 @@ your own rows plus the log.
 
 | Field | Value |
 |---|---|
-| origin/main | 142c31f |
+| origin/main | 703652d |
 | Migration lock held by | None (released after PR #58). |
 | Rubric v1 | LOCKED on main (PR #47). Hash `7a1eddb8e31d0c67fd3326a65ddda396872cf7082b6a5d18e16d86943176bf9c`. Product-authored. Structure unchanged. `draft-v1.ts` deleted and architecture rule enforced. |
 | T10 plan | `docs/plans/t10-runtime-use-cases-plan.md`. Import (MERGED #54), extraction contract (MERGED #55), scheduler (MERGED #57), start-run (MERGED #59), bridge plus OQ-7 policy (MERGED #60), finalize (MERGED #61), scheduler `extraction_run` wiring (MERGED #62), T10.6 correction and re-extraction (MERGED #70 at f3c1824). |
-| Demo spine phase | `docs/plans/demo-spine-phase.md`. ACTIVE. Stakeholder CLI sitting landed on main `e500633` (PR #74). T12 Phase 1 MERGED #75 at `2e38b6f`. T12 Phase 2 MERGED #77 at `142c31f`. Next slice is persisted audit history through `/runs`. `make demo` stays Codex-owned. No live LLM, no 140-candidate corpus. |
+| Demo spine phase | `docs/plans/demo-spine-phase.md`. T10 spine, stakeholder sitting, T12 Phase 1 read-only web, T12 Phase 2 browser correction, and T12 persisted audit history through `/runs` are merged. `main` is `703652d`. CEO readiness review is complete in HOLD SCOPE mode. Next gate is independent browser QA. No live LLM, no large corpus, no public deployment. |
 
 ## Lanes and file locks
 
 | Agent | Branch prefix | Owns (may edit) | Must not touch |
 |---|---|---|---|
-| Cursor | `a/` or `cursor/` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, stores and core IDs for `triage_run` / `triage_attempt` tables. Temporarily `packages/runtime/src/read-models/**`, `apps/cli/src/composition/**` (listAuditEvents adapter only), `apps/web/**`, and root `Makefile` `demo-web` / `demo-web-correction` (user authorized T12 audit timeline while Antigravity is out). | `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md`, `packages/runtime/src/adapters/` implementations, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, `packages/core/src/matching/**`, `packages/core/src/pipeline/**`, `make demo` / `make demo-stakeholder`. No schema or migrations. |
+| Cursor | `a/` or `cursor/` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, stores and core IDs for `triage_run` / `triage_attempt` tables. | `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md`, `packages/runtime/src/adapters/` implementations, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, `packages/core/src/matching/**`, `packages/core/src/pipeline/**`, `make demo` / `make demo-stakeholder`, `apps/web/**`. No schema or migrations. |
 | Claude Code | `b/` | `packages/core/src/matching/**`, `packages/core/src/pipeline/**`, `packages/runtime/src/composition/**`, `packages/runtime/src/use-cases/**`, command use-cases, scheduler runtime (T5), `docs/designs/rubric-lock-prep.md`, `WORKFLOW_ASSUMPTIONS.md` | `packages/runtime/src/db/schema.ts`, `packages/runtime/drizzle/**`, any migration |
-| Codex | `c/` | `apps/cli/**`, `tests/eval/**`, `make demo` / root Makefile (held for the demo-spine phase while Antigravity is out of usage). Also merge-gate `/review` on every PR. | `packages/runtime/src/db/**`, `packages/runtime/drizzle/**`, `packages/runtime/src/use-cases/**`, any migration |
-| Antigravity | `c/` | OUT OF USAGE. `apps/cli/**` + `tests/eval/**` + `make demo` lane held by Codex. `apps/web/**` temporarily reassigned to Cursor for T12 Phase 2 (user authorized). Web returns to Antigravity when it is back in usage. | `packages/runtime/src/db/**`, `packages/runtime/drizzle/**`, any migration |
+| Codex | `c/` | `apps/cli/**`, `tests/eval/**`, `make demo` / root Makefile (held for the demo-spine phase). Also merge-gate `/review` on every PR. | `packages/runtime/src/db/**`, `packages/runtime/drizzle/**`, `packages/runtime/src/use-cases/**`, any migration |
+| Antigravity | `c/` | `apps/web/**`, web tests, bench suites. Returns from usage pause. | `packages/runtime/src/db/**`, `packages/runtime/drizzle/**`, any migration |
 
 ## Migration chain (Cursor, serial, one PR each)
 
@@ -44,10 +44,10 @@ your own rows plus the log.
 
 | Agent | Branch | Item | State |
 |---|---|---|---|
-| Cursor | `cursor/t12-audit-timeline-c42c` | T12 persisted audit timeline. Keyset `listAuditEvents` over `audit_event`, CLI adapter off stub events, read-only `/runs` with DESIGN.md append-only disclaimer. No schema, no proposal approval, no Trust Center cards, no fabricated extraction or score categories. Codex owns merge-gate review. Do not merge from this lane. | ready |
-| Claude Code | `b/t10-seven-route-corpus` | Step 6 PR #69: seven-route proving corpus + `parseResumeFacts` threading structured employment facts into finalization so route 1 reaches `scored`. Codex merge-gate review returned two blockers plus one P2, all addressed in a follow-up commit: strict all-or-nothing parser behind an `EXPERIENCE (STRUCTURED)` sentinel (no partial parse can force a wrong rejection); parsed non-work-auth facts must cite their source document and the bridge confirms the grounding quote relocates before accepting (no ungrounded parsed-fact bypass); `DEMO_EXPECTED_OUTCOMES` pins exact score, confidence, and extractor span counts per route. Awaiting Codex re-review. Step 7 (T10.6 CLI-only correction slice) next. | review |
-| Codex | `c/demo-spine-cli` | PR #66 merged at 8f86884. Implementation lane returns to Claude for Steps 6 and 7. Codex owns corpus outcome validation, merge-gate `/review`, clean-checkout verification, and the eventual CEO review. | idle |
-| Antigravity | (out) | Out of usage. `apps/web/**` plus the audit read-model and CLI `listAuditEvents` adapter are temporarily held by Cursor for this T12 slice. CLI / `make demo` stay with Codex. | out |
+| Cursor | (idle) | T12 Phase 1, Phase 2, and Audit Timeline merged to main. Handles confirmed web fixes after QA. | idle |
+| Claude Code | (available) | Runtime and use-case owner. Available for confirmed runtime contract or product-data gaps found during QA. | available |
+| Codex | `main` | Owns merge-gate review, clean-checkout verification, CEO readiness review, and QA adjudication. | active |
+| Antigravity | `c/` | Independent report-only browser QA owner for the merged T12 flows. No edits or PR until Codex adjudicates findings. | assigned |
 
 ## Hard rules
 
@@ -170,3 +170,8 @@ your own rows plus the log.
 - 2026-09-09 Cursor: PR #77 P1 identity binding on `cursor/t12-phase2-correction-c42c`. Request loads the resolution task before `recordResolutionAction`. Complete requires `taskId`, loads the correction attempt, and rejects unless it is `candidate_correction` for the posted candidate and request task. Mismatched ids return HTTP 403 with no mutation. `corepack pnpm --filter @recruitos/web test` 102 passed. `corepack pnpm check` 1616 tests plus 27 integration. `make demo-web` POST 403. `make demo-web-correction` mismatched task 403, request 303, stale 409, mismatched complete 403, honest complete 303, historical readable. Diff-check clean. No em dashes. Codex owns merge-gate re-review. Do not merge from this lane.
 - 2026-09-09 Cursor: T12 Phase 2 merged on main at `142c31f` (PR #77). Starting `cursor/t12-audit-timeline-c42c` from that SHA. Persisted `listAuditEvents` keyset, CLI adapter, read-only `/runs`. User authorized runtime read-models, CLI composition adapter, web, tests, and Makefile only. No schema or migrations. Codex owns merge-gate review. Do not merge from this lane.
 - 2026-09-09 Cursor: T12 audit timeline ready on `cursor/t12-audit-timeline-c42c` (PR #78). `listAuditEvents` keyset over persisted `audit_event`. CLI adapter no longer returns stub events. `/runs` shows real finalize and correction events plus the DESIGN.md append-only disclaimer. `corepack pnpm check` 1624 plus 28 integration, `test:coverage` All files 100 percent, `make demo` route-1 scored, `make demo-web` `/runs` 200 and POST 403, `make demo-web-correction` request 303 complete 303 with request and completion events on `/runs`. Playwright honest workflow 6 pass. Diff-check clean. No em dashes. Codex owns merge-gate review. Do not merge from this lane.
+- 2026-09-09 Cursor: PR #78 squash-merged to main at 703652d. Persisted audit timeline from runtime through /runs live on main. T12 slices complete.
+- 2026-09-09 Vijay: closed obsolete coordination PR #76.
+- 2026-09-09 Antigravity: back online from usage pause. Rebuilt workspace, ran corepack pnpm check (1624 unit/arch tests + 28 integration tests passing), test:coverage 100 percent repo-wide, make demo and make demo-stakeholder passing. Reclaimed apps/web/** lane. Standing by for next assignment.
+- 2026-09-09 Codex: post-merge CEO readiness review completed in HOLD SCOPE mode. `make demo` and full `pnpm check` pass. Product is ready for a controlled stakeholder demo and independent browser QA. Proposal UI, Trust Center catalog, live providers, large corpus, and public deployment remain deferred.
+- 2026-09-09 Vijay: assigned Antigravity report-only independent browser QA for the merged T12 flows, using Claude Opus in Antigravity when available. Gemini Flash High is the fallback. Cursor handles only confirmed fixes; Codex adjudicates findings and owns the next merge gate.
