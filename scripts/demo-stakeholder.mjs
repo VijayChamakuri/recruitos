@@ -81,6 +81,10 @@ function scoreAsApproximateHundred(scoreText) {
   return (numerator / denominator).toFixed(2);
 }
 
+function outstandingReviewRequiredTask(packet) {
+  return (packet.tasks ?? []).find((task) => task.status === "review_required");
+}
+
 function sqliteCount(database, table) {
   if (table !== "triage_run" && table !== "triage_run_member") {
     fail(`Refusing to count unknown table ${table}`);
@@ -279,18 +283,51 @@ if (class1.passed !== true) {
   fail("Expected Class 1 to pass");
 }
 
+const currentPacket = runCliJson(database, ["packet", route4.candidateId]);
+const originalPacket = runCliJson(database, [
+  "packet",
+  route4.candidateId,
+  "--result",
+  route4.packet.resultId
+]);
+if (currentPacket.status !== "scored") {
+  fail(`Expected route 4 current status scored, got ${currentPacket.status}`);
+}
+if (currentPacket.resultKind !== "correction") {
+  fail(`Expected route 4 current resultKind correction, got ${currentPacket.resultKind}`);
+}
+const reviewTask = outstandingReviewRequiredTask(currentPacket);
+if (!reviewTask) {
+  fail("Expected route 4 current packet to include an outstanding task with status review_required");
+}
+if (originalPacket.resultKind !== "initial") {
+  fail(`Expected route 4 original resultKind initial, got ${originalPacket.resultKind}`);
+}
+if (originalPacket.status !== "escalated") {
+  fail(`Expected route 4 original status escalated, got ${originalPacket.status}`);
+}
+if (!(originalPacket.reasons ?? []).includes("assessment_unavailable")) {
+  fail("Expected route 4 original reasons to include assessment_unavailable");
+}
+if (!originalPacket.resultId || !currentPacket.resultId) {
+  fail("Expected route 4 current and original packets to include result IDs");
+}
+if (originalPacket.resultId === currentPacket.resultId) {
+  fail("Expected route 4 original result ID to differ from the current result ID");
+}
+
 printSection(
   "Executive summary",
   [
     "Promise 1: PASS",
-    "  Initial route-1 result: scored",
+    `  Initial route-1 result: ${route1Packet.status}`,
     `  Score: ${route1Packet.scoreText} (approximately ${scoreAsApproximateHundred(route1Packet.scoreText)}/100)`,
     `  Evidence resolution: ${spansLocated}/${spansReturned}`,
     "  Class 1: PASS (sealed arithmetic and evidence consistency check)",
     "Promise 2: PASS",
-    "  Route 4: escalated -> human-requested re-extraction -> correction/scored",
-    "  Human review after correction: review_required",
-    "  Original result preserved: yes",
+    `  Route 4: ${originalPacket.status} -> human-requested re-extraction -> ${currentPacket.resultKind}/${currentPacket.status}`,
+    `  Human review after correction: ${reviewTask.status}`,
+    `  Original result preserved: ${originalPacket.resultId !== currentPacket.resultId ? "yes" : "no"}`,
     `  Run integrity: ${runCount} triage run and ${memberCount} members`
   ].join("\n")
 );
