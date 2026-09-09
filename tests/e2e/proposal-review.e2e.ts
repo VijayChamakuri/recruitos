@@ -3,6 +3,7 @@ import { ROUTES, TEST_IDS } from "../../apps/web/src/testids.js";
 
 /**
  * Required browser workflow 5: Proposal Review
+ * Deferred in T12 Phase 1.
  * - approve, edit, and reject separate follow-up proposals
  * - assert immutable decisions, head movements, retained originals,
  *   and zero outbound effects

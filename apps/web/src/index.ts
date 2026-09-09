@@ -21,8 +21,16 @@ export { handleRequest, type HttpResponse } from "./server/handlers.js";
 export { renderPage, type PageRenderOptions } from "./server/ssr.js";
 export {
   getServerComposition,
-  setServerComposition
+  setServerComposition,
+  resetServerComposition,
+  openExplicitDatabaseComposition
 } from "./server/composition.js";
-export { createWebServer } from "./server/server.js";
+export { createWebServer, parseWebServerOptions } from "./server/server.js";
+export {
+  parseAppearance,
+  hrefWithAppearance,
+  packetHref,
+  DEFAULT_APPEARANCE
+} from "./appearance.js";
 export { TOKENS_CSS } from "./tokens.js";
 export { ROUTES, TEST_IDS } from "./testids.js";

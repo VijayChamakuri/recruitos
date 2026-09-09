@@ -4,6 +4,12 @@ import type {
   EvidenceGap,
   EvidenceSpan
 } from "@recruitos/cli";
+import { RUBRIC_V1 } from "@recruitos/core";
+import {
+  DEFAULT_APPEARANCE,
+  hrefWithAppearance,
+  type Appearance
+} from "../appearance.js";
 import { renderAnnotatedDocument } from "./span-highlight.js";
 import { renderEvidenceGapCard } from "./evidence-gap-card.js";
 import { escapeHtml } from "./safe-text.js";
@@ -13,7 +19,84 @@ export type CandidatePacketViewProps = Readonly<{
   packet: CandidatePacket;
   focusedDimensionId?: string | undefined;
   focusedSpanId?: string | undefined;
+  appearance?: Appearance | undefined;
 }>;
+
+function inspectingLabel(packet: CandidatePacket): string {
+  if (packet.isHistoricalResult) {
+    return packet.resultId
+      ? `Inspecting: historical result ${packet.resultId}`
+      : "Inspecting: historical result";
+  }
+  return "Inspecting: current head";
+}
+
+function renderConfidenceInputs(packet: CandidatePacket): string {
+  const input = packet.confidenceInput;
+  if (input === null) {
+    return [
+      `        <div class="mono muted" data-testid="${TEST_IDS.CONFIDENCE_INPUTS}" style="font-size:12px;margin:8px 0">`,
+      `          Confidence inputs unavailable`,
+      `        </div>`
+    ].join("\n");
+  }
+  return [
+    `        <div data-testid="${TEST_IDS.CONFIDENCE_INPUTS}" style="margin:8px 0 12px">`,
+    `          <div class="caps">Confidence inputs</div>`,
+    `          <div class="mono muted" style="font-size:12px;margin-top:4px">`,
+    `            Dimension coverage: ${input.dimensionsWithLocatedSpan}/${input.totalDimensions}`,
+    `            · Quote resolution: ${input.spansLocated}/${input.spansReturned}`,
+    `            · Contradictions: ${input.contradictionCount}`,
+    `            · Required missing: ${input.requiredFieldsMissing}/${input.totalRequiredFields}`,
+    `          </div>`,
+    `        </div>`
+  ].join("\n");
+}
+
+function renderPacketTasks(tasks: CandidatePacket["tasks"]): string {
+  if (tasks.length === 0) {
+    return [
+      `    <div data-testid="${TEST_IDS.PACKET_TASKS}" class="mono faint" style="font-size:12px;margin-top:6px">`,
+      `      No current resolution tasks`,
+      `    </div>`
+    ].join("\n");
+  }
+  const rows = tasks.map((task) => {
+    const listing =
+      task.listing === "this_result" ? "this result" : "current candidate work";
+    return [
+      `      <li data-testid="${TEST_IDS.PACKET_TASK_ITEM(task.resolutionTaskId)}" style="margin:2px 0">`,
+      `        <span class="mono">${escapeHtml(task.resolutionTaskId)}</span>`,
+      `        · ${escapeHtml(task.reasonCode)}`,
+      `        · <span data-testid="${TEST_IDS.TASK_STATUS(task.resolutionTaskId)}">${escapeHtml(task.status)}</span>`,
+      `        · ${escapeHtml(listing)}`,
+      `      </li>`
+    ].join("");
+  });
+  return [
+    `    <div data-testid="${TEST_IDS.PACKET_TASKS}" style="margin-top:6px">`,
+    `      <div class="caps">Current resolution tasks</div>`,
+    `      <ul style="margin:4px 0 0;padding-left:18px;font-size:12px" class="mono">`,
+    rows.join("\n"),
+    `      </ul>`,
+    `    </div>`
+  ].join("\n");
+}
+
+function ledgerDimensions(packet: CandidatePacket): readonly {
+  dimensionId: string;
+  dimensionName: string;
+  level?: string;
+  weightedScore?: number;
+}[] {
+  if (packet.arithmeticTerms.length > 0) {
+    return packet.arithmeticTerms;
+  }
+  return RUBRIC_V1.dimensions.map((dimension) => ({
+    dimensionId: dimension.dimensionId,
+    dimensionName: dimension.dimensionId
+  }));
+}
 
 /**
  * Variant B Bench Candidate Review Packet:
@@ -21,12 +104,14 @@ export type CandidatePacketViewProps = Readonly<{
  * 1. pane.arith: --surface-inset graphite (5 cols)
  * 2. pane.ledger: --surface neutral (7 cols)
  * 3. pane.source: --surface-paper white (6 cols)
+ * The aggregate score does not appear in the packet header.
  */
 export function renderCandidatePacketView(props: CandidatePacketViewProps): string {
   const p = props.packet;
+  const appearance = props.appearance ?? DEFAULT_APPEARANCE;
   const focusedDim = props.focusedDimensionId ?? p.arithmeticTerms[0]?.dimensionId;
+  const returnHref = hrefWithAppearance("/triage", appearance);
 
-  // Pane 1: Arithmetic matrix (5 cols)
   const termRows = p.arithmeticTerms.map((term: ArithmeticTerm) => {
     const isFocused = term.dimensionId === focusedDim;
     const onClass = isFocused ? " on" : "";
@@ -41,7 +126,8 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     ].join("\n");
   });
 
-  const totalScore = p.arithmeticTerms.reduce((sum, t) => sum + t.weightedScore, 0);
+  const arithmeticHeadline = p.scoreText ?? "unavailable";
+  const confidenceHeadline = p.confidenceText ?? "unavailable";
 
   const arithPane = [
     `    <section class="pane arith" data-testid="pane-arithmetic">`,
@@ -50,29 +136,31 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     `        <span class="mono">${p.sealed ? "sealed" : "mutable"}</span>`,
     `      </header>`,
     `      <div class="arithbox" data-testid="${TEST_IDS.SCORE_CARD}">`,
-    `        <div class="caps">Overall Score</div>`,
-    `        <div class="big">${p.score !== null ? p.score.toFixed(1) : totalScore.toFixed(1)} <span class="mono faint" style="font-size:14px">/ 100</span></div>`,
-    `        <div class="mono muted" style="font-size:12px;margin:4px 0 12px">Confidence: ${p.confidence !== null ? `${Math.round(p.confidence * 100)}%` : "N/A"}</div>`,
+    `        <div class="caps">Visible arithmetic</div>`,
+    `        <div class="big">${escapeHtml(arithmeticHeadline)}</div>`,
+    `        <div class="mono muted" style="font-size:12px;margin:4px 0 8px">Confidence: ${escapeHtml(confidenceHeadline)}</div>`,
+    renderConfidenceInputs(p),
     `        <table class="terms" data-testid="${TEST_IDS.ARITHMETIC_TABLE}">`,
     `          <thead><tr>`,
     `            <th>Dimension</th><th style="text-align:right">Wt</th><th>Level</th><th style="text-align:right">Pts</th><th style="text-align:right">Score</th>`,
     `          </tr></thead>`,
     `          <tbody>`,
-    termRows.join("\n"),
-    `            <tr class="total">`,
-    `              <td colspan="4">Total</td>`,
-    `              <td class="n">${totalScore.toFixed(2)}</td>`,
-    `            </tr>`,
+    termRows.length > 0
+      ? termRows.join("\n")
+      : `            <tr><td colspan="5" class="muted">Assessment unavailable. No arithmetic terms.</td></tr>`,
     `          </tbody>`,
     `        </table>`,
     `      </div>`,
     `    </section>`
   ].join("\n");
 
-  // Pane 2: Evidence Ledger (7 cols)
-  const dimBlocks = p.arithmeticTerms.map((term, idx) => {
+  const dimBlocks = ledgerDimensions(p).map((term, idx) => {
     const spans = p.evidenceSpans.filter((s) => s.dimensionId === term.dimensionId);
     const gaps = p.evidenceGaps.filter((g) => g.dimensionId === term.dimensionId);
+    const levelLabel =
+      term.level !== undefined && term.weightedScore !== undefined
+        ? `${term.level} (${term.weightedScore.toFixed(1)})`
+        : "unavailable";
 
     const spanCards = spans.map((span: EvidenceSpan) => {
       const isFocused = span.evidenceSpanId === props.focusedSpanId;
@@ -93,11 +181,13 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
       `        <div class="dimhead">`,
       `          <span class="idx">0${idx + 1}</span>`,
       `          <span class="nm">${escapeHtml(term.dimensionName)}</span>`,
-      `          <span class="caps">${term.level} (${term.weightedScore.toFixed(1)})</span>`,
+      `          <span class="caps">${escapeHtml(levelLabel)}</span>`,
       `        </div>`,
       spanCards.length > 0 ? spanCards.join("\n") : "",
       gapCards.length > 0 ? gapCards.join("\n") : "",
-      spanCards.length === 0 && gapCards.length === 0 ? `        <div class="muted faint" style="font-size:12px;padding:4px 0">No evidence items recorded</div>` : "",
+      spanCards.length === 0 && gapCards.length === 0
+        ? `        <div class="muted faint" style="font-size:12px;padding:4px 0">No evidence items recorded</div>`
+        : "",
       `      </div>`
     ].join("\n");
   });
@@ -112,49 +202,58 @@ export function renderCandidatePacketView(props: CandidatePacketViewProps): stri
     `    </section>`
   ].join("\n");
 
-  // Pane 3: Source Document (6 cols)
-  const primaryDoc = p.documents[0] ?? {
-    documentId: "doc-empty",
-    documentKind: "source",
-    label: "Document",
-    text: "(no document content available)"
-  };
+  const primaryDoc = p.documents[0];
+  const sourceBody =
+    primaryDoc === undefined
+      ? `      <div class="doc" data-testid="${TEST_IDS.RESUME_VIEWER}"><span class="muted">Source document unavailable</span></div>`
+      : [
+          renderAnnotatedDocument(primaryDoc.text, p.evidenceSpans, props.focusedSpanId),
+          `      <div class="raw-source-text" data-testid="${TEST_IDS.RAW_SOURCE_TEXT}" style="display:none">${escapeHtml(primaryDoc.text)}</div>`
+        ].join("\n");
 
   const sourcePane = [
     `    <section class="pane source" data-testid="pane-source">`,
     `      <header class="panehead">`,
-    `        <span>Source &middot; ${escapeHtml(primaryDoc.label)}</span>`,
-    `        <span class="mono">${escapeHtml(primaryDoc.documentKind)}</span>`,
+    `        <span>Source &middot; ${escapeHtml(primaryDoc?.label ?? "unavailable")}</span>`,
+    `        <span class="mono">${escapeHtml(primaryDoc?.documentKind ?? "none")}</span>`,
     `      </header>`,
-    renderAnnotatedDocument(primaryDoc.text, p.evidenceSpans, props.focusedSpanId),
-    `      <div class="raw-source-text" data-testid="${TEST_IDS.RAW_SOURCE_TEXT}" style="display:none">${escapeHtml(primaryDoc.text)}</div>`,
+    sourceBody,
     `    </section>`
   ].join("\n");
 
-  const taskReasons = Array.from(new Set(p.tasks.map((t) => t.reasonCode)));
+  const routingReasons = p.reasons;
 
   return [
     `  <div style="padding:10px 16px 8px;border-bottom:1px solid var(--hairline-strong);background:var(--surface)">`,
     `    <div style="display:flex;align-items:baseline;gap:12px">`,
+    `      <a href="${escapeHtml(returnHref)}" class="mono link" style="font-size:12px" data-testid="${TEST_IDS.RETURN_TO_QUEUE}">Return to triage queue</a>`,
+    `      <span style="flex:1"></span>`,
+    `      <span class="pill-synthetic" data-testid="${TEST_IDS.SYNTHETIC_DATA_PILL}">SYNTHETIC DATA</span>`,
+    `    </div>`,
+    `    <div style="display:flex;align-items:baseline;gap:12px;margin-top:6px">`,
     `      <span style="font-size:24px;line-height:30px;font-weight:600">${escapeHtml(p.sourceKey)}</span>`,
     `      <span class="muted">${escapeHtml(p.roleTitle)}</span>`,
-    `      <span style="flex:1"></span>`,
-    `      <span class="pill-synthetic">Synthetic</span>`,
     `      <span class="mono" style="font-size:12px">ID: ${escapeHtml(p.candidateId)}</span>`,
     `    </div>`,
     `    <div class="mono faint" style="font-size:12px;margin-top:4px">`,
     `      channel: ${escapeHtml(p.channel)} &middot; status: <strong style="color:var(--text)">${escapeHtml(p.status)}</strong> &middot; content hash: ${escapeHtml(p.contentHash.slice(0, 16))}... &middot; sealed: ${p.sealed ? "yes" : "no"}`,
     `    </div>`,
+    `    <div class="mono" style="font-size:12px;margin-top:4px" data-testid="${TEST_IDS.PACKET_INSPECTING_LABEL}">${escapeHtml(inspectingLabel(p))}</div>`,
     `    <div style="display:flex;align-items:center;gap:12px;margin-top:6px" data-testid="${TEST_IDS.VERSION_HISTORY}">`,
     `      <span class="badge" data-testid="${TEST_IDS.SUPERSEDING_BADGE}">${p.sealed ? "Sealed Version" : "Active Head"}</span>`,
-    `      <a href="#history" class="mono link faint" style="font-size:12px" data-testid="${TEST_IDS.PRIOR_VERSION_LINK}">Prior versions</a>`,
     `      <span class="sep">&#124;</span>`,
-    `      <div data-testid="${TEST_IDS.ROUTING_REASONS}" style="display:inline-flex;gap:6px">`,
-    taskReasons.length > 0
-      ? taskReasons.map((r) => `<span class="tag reason-tag" data-testid="${TEST_IDS.ROUTING_REASON_TAG(r)}">${escapeHtml(r)}</span>`).join("")
-      : `<span class="mono faint" style="font-size:12px">no escalation reasons</span>`,
+    `      <div data-testid="${TEST_IDS.ROUTING_REASONS}" style="display:inline-flex;gap:6px;flex-wrap:wrap">`,
+    routingReasons.length > 0
+      ? routingReasons
+          .map(
+            (r) =>
+              `<span class="tag reason-tag" data-testid="${TEST_IDS.ROUTING_REASON_TAG(r)}">${escapeHtml(r)}</span>`
+          )
+          .join("")
+      : `<span class="mono faint" style="font-size:12px">no routing reasons</span>`,
     `      </div>`,
     `    </div>`,
+    renderPacketTasks(p.tasks),
     `  </div>`,
     `  <div class="packet-b" data-testid="candidate-packet-view">`,
     `    <svg class="thread" aria-hidden="true">`,

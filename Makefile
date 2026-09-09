@@ -1,4 +1,4 @@
-.PHONY: demo demo-stakeholder
+.PHONY: demo demo-stakeholder demo-web
 
 demo:
 	@set -eu; \
@@ -18,3 +18,8 @@ demo-stakeholder:
 	trap 'rm -rf "$$demo_dir"' EXIT; \
 	database="$$demo_dir/runtime.db"; \
 	node scripts/demo-stakeholder.mjs --db "$$database"
+
+demo-web:
+	@set -eu; \
+	corepack pnpm build >/dev/null; \
+	node scripts/demo-web.mjs

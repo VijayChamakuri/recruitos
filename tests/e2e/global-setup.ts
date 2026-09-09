@@ -3,11 +3,11 @@ import { resolve } from "node:path";
 
 /**
  * Global setup for Playwright E2E suite.
- * Executes a single production build before any test executes.
+ * Builds CLI and web so demo:prepare and the production server exist.
  */
 export default function globalSetup(): void {
   const repoRoot = resolve(import.meta.dirname, "../..");
-  execSync("corepack pnpm --filter @recruitos/web build", {
+  execSync("corepack pnpm build", {
     cwd: repoRoot,
     stdio: "inherit"
   });

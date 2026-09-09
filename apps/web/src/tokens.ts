@@ -302,6 +302,10 @@ table.q tr.rejected td { color: var(--text-muted); }
   background: none;
   border: 1px dashed var(--gap-outline);
 }
+.strip i.na {
+  background: none;
+  border: 1px solid var(--hairline);
+}
 
 /* Bracket */
 .bracket {

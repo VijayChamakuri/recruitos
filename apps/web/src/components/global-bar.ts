@@ -1,40 +1,54 @@
 import type { SystemStatusSummary } from "@recruitos/cli";
+import { hrefWithAppearance, type Appearance } from "../appearance.js";
 import { escapeHtml } from "./safe-text.js";
+import { TEST_IDS } from "../testids.js";
 
 export type GlobalBarProps = Readonly<{
   status?: SystemStatusSummary | undefined;
   roleTitle?: string | undefined;
-  theme?: string | undefined;
-  density?: string | undefined;
+  appearance: Appearance;
+  currentPath?: string | undefined;
+  outstandingTaskCount?: number | undefined;
 }>;
 
 /**
  * RecruitOS Global Chrome Bar:
- * Synthetic data pill, open tasks count, known limitations, active run tag.
+ * SYNTHETIC DATA pill, open tasks count, known limitations, active run tag.
  */
-export function renderGlobalBar(props?: GlobalBarProps): string {
-  const roleTitle = props?.roleTitle ?? "Applied AI Engineer";
-  const runTag = props?.status ? `${props.status.activeRunId} ${props.status.isSealed ? "sealed" : "active"}` : "run-7 sealed";
-  const openTasks = props?.status?.openTasksCount ?? 41;
-  const knownLimitations = props?.status?.knownLimitationsCount ?? 3;
-  const theme = props?.theme ?? "light";
-  const density = props?.density ?? "default";
+export function renderGlobalBar(props: GlobalBarProps): string {
+  const appearance = props.appearance;
+  const roleTitle = props.roleTitle;
+  const currentPath = props.currentPath ?? "/triage";
+  const otherTheme = appearance.theme === "light" ? "dark" : "light";
+  const themeHref = `${currentPath}?theme=${otherTheme}&amp;density=${appearance.density}`;
+  const runTag = props.status
+    ? `${props.status.activeRunId} ${props.status.isSealed ? "sealed" : "active"}`
+    : "status unavailable";
+  const openTasks =
+    props.outstandingTaskCount ?? props.status?.openTasksCount;
+  const knownLimitations = props.status?.knownLimitationsCount;
 
   return [
     `<header class="globalbar" data-testid="global-bar">`,
-    `  <a href="/triage" class="brand" style="color:inherit;text-decoration:none">RecruitOS</a>`,
-    `  <span class="muted">${escapeHtml(roleTitle)}</span>`,
+    `  <a href="${escapeHtml(hrefWithAppearance("/triage", appearance))}" class="brand" style="color:inherit;text-decoration:none">RecruitOS</a>`,
+    roleTitle
+      ? `  <span class="muted">${escapeHtml(roleTitle)}</span>`
+      : `  <span class="muted">RecruitOS</span>`,
     `  <span class="mono muted" style="font-size:12px">${escapeHtml(runTag)}</span>`,
     `  <span class="sep">&#124;</span>`,
-    `  <span class="pill-synthetic">Synthetic data</span>`,
+    `  <span class="pill-synthetic" data-testid="${TEST_IDS.SYNTHETIC_DATA_PILL}">SYNTHETIC DATA</span>`,
     `  <span class="sep">&#124;</span>`,
-    `  <a href="/review" class="mono link" style="font-size:12px">${openTasks} open tasks</a>`,
+    openTasks === undefined
+      ? `  <span class="mono muted" style="font-size:12px">open tasks unavailable</span>`
+      : `  <a href="${escapeHtml(hrefWithAppearance("/review", appearance))}" class="mono link" style="font-size:12px">${openTasks} open tasks</a>`,
     `  <span class="sep">&#124;</span>`,
-    `  <a href="/status" class="mono link" style="font-size:12px">${knownLimitations} known limitations</a>`,
+    knownLimitations === undefined
+      ? `  <span class="mono muted" style="font-size:12px">limitations unavailable</span>`
+      : `  <a href="${escapeHtml(hrefWithAppearance("/status", appearance))}" class="mono link" style="font-size:12px">${knownLimitations} known limitations</a>`,
     `  <span class="spacer"></span>`,
-    `  <a href="?theme=${theme === 'light' ? 'dark' : 'light'}&amp;density=${density}" class="mono muted" style="font-size:12px;text-decoration:none">theme: ${theme}</a>`,
+    `  <a href="${themeHref}" class="mono muted" style="font-size:12px;text-decoration:none">theme: ${appearance.theme}</a>`,
     `  <span class="sep">&#124;</span>`,
-    `  <span style="font-size:13px">Operator &#9662;</span>`,
+    `  <span class="mono muted" style="font-size:12px">density: ${appearance.density}</span>`,
     `</header>`
   ].join("\n");
 }

@@ -3,6 +3,7 @@ import { ROUTES, TEST_IDS } from "../../apps/web/src/testids.js";
 
 /**
  * Required browser workflow 4: Stale Conflict Handling
+ * Deferred in T12 Phase 1.
  * - open one task or proposal in two browser contexts
  * - commit in the first and submit the stale second action
  * - assert no second mutation and require refresh

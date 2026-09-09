@@ -33,6 +33,6 @@ Correction writes a new sealed result and moves the candidate head. It does not 
 - Fixture extraction only. There is no live LLM and no provider credential.
 - The route-4 flip needs `--correction-overlay`. The default demo fixtures keep the reviewable failure.
 - The corpus is synthetic. Seven routes, not a production applicant pool.
-- No T12 UI and no web serving. This sitting is CLI text only.
+- No T12 correction inspector and no web mutations. `make demo-web` is the read-only UI path: it prepares the seven-candidate database and serves `/triage` and `/packet/:id`. `make demo` and `make demo-stakeholder` stay CLI text.
 - A `review_required` task does not accept a second `request_re_extraction` from this slice.
 - `make demo` still shows only promise 1. Use `make demo-stakeholder` when both promises must appear together.
