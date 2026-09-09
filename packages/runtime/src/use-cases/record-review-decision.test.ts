@@ -427,6 +427,20 @@ describe("recordReviewDecision", () => {
   it("leaves history unchanged on a stale expected version", async () => {
     const runtime = await openRuntime();
     const proposalId = await seedCurrentShortlist(runtime);
+    expect(
+      recordReviewDecision(runtime, approveInput(proposalId, { expectedVersion: 1 }))
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "version_conflict",
+        details: {
+          table: "proposal_head",
+          identity: proposalId,
+          expectedVersion: 1,
+          actualVersion: null
+        }
+      }
+    });
     unwrap(recordReviewDecision(runtime, approveInput(proposalId)));
     const stale = recordReviewDecision(runtime, approveInput(proposalId));
     expect(stale).toMatchObject({

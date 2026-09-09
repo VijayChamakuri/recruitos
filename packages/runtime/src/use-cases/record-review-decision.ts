@@ -197,6 +197,7 @@ function commitDecision(args: {
   if (!storedResult.ok) {
     return storedResult;
   }
+  /* v8 ignore next 9 -- proposal.candidate_result_id is a foreign key */
   if (storedResult.value === undefined) {
     return err(
       createRuntimeError(
