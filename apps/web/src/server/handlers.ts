@@ -16,7 +16,14 @@ import {
 import { isCorrectionFixtureMode } from "./correction-mode.js";
 import { requiredInteger, requiredText } from "./form-body.js";
 import { loadPacketInspectorModel } from "./inspector-model.js";
+import {
+  AUDIT_APPEND_ONLY_DISCLAIMER,
+  actorGlyph,
+  formatAuditTimestamp,
+  groupAuditEventsByCommand
+} from "./audit-ledger.js";
 import { overlayPersistedRunStatus } from "./persisted-run.js";
+import { listAllAuditEventSummaries } from "./read-pages.js";
 import { renderPage, type PageRenderOptions } from "./ssr.js";
 import { loadTriageQueueModel } from "./triage-queue.js";
 
@@ -543,13 +550,78 @@ export async function handleRequest(
   }
 
   if (urlPath === "/runs") {
+    const runtime = getServerRuntime();
+    if (runtime === null) {
+      return typedErrorPage(
+        "Audit ledger unavailable",
+        "Audit history requires a runtime database. This page does not display stub events.",
+        appearance,
+        "/runs",
+        503,
+        searchParams
+      );
+    }
+    const listed = listAllAuditEventSummaries(runtime.connection.database);
+    if (!listed.ok) {
+      return typedErrorPage(
+        "Audit ledger unavailable",
+        listed.error.message,
+        appearance,
+        "/runs",
+        500,
+        searchParams
+      );
+    }
+
+    const groups = groupAuditEventsByCommand(listed.value);
+    const groupBlocks = groups.map((group) => {
+      const header =
+        group.commandId === null
+          ? ""
+          : [
+              `        <tr class="group-head">`,
+              `          <td colspan="7">command ${escapeHtml(group.commandId)} · ${group.events.length} event${group.events.length === 1 ? "" : "s"}</td>`,
+              `        </tr>`
+            ].join("\n");
+      const rows = group.events.map((event) => {
+        const ordinal =
+          event.eventOrdinal === null ? "" : String(event.eventOrdinal);
+        const commandId = event.commandId ?? "";
+        return [
+          `        <tr data-testid="${TEST_IDS.AUDIT_EVENT_ROW}" id="${escapeHtml(TEST_IDS.AUDIT_EVENT_ITEM(event.auditEventId))}">`,
+          `          <td class="mono" data-testid="${TEST_IDS.AUDIT_EVENT_ITEM(event.auditEventId)}">${escapeHtml(event.auditEventId)}</td>`,
+          `          <td class="num">${escapeHtml(ordinal)}</td>`,
+          `          <td class="mono">${escapeHtml(formatAuditTimestamp(event.occurredAt))}</td>`,
+          `          <td class="mono">${escapeHtml(commandId)}</td>`,
+          `          <td class="mono">${escapeHtml(`${actorGlyph(event.actorId)} ${event.actorId}`)}</td>`,
+          `          <td class="mono">${escapeHtml(event.eventName)}</td>`,
+          `          <td class="mono" style="white-space:normal;word-break:break-all">${escapeHtml(event.payloadHash)}</td>`,
+          `        </tr>`
+        ].join("\n");
+      });
+      return [header, ...rows].filter((block) => block.length > 0).join("\n");
+    });
+
+    const bodyRows =
+      groupBlocks.length > 0
+        ? groupBlocks.join("\n")
+        : `        <tr><td colspan="7" class="muted">No audit events are recorded in this database.</td></tr>`;
+
     const contentHtml = [
       `      <div style="padding:16px;border-bottom:1px solid var(--hairline);background:var(--surface)">`,
       `        <h2 style="margin:0 0 4px;font-size:20px">Audit Timeline &amp; Run History</h2>`,
-      `        <div class="muted" style="font-size:13px">The CLI audit adapter is not wired to the runtime ledger. This read-only slice does not display stub events as real history.</div>`,
+      `        <div class="muted" style="font-size:13px">Persisted audit_event rows. Newest first. Events that share a command ID are grouped.</div>`,
       `      </div>`,
       `      <div style="padding:16px">`,
-      `        <p class="muted" data-testid="${TEST_IDS.AUDIT_EVENT_TABLE}">Audit timeline is deferred with the Trust Center.</p>`,
+      `        <table class="q" data-testid="${TEST_IDS.AUDIT_EVENT_TABLE}">`,
+      `          <thead><tr>`,
+      `            <th>Event ID</th><th style="text-align:right">Ordinal</th><th>Timestamp</th><th>Command ID</th><th>Actor ID</th><th>Event type</th><th>Payload hash</th>`,
+      `          </tr></thead>`,
+      `          <tbody>`,
+      bodyRows,
+      `          </tbody>`,
+      `        </table>`,
+      `        <p class="muted mono" style="font-size:12px;margin-top:16px" data-testid="${TEST_IDS.AUDIT_APPEND_ONLY_DISCLAIMER}">${escapeHtml(AUDIT_APPEND_ONLY_DISCLAIMER)}</p>`,
       `      </div>`
     ].join("\n");
 

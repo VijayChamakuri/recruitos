@@ -6,12 +6,16 @@ import { fileURLToPath } from "node:url";
 import type BetterSqlite3 from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { appendAuditEvent, prepareAuditEvent } from "../audit/index.js";
+import { runImmediateTransaction } from "../commands/index.js";
 import { openRuntimeDatabase, type RuntimeDatabaseConnection } from "../db/index.js";
 import {
+  assertListAuditEventsIndexPlan,
   assertListCandidatesIndexPlan,
   assertListResolutionTasksIndexPlan,
   decodeCursor,
   encodeCursor,
+  listAuditEvents,
   listCandidates,
   listResolutionTasks,
   readCandidatePacket
@@ -435,6 +439,223 @@ describe("listResolutionTasks Read Model", () => {
 
       expect(planResult.value.steps.length).toBeGreaterThan(0);
       expect(planResult.value.usesCoveringOrIndexedScan).toBe(true);
+    } finally {
+      connection.close();
+    }
+  });
+});
+
+const AUDIT_PAYLOAD_HASH = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+function insertCommandReceipt(
+  nativeDb: BetterSqlite3.Database,
+  commandId: string
+): void {
+  nativeDb
+    .prepare(
+      `INSERT INTO command_receipt (
+        command_id, command_name, actor_id, expected_version, payload_hash, status,
+        result_json, result_hash, error_code, error_message, created_at, completed_at
+      ) VALUES (?, 'test.command', 'test-actor-1', 0, ?, 'in_progress', NULL, NULL, NULL, NULL, 1000, NULL)`
+    )
+    .run(commandId, AUDIT_PAYLOAD_HASH);
+}
+
+function appendTestAuditEvent(
+  connection: RuntimeDatabaseConnection,
+  input: {
+    readonly auditEventId: string;
+    readonly commandId?: string | null;
+    readonly eventOrdinal?: number | null;
+    readonly actorId?: string;
+    readonly eventName?: string;
+    readonly occurredAt: number;
+    readonly payload?: unknown;
+  }
+): void {
+  const prepared = prepareAuditEvent(
+    { now: () => input.occurredAt },
+    {
+      auditEventId: input.auditEventId,
+      commandId: input.commandId === undefined ? null : input.commandId,
+      eventOrdinal: input.eventOrdinal === undefined ? null : input.eventOrdinal,
+      actorId: input.actorId ?? "test-actor-1",
+      actorDisplayName: "Test Operator",
+      eventName: input.eventName ?? "test.event_recorded",
+      eventVersion: 1,
+      payload: input.payload ?? { id: input.auditEventId },
+      occurredAt: input.occurredAt
+    }
+  );
+  if (!prepared.ok) {
+    throw new Error(prepared.error.message);
+  }
+  const appended = runImmediateTransaction(connection, (context) =>
+    appendAuditEvent(context, prepared.value)
+  );
+  if (!appended.ok) {
+    throw new Error(appended.error.message);
+  }
+}
+
+describe("listAuditEvents Read Model", () => {
+  it("returns empty page on clean database with queryCount = 1", async () => {
+    const connection = await openMigratedDatabase();
+    try {
+      const result = listAuditEvents(connection.database);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.items.length).toBe(0);
+      expect(result.value.nextCursor).toBeUndefined();
+      expect(result.value.queryCount).toBe(1);
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("orders by timestamp, command id, ordinal, and event id descending", async () => {
+    const connection = await openMigratedDatabase();
+    const nativeDb = getNativeClient(connection);
+    try {
+      insertCommandReceipt(nativeDb, "cmd-b");
+      insertCommandReceipt(nativeDb, "cmd-a");
+      insertCommandReceipt(nativeDb, "cmd-old");
+
+      appendTestAuditEvent(connection, {
+        auditEventId: "evt-old",
+        commandId: "cmd-old",
+        eventOrdinal: 0,
+        occurredAt: 1000,
+        eventName: "test.older"
+      });
+      appendTestAuditEvent(connection, {
+        auditEventId: "evt-unlinked-z",
+        occurredAt: 2000,
+        eventName: "test.unlinked_z"
+      });
+      appendTestAuditEvent(connection, {
+        auditEventId: "evt-unlinked-a",
+        occurredAt: 2000,
+        eventName: "test.unlinked_a"
+      });
+      appendTestAuditEvent(connection, {
+        auditEventId: "evt-cmdb-1",
+        commandId: "cmd-b",
+        eventOrdinal: 1,
+        occurredAt: 2000,
+        eventName: "test.cmd_b_one"
+      });
+      appendTestAuditEvent(connection, {
+        auditEventId: "evt-cmdb-0",
+        commandId: "cmd-b",
+        eventOrdinal: 0,
+        occurredAt: 2000,
+        eventName: "test.cmd_b_zero"
+      });
+      appendTestAuditEvent(connection, {
+        auditEventId: "evt-cmda-0",
+        commandId: "cmd-a",
+        eventOrdinal: 0,
+        occurredAt: 2000,
+        eventName: "test.cmd_a"
+      });
+
+      const listed = listAuditEvents(connection.database);
+      expect(listed.ok).toBe(true);
+      if (!listed.ok) return;
+      expect(listed.value.queryCount).toBe(1);
+      expect(listed.value.items.map((item) => item.auditEventId)).toEqual([
+        "evt-cmdb-1",
+        "evt-cmdb-0",
+        "evt-cmda-0",
+        "evt-unlinked-z",
+        "evt-unlinked-a",
+        "evt-old"
+      ]);
+      expect(listed.value.items[0]?.commandId).toBe("cmd-b");
+      expect(listed.value.items[0]?.eventOrdinal).toBe(1);
+      expect(listed.value.items[3]?.commandId).toBeNull();
+      expect(listed.value.items[3]?.eventOrdinal).toBeNull();
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("paginates with a keyset cursor over the same tuple", async () => {
+    const connection = await openMigratedDatabase();
+    const nativeDb = getNativeClient(connection);
+    try {
+      insertCommandReceipt(nativeDb, "cmd-page");
+      for (let ordinal = 0; ordinal < 4; ordinal += 1) {
+        appendTestAuditEvent(connection, {
+          auditEventId: `evt-page-${ordinal}`,
+          commandId: "cmd-page",
+          eventOrdinal: ordinal,
+          occurredAt: 3000,
+          eventName: "test.paged"
+        });
+      }
+
+      const page1 = listAuditEvents(connection.database, { limit: 2 });
+      expect(page1.ok).toBe(true);
+      if (!page1.ok) return;
+      expect(page1.value.items.map((item) => item.auditEventId)).toEqual([
+        "evt-page-3",
+        "evt-page-2"
+      ]);
+      expect(page1.value.nextCursor).toBeDefined();
+      expect(page1.value.queryCount).toBe(1);
+
+      const page2 = listAuditEvents(connection.database, {
+        cursor: page1.value.nextCursor,
+        limit: 2
+      });
+      expect(page2.ok).toBe(true);
+      if (!page2.ok) return;
+      expect(page2.value.items.map((item) => item.auditEventId)).toEqual([
+        "evt-page-1",
+        "evt-page-0"
+      ]);
+      expect(page2.value.nextCursor).toBeUndefined();
+      expect(page2.value.queryCount).toBe(1);
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("handles client errors, bad cursors, and query errors", async () => {
+    const badClientDb = {};
+    expect(listAuditEvents(badClientDb).ok).toBe(false);
+    expect(assertListAuditEventsIndexPlan(badClientDb).ok).toBe(false);
+
+    const connection = await openMigratedDatabase();
+    try {
+      const badCursorResult = listAuditEvents(connection.database, { cursor: "invalid" });
+      expect(badCursorResult.ok).toBe(false);
+
+      const throwingDb = {
+        $client: {
+          prepare() {
+            throw new Error("Simulated query failure");
+          }
+        }
+      };
+      expect(listAuditEvents(throwingDb).ok).toBe(false);
+      expect(assertListAuditEventsIndexPlan(throwingDb).ok).toBe(false);
+    } finally {
+      connection.close();
+    }
+  });
+
+  it("reports the index plan without requiring a covering scan", async () => {
+    const connection = await openMigratedDatabase();
+    try {
+      const planResult = assertListAuditEventsIndexPlan(connection.database);
+      expect(planResult.ok).toBe(true);
+      if (!planResult.ok) return;
+      expect(planResult.value.steps.length).toBeGreaterThan(0);
+      expect(planResult.value.query).toContain("FROM audit_event");
     } finally {
       connection.close();
     }

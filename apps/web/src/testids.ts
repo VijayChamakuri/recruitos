@@ -93,6 +93,7 @@ export const TEST_IDS = {
   AUDIT_EVENT_TABLE: "audit-event-table",
   AUDIT_EVENT_ROW: "audit-event-row",
   AUDIT_EVENT_ITEM: (id: string) => `audit-event-${id}`,
+  AUDIT_APPEND_ONLY_DISCLAIMER: "audit-append-only-disclaimer",
   CORPUS_SEAL_STATUS: "corpus-seal-status",
   KNOWN_LIMITATIONS: "known-limitations",
   KNOWN_LIMITATION_ITEM: "known-limitation-item",
