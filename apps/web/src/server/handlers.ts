@@ -340,7 +340,9 @@ export async function handleRequest(
   const outstandingTaskCount = queueModel?.outstandingTaskCount;
   const packetCandidateId = queueModel?.firstCandidateId;
   const reasonCodeCounts = queueModel?.reasonCodeCounts;
-  const roleTitle = queueModel?.rows[0]?.candidate.roleTitle;
+  const roleTitle =
+    queueModel?.rows.find((row) => row.packet !== null)?.packet?.roleTitle ??
+    queueModel?.rows[0]?.candidate.roleTitle;
 
   const pageShell = {
     status,
