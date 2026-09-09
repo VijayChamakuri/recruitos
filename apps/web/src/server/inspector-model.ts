@@ -1,6 +1,5 @@
 import type {
   CandidatePacket,
-  PacketResolutionTask,
   RecruitosComposition,
   ResolutionTaskDetail
 } from "@recruitos/cli";
@@ -9,6 +8,8 @@ import { getServerRuntime } from "./composition.js";
 import { readCorrectionAttemptId } from "./correction-actions.js";
 import { isCorrectionFixtureMode } from "./correction-mode.js";
 import { FIXTURE_CORRECTION_SOURCE_KEY } from "./form-body.js";
+
+type PacketResolutionTask = CandidatePacket["tasks"][number];
 
 export type PacketInspectorModel = Readonly<{
   appearance: Appearance;

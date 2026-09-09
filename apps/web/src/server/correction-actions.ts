@@ -1,4 +1,4 @@
-import type { RecruitosComposition, RuntimeError } from "@recruitos/cli";
+import type { RecruitosComposition } from "@recruitos/cli";
 import { err, ok, type Result } from "@recruitos/core";
 import { SYSTEM_ACTOR_ID } from "@recruitos/runtime";
 import { isCorrectionFixtureMode } from "./correction-mode.js";
@@ -77,7 +77,12 @@ function correctionDisabled(): WebActionFailure {
   return failure("command_conflict", CORRECTION_DISABLED_MESSAGE, 403);
 }
 
-function fromRuntimeError(error: RuntimeError): WebActionFailure {
+function fromRuntimeError(error: {
+  code: string;
+  message: string;
+  retryable?: boolean;
+  details?: unknown;
+}): WebActionFailure {
   const httpStatus =
     error.code === "version_conflict" || error.code === "command_conflict"
       ? 409

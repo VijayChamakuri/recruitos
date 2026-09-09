@@ -216,19 +216,18 @@ async function handleCorrectionPost(
       if (candidateId === undefined) {
         return actionFailurePage(result.error, appearance, urlPath, searchParams);
       }
+      const preservedRationale = requiredText(body, "rationale");
+      const expectedTaskHeadVersion = requiredInteger(body, "expectedTaskHeadVersion");
+      const expectedCandidateHeadVersion = requiredInteger(body, "expectedCandidateHeadVersion");
       return renderPacketPage(composition, candidateId, searchParams, appearance, pageShell, {
         statusCode: 409,
         conflictMessage: staleConflictCopy(result.error),
-        preservedRationale: body.get("rationale") ?? undefined,
         freezeSubmit: true,
-        ...(requiredInteger(body, "expectedTaskHeadVersion") === undefined
+        ...(preservedRationale === undefined ? {} : { preservedRationale }),
+        ...(expectedTaskHeadVersion === undefined ? {} : { expectedTaskHeadVersion }),
+        ...(expectedCandidateHeadVersion === undefined
           ? {}
-          : { expectedTaskHeadVersion: requiredInteger(body, "expectedTaskHeadVersion") }),
-        ...(requiredInteger(body, "expectedCandidateHeadVersion") === undefined
-          ? {}
-          : {
-              expectedCandidateHeadVersion: requiredInteger(body, "expectedCandidateHeadVersion")
-            })
+          : { expectedCandidateHeadVersion })
       });
     }
     return actionFailurePage(result.error, appearance, urlPath, searchParams);
