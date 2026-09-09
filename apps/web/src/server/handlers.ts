@@ -234,7 +234,11 @@ async function handleCorrectionPost(
   }
 
   if (urlPath === "/actions/complete-fixture-extraction") {
-    const result = await completeFixtureReExtractionAction(composition, body);
+    const result = await completeFixtureReExtractionAction(
+      composition,
+      body,
+      getServerRuntime()?.connection.database
+    );
     if (result.ok) {
       const next = new URLSearchParams(searchParams);
       next.set("prior", result.value.baseResultId);

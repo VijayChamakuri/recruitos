@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { err, ok } from "@recruitos/core";
-import type { CandidatePacket, RecruitosComposition } from "@recruitos/cli";
+import type {
+  CandidatePacket,
+  RecruitosComposition,
+  ResolutionTaskDetail
+} from "@recruitos/cli";
 import {
   completeFixtureReExtractionAction,
+  readCorrectionAttemptBinding,
   readCorrectionAttemptId,
   requestReExtractionAction,
   staleConflictCopy
@@ -39,11 +44,44 @@ function fixturePacket(sourceKey = FIXTURE_CORRECTION_SOURCE_KEY): CandidatePack
   };
 }
 
+function fixtureTask(candidateId = "cand-1"): ResolutionTaskDetail {
+  return {
+    resolutionTaskId: "task-1",
+    candidateId,
+    candidateResultId: "result-1",
+    reasonCode: "assessment_unavailable",
+    status: "open",
+    taskOrdinal: 1,
+    version: 1,
+    createdAt: 1,
+    actions: []
+  };
+}
+
+function matchingAttemptDatabase(
+  overrides: Partial<{
+    kind: string;
+    scopeCandidateId: string | null;
+    requestTaskId: string | null;
+  }> = {}
+): { prepare: () => { get: () => Record<string, unknown> } } {
+  return {
+    prepare: () => ({
+      get: () => ({
+        kind: overrides.kind ?? "candidate_correction",
+        scopeCandidateId: overrides.scopeCandidateId ?? "cand-1",
+        requestTaskId: overrides.requestTaskId ?? "task-1"
+      })
+    })
+  };
+}
+
 function composition(
   overrides: Partial<RecruitosComposition> = {}
 ): RecruitosComposition {
   return {
     getCandidatePacket: async () => ok(fixturePacket()),
+    getResolutionTask: async () => ok(fixtureTask()),
     recordResolutionAction: async () =>
       ok({
         actionId: "action-1",
@@ -93,6 +131,7 @@ const requestBody = new URLSearchParams({
 
 const completeBody = new URLSearchParams({
   candidateId: "cand-1",
+  taskId: "task-1",
   triageAttemptId: "attempt-1",
   expectedTaskHeadVersion: "2",
   expectedCandidateHeadVersion: "1"
@@ -108,7 +147,11 @@ describe("correction actions", () => {
     expect(requested.ok).toBe(false);
     if (requested.ok) return;
     expect(requested.error.httpStatus).toBe(403);
-    const completed = await completeFixtureReExtractionAction(composition(), completeBody);
+    const completed = await completeFixtureReExtractionAction(
+      composition(),
+      completeBody,
+      matchingAttemptDatabase()
+    );
     expect(completed.ok).toBe(false);
     if (completed.ok) return;
     expect(completed.error.httpStatus).toBe(403);
@@ -234,7 +277,8 @@ describe("correction actions", () => {
           });
         }
       }),
-      completeBody
+      completeBody,
+      matchingAttemptDatabase()
     );
     expect(completed.ok).toBe(true);
     if (!completed.ok) return;
@@ -264,7 +308,8 @@ describe("correction actions", () => {
     setCorrectionFixtureMode(true);
     const missingComplete = await completeFixtureReExtractionAction(
       composition({ completeReExtraction: undefined }),
-      completeBody
+      completeBody,
+      matchingAttemptDatabase()
     );
     expect(missingComplete.ok).toBe(false);
     if (missingComplete.ok) return;
@@ -275,7 +320,8 @@ describe("correction actions", () => {
         extractTriage: async () =>
           err({ code: "persistence_failed", message: "extract failed", retryable: false })
       }),
-      completeBody
+      completeBody,
+      matchingAttemptDatabase()
     );
     expect(extractFailed.ok).toBe(false);
   });
@@ -284,7 +330,8 @@ describe("correction actions", () => {
     setCorrectionFixtureMode(true);
     const missing = await completeFixtureReExtractionAction(
       composition({ registerExtractionFixtures: undefined }),
-      completeBody
+      completeBody,
+      matchingAttemptDatabase()
     );
     expect(missing.ok).toBe(false);
     if (missing.ok) return;
@@ -312,21 +359,233 @@ describe("correction actions", () => {
 
   it("rejects complete posts that omit versions or include facts", async () => {
     setCorrectionFixtureMode(true);
-    const missing = await completeFixtureReExtractionAction(composition(), new URLSearchParams());
+    const missing = await completeFixtureReExtractionAction(
+      composition(),
+      new URLSearchParams(),
+      matchingAttemptDatabase()
+    );
     expect(missing.ok).toBe(false);
     if (missing.ok) return;
     expect(missing.error.httpStatus).toBe(400);
     const facts = new URLSearchParams(completeBody);
     facts.set("extractedFacts", "[]");
-    const factResult = await completeFixtureReExtractionAction(composition(), facts);
+    const factResult = await completeFixtureReExtractionAction(
+      composition(),
+      facts,
+      matchingAttemptDatabase()
+    );
     expect(factResult.ok).toBe(false);
 
     const system = new URLSearchParams(completeBody);
     system.set("actorId", "system:runtime");
-    const actorResult = await completeFixtureReExtractionAction(composition(), system);
+    const actorResult = await completeFixtureReExtractionAction(
+      composition(),
+      system,
+      matchingAttemptDatabase()
+    );
     expect(actorResult.ok).toBe(false);
     if (actorResult.ok) return;
     expect(actorResult.error.message).toContain("system actor");
+  });
+
+  it("rejects a posted task that belongs to another candidate", async () => {
+    setCorrectionFixtureMode(true);
+    let recorded = false;
+    const requested = await requestReExtractionAction(
+      composition({
+        getResolutionTask: async () => ok(fixtureTask("cand-other")),
+        recordResolutionAction: async () => {
+          recorded = true;
+          return ok({
+            actionId: "action-1",
+            newVersion: 2,
+            derivedStatus: "open",
+            triageAttemptId: "attempt-1",
+            commandId: "command-1"
+          });
+        }
+      }),
+      requestBody
+    );
+    expect(requested.ok).toBe(false);
+    if (requested.ok) return;
+    expect(requested.error.httpStatus).toBe(403);
+    expect(requested.error.message).toContain("taskId");
+    expect(recorded).toBe(false);
+  });
+
+  it("maps a missing posted task to HTTP 404", async () => {
+    setCorrectionFixtureMode(true);
+    let recorded = false;
+    const requested = await requestReExtractionAction(
+      composition({
+        getResolutionTask: async () =>
+          err({ code: "not_found", message: "Resolution task not found", retryable: false }),
+        recordResolutionAction: async () => {
+          recorded = true;
+          return ok({
+            actionId: "action-1",
+            newVersion: 2,
+            derivedStatus: "open",
+            triageAttemptId: "attempt-1",
+            commandId: "command-1"
+          });
+        }
+      }),
+      requestBody
+    );
+    expect(requested.ok).toBe(false);
+    if (requested.ok) return;
+    expect(requested.error.httpStatus).toBe(404);
+    expect(recorded).toBe(false);
+  });
+
+  it("rejects complete posts that omit taskId", async () => {
+    setCorrectionFixtureMode(true);
+    const body = new URLSearchParams(completeBody);
+    body.delete("taskId");
+    let overlay = false;
+    const completed = await completeFixtureReExtractionAction(
+      composition({
+        registerExtractionFixtures: () => {
+          overlay = true;
+          return ok(undefined);
+        }
+      }),
+      body,
+      matchingAttemptDatabase()
+    );
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+    expect(completed.error.httpStatus).toBe(400);
+    expect(overlay).toBe(false);
+  });
+
+  it("rejects complete posts whose task belongs to another candidate", async () => {
+    setCorrectionFixtureMode(true);
+    let overlay = false;
+    const completed = await completeFixtureReExtractionAction(
+      composition({
+        getResolutionTask: async () => ok(fixtureTask("cand-other")),
+        registerExtractionFixtures: () => {
+          overlay = true;
+          return ok(undefined);
+        }
+      }),
+      completeBody,
+      matchingAttemptDatabase()
+    );
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+    expect(completed.error.httpStatus).toBe(403);
+    expect(completed.error.message).toContain("taskId");
+    expect(overlay).toBe(false);
+  });
+
+  it("rejects complete posts whose attempt belongs to another candidate", async () => {
+    setCorrectionFixtureMode(true);
+    let overlay = false;
+    const completed = await completeFixtureReExtractionAction(
+      composition({
+        registerExtractionFixtures: () => {
+          overlay = true;
+          return ok(undefined);
+        }
+      }),
+      completeBody,
+      matchingAttemptDatabase({ scopeCandidateId: "cand-other" })
+    );
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+    expect(completed.error.httpStatus).toBe(403);
+    expect(completed.error.message).toContain("triageAttemptId");
+    expect(overlay).toBe(false);
+  });
+
+  it("rejects complete posts whose attempt belongs to another task", async () => {
+    setCorrectionFixtureMode(true);
+    let overlay = false;
+    const completed = await completeFixtureReExtractionAction(
+      composition({
+        registerExtractionFixtures: () => {
+          overlay = true;
+          return ok(undefined);
+        }
+      }),
+      completeBody,
+      matchingAttemptDatabase({ requestTaskId: "task-other" })
+    );
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+    expect(completed.error.httpStatus).toBe(403);
+    expect(completed.error.message).toContain("taskId");
+    expect(overlay).toBe(false);
+  });
+
+  it("rejects complete posts that target a main_run attempt", async () => {
+    setCorrectionFixtureMode(true);
+    let overlay = false;
+    const completed = await completeFixtureReExtractionAction(
+      composition({
+        registerExtractionFixtures: () => {
+          overlay = true;
+          return ok(undefined);
+        }
+      }),
+      completeBody,
+      matchingAttemptDatabase({
+        kind: "main_run",
+        scopeCandidateId: null,
+        requestTaskId: null
+      })
+    );
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+    expect(completed.error.httpStatus).toBe(403);
+    expect(completed.error.message).toContain("candidate_correction");
+    expect(overlay).toBe(false);
+  });
+
+  it("rejects complete posts when the attempt row is missing", async () => {
+    setCorrectionFixtureMode(true);
+    let overlay = false;
+    const completed = await completeFixtureReExtractionAction(
+      composition({
+        registerExtractionFixtures: () => {
+          overlay = true;
+          return ok(undefined);
+        }
+      }),
+      completeBody,
+      {
+        prepare: () => ({
+          get: () => undefined
+        })
+      }
+    );
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+    expect(completed.error.httpStatus).toBe(404);
+    expect(overlay).toBe(false);
+  });
+
+  it("fails closed when complete cannot open a database", async () => {
+    setCorrectionFixtureMode(true);
+    let overlay = false;
+    const completed = await completeFixtureReExtractionAction(
+      composition({
+        registerExtractionFixtures: () => {
+          overlay = true;
+          return ok(undefined);
+        }
+      }),
+      completeBody,
+      null
+    );
+    expect(completed.ok).toBe(false);
+    if (completed.ok) return;
+    expect(completed.error.httpStatus).toBe(500);
+    expect(overlay).toBe(false);
   });
 
   it("reads a correction attempt id from the native client and fails closed otherwise", () => {
@@ -358,5 +617,24 @@ describe("correction actions", () => {
     expect(staleConflictCopy({ code: "command_conflict", message: "already in flight" })).toContain(
       "stale"
     );
+    const bound = readCorrectionAttemptBinding(matchingAttemptDatabase(), "attempt-1");
+    expect(bound.ok).toBe(true);
+    if (!bound.ok) return;
+    expect(bound.value.kind).toBe("candidate_correction");
+    expect(bound.value.scopeCandidateId).toBe("cand-1");
+    expect(bound.value.requestTaskId).toBe("task-1");
+    const thrown = readCorrectionAttemptBinding(
+      {
+        prepare: () => ({
+          get: () => {
+            throw new Error("boom");
+          }
+        })
+      },
+      "attempt-1"
+    );
+    expect(thrown.ok).toBe(false);
+    if (thrown.ok) return;
+    expect(thrown.error.httpStatus).toBe(500);
   });
 });

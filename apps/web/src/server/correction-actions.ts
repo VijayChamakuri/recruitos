@@ -149,6 +149,122 @@ export function readCorrectionAttemptId(
   }
 }
 
+export type CorrectionAttemptBinding = Readonly<{
+  kind: string;
+  scopeCandidateId: string | null;
+  requestTaskId: string | null;
+}>;
+
+export function readCorrectionAttemptBinding(
+  database: unknown,
+  triageAttemptId: string
+): Result<CorrectionAttemptBinding, WebActionFailure> {
+  const prepare = nativePrepare(database);
+  if (prepare === null) {
+    return err(
+      failure(
+        "persistence_failed",
+        "Cannot verify correction attempt identity without a database.",
+        500
+      )
+    );
+  }
+  try {
+    const row = prepare(
+      `SELECT
+         triage_attempt.kind AS kind,
+         triage_attempt.scope_candidate_id AS scopeCandidateId,
+         resolution_action.resolution_task_id AS requestTaskId
+       FROM triage_attempt
+       LEFT JOIN resolution_action
+         ON resolution_action.resolution_action_id = triage_attempt.request_action_id
+       WHERE triage_attempt.triage_attempt_id = ?
+       LIMIT 1`
+    ).get(triageAttemptId);
+    if (typeof row !== "object" || row === null || !("kind" in row)) {
+      return err(
+        failure("not_found", `Correction attempt "${triageAttemptId}" not found.`, 404)
+      );
+    }
+    const record = row as {
+      kind: unknown;
+      scopeCandidateId: unknown;
+      requestTaskId: unknown;
+    };
+    if (typeof record.kind !== "string" || record.kind.length === 0) {
+      return err(
+        failure("not_found", `Correction attempt "${triageAttemptId}" not found.`, 404)
+      );
+    }
+    return ok({
+      kind: record.kind,
+      scopeCandidateId:
+        typeof record.scopeCandidateId === "string" ? record.scopeCandidateId : null,
+      requestTaskId: typeof record.requestTaskId === "string" ? record.requestTaskId : null
+    });
+  } catch {
+    return err(
+      failure("persistence_failed", "Cannot verify correction attempt identity.", 500)
+    );
+  }
+}
+
+async function requirePostedTaskBelongsToCandidate(
+  composition: RecruitosComposition,
+  taskId: string,
+  candidateId: string
+): Promise<Result<{ taskId: string }, WebActionFailure>> {
+  const task = await composition.getResolutionTask(taskId);
+  if (!task.ok) {
+    return err(fromRuntimeError(task.error));
+  }
+  if (task.value.candidateId !== candidateId) {
+    return err(
+      failure(
+        "command_conflict",
+        "Posted taskId does not belong to posted candidateId.",
+        403
+      )
+    );
+  }
+  return ok({ taskId });
+}
+
+function requireAttemptMatchesPostedIds(
+  binding: CorrectionAttemptBinding,
+  candidateId: string,
+  taskId: string
+): Result<CorrectionAttemptBinding, WebActionFailure> {
+  if (binding.kind !== "candidate_correction") {
+    return err(
+      failure(
+        "command_conflict",
+        "Posted triageAttemptId is not a candidate_correction attempt.",
+        403
+      )
+    );
+  }
+  if (binding.scopeCandidateId !== candidateId) {
+    return err(
+      failure(
+        "command_conflict",
+        "Posted triageAttemptId does not belong to posted candidateId.",
+        403
+      )
+    );
+  }
+  if (binding.requestTaskId !== taskId) {
+    return err(
+      failure(
+        "command_conflict",
+        "Posted triageAttemptId does not belong to posted taskId.",
+        403
+      )
+    );
+  }
+  return ok(binding);
+}
+
 async function requireFixtureCandidate(
   composition: RecruitosComposition,
   candidateId: string
@@ -224,6 +340,10 @@ export async function requestReExtractionAction(
   if (!fixture.ok) {
     return fixture;
   }
+  const ownedTask = await requirePostedTaskBelongsToCandidate(composition, taskId, candidateId);
+  if (!ownedTask.ok) {
+    return ownedTask;
+  }
   const recorded = await composition.recordResolutionAction({
     taskId,
     actionKind: "request_re_extraction",
@@ -256,7 +376,8 @@ export async function requestReExtractionAction(
 
 export async function completeFixtureReExtractionAction(
   composition: RecruitosComposition,
-  body: URLSearchParams
+  body: URLSearchParams,
+  database: unknown
 ): Promise<Result<FixtureCompleteSuccess, WebActionFailure>> {
   if (!isCorrectionFixtureMode()) {
     return err(correctionDisabled());
@@ -276,11 +397,13 @@ export async function completeFixtureReExtractionAction(
     return err(failure("invalid_argument", actorError, 400));
   }
   const candidateId = requiredText(body, "candidateId");
+  const taskId = requiredText(body, "taskId");
   const triageAttemptId = requiredText(body, "triageAttemptId");
   const expectedTaskHeadVersion = requiredInteger(body, "expectedTaskHeadVersion");
   const expectedCandidateHeadVersion = requiredInteger(body, "expectedCandidateHeadVersion");
   if (
     candidateId === undefined ||
+    taskId === undefined ||
     triageAttemptId === undefined ||
     expectedTaskHeadVersion === undefined ||
     expectedCandidateHeadVersion === undefined
@@ -288,7 +411,7 @@ export async function completeFixtureReExtractionAction(
     return err(
       failure(
         "invalid_argument",
-        "Complete fixture extraction requires candidateId, triageAttemptId, expectedTaskHeadVersion, and expectedCandidateHeadVersion.",
+        "Complete fixture extraction requires candidateId, taskId, triageAttemptId, expectedTaskHeadVersion, and expectedCandidateHeadVersion.",
         400
       )
     );
@@ -296,6 +419,18 @@ export async function completeFixtureReExtractionAction(
   const fixture = await requireFixtureCandidate(composition, candidateId);
   if (!fixture.ok) {
     return fixture;
+  }
+  const ownedTask = await requirePostedTaskBelongsToCandidate(composition, taskId, candidateId);
+  if (!ownedTask.ok) {
+    return ownedTask;
+  }
+  const loadedAttempt = readCorrectionAttemptBinding(database, triageAttemptId);
+  if (!loadedAttempt.ok) {
+    return loadedAttempt;
+  }
+  const boundAttempt = requireAttemptMatchesPostedIds(loadedAttempt.value, candidateId, taskId);
+  if (!boundAttempt.ok) {
+    return boundAttempt;
   }
   if (composition.registerExtractionFixtures === undefined) {
     return err(

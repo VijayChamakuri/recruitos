@@ -17,22 +17,87 @@ import {
 } from "./composition.js";
 import { setCorrectionFixtureMode } from "./correction-mode.js";
 import { FIXTURE_CORRECTION_SOURCE_KEY } from "./form-body.js";
+import { listAllResolutionTaskSummaries } from "./read-pages.js";
 
-function countRequestActions(): number {
+function nativeClient(): {
+  prepare: (sql: string) => { get: (...parameters: readonly unknown[]) => { n?: number; id?: string } };
+} {
   const runtime = getServerRuntime();
   if (runtime === null) {
     throw new Error("runtime required");
   }
-  const native = (
+  return (
     runtime.connection.database as {
-      $client: { prepare: (sql: string) => { get: () => { n: number } } };
+      $client: {
+        prepare: (sql: string) => {
+          get: (...parameters: readonly unknown[]) => { n?: number; id?: string };
+        };
+      };
     }
   ).$client;
-  return native
+}
+
+function countRequestActions(): number {
+  return nativeClient()
     .prepare(
       `SELECT COUNT(*) AS n FROM resolution_action WHERE action_kind = 'request_re_extraction'`
     )
-    .get().n;
+    .get().n as number;
+}
+
+function countCorrectionAttempts(): number {
+  return nativeClient()
+    .prepare(`SELECT COUNT(*) AS n FROM triage_attempt WHERE kind = 'candidate_correction'`)
+    .get().n as number;
+}
+
+function readMainRunAttemptId(): string {
+  const id = nativeClient()
+    .prepare(`SELECT triage_attempt_id AS id FROM triage_attempt WHERE kind = 'main_run' LIMIT 1`)
+    .get().id;
+  if (typeof id !== "string" || id.length === 0) {
+    throw new Error("main_run attempt required");
+  }
+  return id;
+}
+
+async function loadRoute4PacketForm(): Promise<{
+  candidateId: string;
+  taskId: string;
+  taskVersion: string;
+  candidateVersion: string;
+}> {
+  const listed = await handleRequest("/api/candidates", new URLSearchParams());
+  const candidates = JSON.parse(listed.body) as Array<{
+    candidateId: string;
+    sourceKey: string;
+  }>;
+  const route4 = candidates.find((candidate) => candidate.sourceKey === FIXTURE_CORRECTION_SOURCE_KEY);
+  expect(route4).toBeDefined();
+  if (route4 === undefined) {
+    throw new Error("route-4 fixture candidate required");
+  }
+  const packetPage = await handleRequest(
+    `/packet/${route4.candidateId}`,
+    new URLSearchParams("theme=light&density=default")
+  );
+  const taskVersion = /name="expectedTaskHeadVersion" value="([^"]+)"/.exec(packetPage.body)?.[1];
+  const candidateVersion = /name="expectedCandidateHeadVersion" value="([^"]+)"/.exec(
+    packetPage.body
+  )?.[1];
+  const taskId = /name="taskId" value="([^"]+)"/.exec(packetPage.body)?.[1];
+  expect(taskVersion).toBeDefined();
+  expect(candidateVersion).toBeDefined();
+  expect(taskId).toBeDefined();
+  if (taskVersion === undefined || candidateVersion === undefined || taskId === undefined) {
+    throw new Error("route-4 inspector form fields required");
+  }
+  return {
+    candidateId: route4.candidateId,
+    taskId,
+    taskVersion,
+    candidateVersion
+  };
 }
 
 describe("fixture correction HTTP flow", () => {
@@ -67,6 +132,61 @@ describe("fixture correction HTTP flow", () => {
     if (tempDir.length > 0) {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("rejects a request that pairs the route-4 candidate with another candidate's task", async () => {
+    const route4 = await loadRoute4PacketForm();
+    const runtime = getServerRuntime();
+    expect(runtime).not.toBeNull();
+    if (runtime === null) return;
+    const tasks = listAllResolutionTaskSummaries(runtime.connection.database);
+    expect(tasks.ok).toBe(true);
+    if (!tasks.ok) return;
+    const otherTask = tasks.value.find((task) => task.candidateId !== route4.candidateId);
+    expect(otherTask).toBeDefined();
+    if (otherTask === undefined) return;
+    const before = countRequestActions();
+    const mismatched = await handleRequest(
+      "/actions/request-re-extraction",
+      new URLSearchParams("theme=light&density=default"),
+      {
+        method: "POST",
+        body: new URLSearchParams({
+          candidateId: route4.candidateId,
+          taskId: otherTask.resolutionTaskId,
+          rationale: "Pair route 4 with another candidate task",
+          expectedTaskHeadVersion: route4.taskVersion,
+          expectedCandidateHeadVersion: route4.candidateVersion
+        })
+      }
+    );
+    expect(mismatched.statusCode).toBe(403);
+    expect(mismatched.body).toContain("Posted taskId does not belong to posted candidateId.");
+    expect(countRequestActions()).toBe(before);
+  });
+
+  it("rejects a complete post that pairs the route-4 candidate with a main_run attempt", async () => {
+    const route4 = await loadRoute4PacketForm();
+    const beforeRequests = countRequestActions();
+    const beforeAttempts = countCorrectionAttempts();
+    const mismatched = await handleRequest(
+      "/actions/complete-fixture-extraction",
+      new URLSearchParams("theme=light&density=default"),
+      {
+        method: "POST",
+        body: new URLSearchParams({
+          candidateId: route4.candidateId,
+          taskId: route4.taskId,
+          triageAttemptId: readMainRunAttemptId(),
+          expectedTaskHeadVersion: route4.taskVersion,
+          expectedCandidateHeadVersion: route4.candidateVersion
+        })
+      }
+    );
+    expect(mismatched.statusCode).toBe(403);
+    expect(mismatched.body).toContain("candidate_correction");
+    expect(countRequestActions()).toBe(beforeRequests);
+    expect(countCorrectionAttempts()).toBe(beforeAttempts);
   });
 
   it("requests re-extraction, rejects a stale second submit, then completes the fixture overlay", async () => {
