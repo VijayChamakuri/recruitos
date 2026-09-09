@@ -149,7 +149,12 @@ export type ResolutionTaskDetail = ResolutionTaskSummary &
     }[];
   }>;
 
-export type ProposalStatus = "pending" | "approved" | "rejected";
+export type ProposalStatus =
+  | "pending"
+  | "evidence_requested"
+  | "approved"
+  | "rejected"
+  | "edited";
 
 export type ProposalSummary = Readonly<{
   proposalId: string;
