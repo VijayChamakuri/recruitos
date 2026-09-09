@@ -78,7 +78,7 @@ function scoreAsApproximateHundred(scoreText) {
   if (!Number.isInteger(numerator) || !Number.isInteger(denominator) || denominator === 0) {
     fail(`Unexpected score text: ${scoreText}`);
   }
-  return ((numerator / denominator) * 100).toFixed(2);
+  return (numerator / denominator).toFixed(2);
 }
 
 function sqliteCount(database, table) {
