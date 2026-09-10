@@ -6,3 +6,4 @@ export * from "./demo-prepare.js";
 export * from "./request-re-extraction.js";
 export * from "./complete-re-extraction.js";
 export * from "./record-review-decision.js";
+export * from "./seed-demo-proposals.js";

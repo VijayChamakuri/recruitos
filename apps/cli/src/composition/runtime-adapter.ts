@@ -48,6 +48,7 @@ import {
   registerDemoCorrectionFixtures,
   registerDemoFixtures,
   requestReExtraction,
+  seedDemoProposals,
   runExtractionAttempt,
   startTriageRun,
   finalizeTriageRun,
@@ -379,6 +380,15 @@ export class RuntimeRecruitosComposition implements RecruitosComposition {
       });
     }
     return demoPrepare(this.runtime, input);
+  }
+
+  async seedDemoProposals(input: {
+    actorId?: string;
+    commandId?: string;
+  }): Promise<Result<import("./types.js").SeedDemoProposalsSummary, RuntimeError>> {
+    const result = seedDemoProposals(this.runtime, input);
+    if (!result.ok) return result;
+    return ok({ commandId: result.value.metadata.commandId, ...result.value.result });
   }
 
   async evaluateClass1(

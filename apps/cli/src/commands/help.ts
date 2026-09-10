@@ -11,6 +11,18 @@ export function formatHelp(targetCommand?: string): string {
         "fixture extraction, finalizes the run, and seals the result."
       ].join("\n");
 
+    case "demo:proposals":
+      return [
+        "recruitos demo:proposals - Seed authored fixture proposals into a prepared demo",
+        "",
+        "Usage:",
+        "  recruitos demo:proposals --db <path> [--command-id <id>] [--json]",
+        "",
+        "Requires a fresh seven-candidate database produced by demo:prepare.",
+        "Creates three pending proposals through the real proposal store.",
+        "It has no outbound ATS, email, message, or provider effect."
+      ].join("\n");
+
     case "eval:class1":
       return [
         "recruitos eval:class1 - Evaluate one sealed candidate result",
@@ -162,7 +174,8 @@ export function formatHelp(targetCommand?: string): string {
         "  recruitos <command> [options]",
         "",
         "Commands:",
-        "  demo:prepare     Build the deterministic one-candidate demo in a fresh database",
+        "  demo:prepare     Build the deterministic seven-candidate demo in a fresh database",
+        "  demo:proposals   Seed three authored proposals into a prepared demo database",
         "  eval:class1      Run the Class 1 gate against a sealed candidate result",
         "  db:migrate       Open and migrate a local runtime database",
         "  corpus:import    Import candidates through the configured source adapter",
