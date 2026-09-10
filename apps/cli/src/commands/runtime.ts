@@ -124,6 +124,45 @@ export async function runRuntimeCommand(
     );
   }
 
+  if (args.command === "demo:proposals") {
+    if (!args.options.db) {
+      return usageError("demo:proposals", "--db <path> is required", args, startTime);
+    }
+    if (!composition.seedDemoProposals) {
+      return runtimeError(
+        args.command,
+        {
+          code: "persistence_failed",
+          message: "The active composition does not support demo proposal seeding",
+          retryable: false
+        },
+        args,
+        startTime
+      );
+    }
+    const result = await composition.seedDemoProposals({
+      actorId,
+      ...(args.options.commandId === undefined ? {} : { commandId: args.options.commandId })
+    });
+    if (!result.ok) return runtimeError(args.command, result.error, args, startTime);
+    return success(
+      args.command,
+      result.value,
+      [
+        "RecruitOS Demo Proposals Seeded",
+        `Command ID: ${result.value.commandId}`,
+        ...result.value.proposals.map(
+          (proposal) =>
+            `${proposal.kind}: ${proposal.proposalId} (${proposal.sourceKey})`
+        ),
+        `Run integrity: ${result.value.triageRunCount} triage run, ${result.value.triageRunMemberCount} members`,
+        "NO OUTBOUND EFFECT"
+      ],
+      args,
+      startTime
+    );
+  }
+
   if (args.command === "eval:class1") {
     const candidateId = args.options.candidateId ?? args.positionals[0];
     if (!args.options.db) {

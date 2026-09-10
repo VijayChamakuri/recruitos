@@ -257,6 +257,20 @@ export type DemoPrepareSummary = Readonly<{
   resultIds: readonly string[];
 }>;
 
+export type DemoProposalSummary = Readonly<{
+  proposalId: string;
+  candidateId: string;
+  sourceKey: string;
+  kind: "shortlist_inclusion" | "ats_stage_change" | "follow_up_draft";
+}>;
+
+export type SeedDemoProposalsSummary = Readonly<{
+  commandId: string;
+  proposals: readonly DemoProposalSummary[];
+  triageRunCount: 1;
+  triageRunMemberCount: 7;
+}>;
+
 export type ListResolutionTasksOptions = Readonly<{
   candidateId?: string | undefined;
   status?: ResolutionTaskStatus | undefined;
@@ -294,6 +308,11 @@ export interface RecruitosComposition {
   prepareDemo?(input: Readonly<{
     actorId?: string;
   }>): Promise<Result<DemoPrepareSummary, RuntimeError>>;
+
+  seedDemoProposals?(input: Readonly<{
+    actorId?: string;
+    commandId?: string;
+  }>): Promise<Result<SeedDemoProposalsSummary, RuntimeError>>;
 
   evaluateClass1?(
     candidateId: string

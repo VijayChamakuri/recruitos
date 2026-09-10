@@ -299,6 +299,18 @@ describe("CLI Commands Execution", () => {
         expect(evaluated.exitCode).toBe(EXIT_SUCCESS);
         expect(evaluated.stdout).toContain("Passed:                    yes");
 
+        const seeded = parseEnvelopeData<{
+          proposals: Array<{ kind: string }>;
+          triageRunCount: number;
+          triageRunMemberCount: number;
+        }>(await runCli(["demo:proposals", "--db", database, "--json"]));
+        expect(seeded.proposals.map((proposal) => proposal.kind)).toEqual([
+          "shortlist_inclusion",
+          "ats_stage_change",
+          "follow_up_draft"
+        ]);
+        expect(seeded).toMatchObject({ triageRunCount: 1, triageRunMemberCount: 7 });
+
         const second = await runCli(["demo:prepare", "--db", database]);
         expect(second.exitCode).toBe(EXIT_RUNTIME_ERROR);
         expect(second.stderr).toContain("Demo corpus imported no candidates");
@@ -764,6 +776,7 @@ describe("CLI Commands Execution", () => {
       );
       expect((await runCli(["triage:finalize"])).exitCode).toBe(EXIT_USAGE_ERROR);
       expect((await runCli(["demo:prepare"])).exitCode).toBe(EXIT_USAGE_ERROR);
+      expect((await runCli(["demo:proposals"])).exitCode).toBe(EXIT_USAGE_ERROR);
       expect((await runCli(["eval:class1"])).exitCode).toBe(EXIT_USAGE_ERROR);
       expect((await runCli(["triage:complete-correction"])).exitCode).toBe(EXIT_USAGE_ERROR);
       expect(

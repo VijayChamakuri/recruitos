@@ -152,6 +152,7 @@ export async function runCli(
   switch (parsed.command) {
     case "db:migrate":
     case "demo:prepare":
+    case "demo:proposals":
     case "eval:class1":
     case "import":
     case "corpus:import":
